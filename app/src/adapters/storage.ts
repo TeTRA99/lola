@@ -81,8 +81,11 @@ export async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
  */
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbSingleton) return dbSingleton;
-  dbSingleton = await SQLite.openDatabaseAsync(DB_NAME);
-  await migrate(dbSingleton);
+  // Open + migrate before caching — a half-migrated handle must not be cached
+  // (B3 from the 2026-05-27 code review).
+  const db = await SQLite.openDatabaseAsync(DB_NAME);
+  await migrate(db);
+  dbSingleton = db;
   return dbSingleton;
 }
 

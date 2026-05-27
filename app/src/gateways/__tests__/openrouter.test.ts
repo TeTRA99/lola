@@ -82,15 +82,15 @@ describe('openrouter.chat', () => {
     if (!r.ok) expect(r.error).toBe('rate_limit');
   });
 
-  test('503 retries twice then bubbles err("network")', async () => {
+  // B4 fix: retry budget tightened to 1 retry (was 2) to respect NFR-1.
+  test('503 retries once then bubbles err("network")', async () => {
     mockFetch
-      .mockReturnValueOnce(mockResponse(503, {}))
       .mockReturnValueOnce(mockResponse(503, {}))
       .mockReturnValueOnce(mockResponse(503, {}));
     const r = await chat({ systemPrompt: 's', userText: 'u', imageBase64: 'x' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('network');
-    expect(mockFetch).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+    expect(mockFetch).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
   });
 
   test('503 then 200 succeeds (retry recovery)', async () => {
@@ -118,6 +118,34 @@ describe('openrouter.chat', () => {
     const r = await chat({ systemPrompt: 's', userText: 'u', imageBase64: 'x' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('parse_fail');
+  });
+
+  // B2 regression — shallow validation must reject objects[] entries missing fields.
+  test('objects with missing canonical/display fields returns err("parse_fail")', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({
+        narration: 'ok',
+        objects: [{}, { canonical: 'x' }],  // both malformed
+      }))),
+    );
+    const r = await chat({ systemPrompt: 's', userText: 'u', imageBase64: 'x' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('parse_fail');
+  });
+
+  test('objects with valid shape pass validation', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({
+        narration: 'ok',
+        objects: [
+          { canonical: 'taza', display: 'una taza', room_hint: 'cocina' },
+          { canonical: 'mate', display: 'el mate', room_hint: null },
+        ],
+      }))),
+    );
+    const r = await chat({ systemPrompt: 's', userText: 'u', imageBase64: 'x' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.objects).toHaveLength(2);
   });
 
   test('custom model overrides default', async () => {

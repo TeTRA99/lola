@@ -36,12 +36,28 @@ export function _setCameraRefForTests(ref: unknown): void {
   cameraRef = ref as CameraView | null;
 }
 
+// B5 fix (2026-05-27 review): poll briefly for cameraRef after permission
+// grant — CameraHost re-render is async, so the very first capture after a
+// fresh "Allow" tap can land before the host has registered its ref.
+const REF_POLL_MAX_MS = 1000;
+const REF_POLL_INTERVAL_MS = 50;
+
+async function awaitCameraRef(): Promise<boolean> {
+  if (cameraRef) return true;
+  const deadline = Date.now() + REF_POLL_MAX_MS;
+  while (Date.now() < deadline) {
+    await new Promise<void>(r => setTimeout(r, REF_POLL_INTERVAL_MS));
+    if (cameraRef) return true;
+  }
+  return false;
+}
+
 export async function captureSnapshot(): Promise<Result<Snapshot, CameraError>> {
   // Lazy permission request.
   const perm = await CameraModule.requestCameraPermissionsAsync();
   if (!perm.granted) return err('permission_denied');
 
-  if (!cameraRef) return err('no_camera');
+  if (!cameraRef && !(await awaitCameraRef())) return err('no_camera');
 
   // takePictureAsync is on the CameraView instance via ref.
   type TakePictureResult = { uri: string; base64?: string; width: number; height: number };

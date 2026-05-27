@@ -110,3 +110,38 @@ describe('storage migrations', () => {
     });
   });
 });
+
+describe('getDb singleton — B3 fix: do not cache a half-migrated handle', () => {
+  test('throws + does NOT cache the singleton when migrate fails', async () => {
+    // Reload the module so the singleton starts null.
+    jest.resetModules();
+
+    let openCalls = 0;
+    const failingDb = {
+      execAsync: jest.fn(async () => { throw new Error('boom'); }),
+      getFirstAsync: jest.fn(async () => ({ user_version: 0 })),
+    };
+    const okDb = {
+      execAsync: jest.fn(async () => undefined),
+      getFirstAsync: jest.fn(async () => ({ user_version: 1 })),
+    };
+
+    jest.doMock('expo-sqlite', () => ({
+      openDatabaseAsync: jest.fn(async () => {
+        openCalls += 1;
+        return openCalls === 1 ? failingDb : okDb;
+      }),
+      SQLiteProvider: () => null,
+      useSQLiteContext: () => null,
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getDb } = require('../storage') as typeof import('../storage');
+
+    await expect(getDb()).rejects.toThrow('boom');
+    // Second call must re-open + re-migrate (would not, if the failed handle were cached).
+    const db2 = await getDb();
+    expect(db2).toBe(okDb);
+    expect(openCalls).toBe(2);
+  });
+});

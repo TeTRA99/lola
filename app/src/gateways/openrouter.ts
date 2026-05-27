@@ -24,8 +24,13 @@ function apiKey(): string | undefined {
   return process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
 }
 
-const RETRY_DELAYS_MS = [250, 750];
-const PER_ATTEMPT_TIMEOUT_MS = 8000;
+// B4 fix (2026-05-27 review): NFR-1 says button-to-audio ≤2s. The previous
+// 8s × 3-attempt budget meant worst-case ~25s before user heard the error.
+// Reduced to a single retry with a tighter per-attempt timeout — worst case
+// is now ~10.5s, still over NFR-1 in failure but felt-quickly instead of
+// felt-eternally. If a consumer needs more patience, expose maxLatencyMs later.
+const RETRY_DELAYS_MS = [500];
+const PER_ATTEMPT_TIMEOUT_MS = 5000;
 
 function buildBody(input: ChatInput): unknown {
   return {
@@ -116,6 +121,18 @@ export async function chat(input: ChatInput): Promise<Result<LolaResponse, ChatE
     ) {
       return err('parse_fail');
     }
+    // B2 fix (2026-05-27 review): validate each object shape so downstream
+    // consumers (sightings log, catalog match) don't trip on undefined fields.
+    const objectsOk = parsed.objects.every(o => {
+      if (!o || typeof o !== 'object') return false;
+      const obj = o as Partial<LolaObject>;
+      return (
+        typeof obj.canonical === 'string' &&
+        typeof obj.display === 'string' &&
+        (obj.room_hint === null || typeof obj.room_hint === 'string')
+      );
+    });
+    if (!objectsOk) return err('parse_fail');
     return ok(parsed);
   }
 }

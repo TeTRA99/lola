@@ -113,4 +113,15 @@ describe('haptics adapter — thinking rhythmic pulse', () => {
     // Total = 2; no further activity.
     expect(mImpact).toHaveBeenCalledTimes(2);
   });
+
+  // B1 regression — double-fire thinking_start must NOT leak a parallel interval.
+  test('double thinking_start does not stack two intervals', () => {
+    fire('thinking_start');  // initial impact #1
+    jest.advanceTimersByTime(600);  // tick → impact #2
+    fire('thinking_start');  // re-fire: clears prev, fires initial impact #3
+    jest.advanceTimersByTime(600);  // single tick → impact #4 (not #4 AND #5)
+    expect(mImpact).toHaveBeenCalledTimes(4);
+    jest.advanceTimersByTime(600);
+    expect(mImpact).toHaveBeenCalledTimes(5);  // still one tick per period
+  });
 });

@@ -86,6 +86,9 @@ export function fire(pattern: HapticPattern): void {
       // Note: setInterval approximates the rhythm — if AC1.6.5 perception
       // test fails on Charly's iOS, escalate to CHHapticEngine AHAP via
       // react-native-haptic-feedback custom patterns.
+      // B1 fix (2026-05-27 review): explicit clearThinking to guard against
+      // double-fire — the top-of-function guard skips for thinking_start.
+      clearThinking();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       thinkingTimer = setInterval(() => {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

@@ -103,6 +103,41 @@ describe('captureSnapshot', () => {
     expect(mockedManipulate).toHaveBeenCalledTimes(1);
   });
 
+  // B5 regression — CameraHost mount race.
+  test('polls briefly for cameraRef when permission just granted', async () => {
+    mockedRequestPerm.mockResolvedValue({
+      status: 'granted', granted: true, expires: 'never', canAskAgain: true,
+    } as Awaited<ReturnType<typeof Camera.requestCameraPermissionsAsync>>);
+
+    // Ref starts null (CameraHost not mounted yet); simulate the host
+    // registering the ref ~150ms later.
+    _setCameraRefForTests(null);
+    const fakeRef = {
+      takePictureAsync: jest.fn().mockResolvedValue({
+        uri: 'file:///photo.jpg',
+        base64: 'BASE64',
+        width: 800,
+        height: 600,
+      }),
+    };
+    setTimeout(() => _setCameraRefForTests(fakeRef), 150);
+
+    const r = await captureSnapshot();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.base64).toBe('BASE64');
+  });
+
+  test('still returns no_camera if ref never registers within the poll window', async () => {
+    mockedRequestPerm.mockResolvedValue({
+      status: 'granted', granted: true, expires: 'never', canAskAgain: true,
+    } as Awaited<ReturnType<typeof Camera.requestCameraPermissionsAsync>>);
+    _setCameraRefForTests(null);
+
+    const r = await captureSnapshot();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('no_camera');
+  }, 5000);
+
   test('returns capture_failed when takePictureAsync returns no base64', async () => {
     mockedRequestPerm.mockResolvedValue({
       status: 'granted', granted: true, expires: 'never', canAskAgain: true,
