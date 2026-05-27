@@ -4,7 +4,8 @@ date: 2026-05-27
 reviewer: "bmad-code-review (adversarial pass)"
 scope: "All 1063 LOC across 21 source files; 75 tests across 9 suites"
 commits_in_scope: e2368b2 .. 671c459
-status: findings
+status: blockers-resolved
+resolved_in_commit: e0af917
 ---
 
 # Code Review — Sprint 1 + Sprint 2
