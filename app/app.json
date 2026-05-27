@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Lola",
+    "slug": "lola",
+    "version": "0.9.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "extra": {
+      "primaryLocale": "es-AR"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.carlosbernardi.lola"
+    },
+    "android": {
+      "package": "com.carlosbernardi.lola",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

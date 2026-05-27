@@ -1,0 +1,36 @@
+# Lola — root-level gitignore
+
+# Node / Expo (the app/ tree has its own .gitignore for app-specific noise;
+# this root file covers project-wide concerns + redundant safety nets.)
+app/node_modules/
+app/.expo/
+app/.eas/
+app/dist/
+app/web-build/
+*.tsbuildinfo
+
+# Native (managed workflow — regenerated via prebuild if/when needed)
+app/ios/
+app/android/
+
+# Secrets — NEVER commit
+.env
+.env.local
+app/.env
+app/.env.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Existing tooling local state
+.claude/
+.agent/
+
+# Logs
+*.log
+npm-debug.log*
+
+# _bmad-output/ is INTENTIONALLY NOT IGNORED — planning + implementation
+# artifacts are part of the project history.
