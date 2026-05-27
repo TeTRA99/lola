@@ -10,7 +10,7 @@ const SPANISH_CHARS = /[áéíóúñ¿¡]/;
 export default [
   {
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/services/CopyModule.ts', 'src/services/__tests__/copy.*'],
+    ignores: ['src/services/CopyModule.ts', 'src/**/__tests__/**'],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true } },

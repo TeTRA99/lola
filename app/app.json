@@ -37,6 +37,13 @@
         {
           "cameraPermission": "Lola necesita ver para ayudarte."
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Lola necesita escucharte para responder.",
+          "speechRecognitionPermission": "Lola usa el reconocimiento de voz para entenderte."
+        }
       ]
     ]
   }
