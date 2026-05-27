@@ -1,21 +1,27 @@
+import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 import { CONFIG } from '@/config';
 import { SQLiteProvider, migrate } from '@/adapters/storage';
+import { LaunchSplash } from '@/screens/LaunchSplash';
 
-// Smoke import of CONFIG proves the `@/*` path alias works at both
-// type-check time (tsconfig paths) and runtime (babel-plugin-module-resolver).
-// AC1.1.10 + AC1.1.11.
 void CONFIG;
 
 export default function App() {
+  const [splashDone, setSplashDone] = useState(false);
+
   return (
     <SQLiteProvider databaseName="lola.db" onInit={migrate}>
-      <View style={styles.container}>
-        <Text style={styles.brand}>Lola</Text>
-        <Text style={styles.placeholder}>v0.9 scaffold — Sprint 1 in progress</Text>
-        <StatusBar style="light" />
-      </View>
+      {!splashDone ? (
+        <LaunchSplash onDone={() => setSplashDone(true)} />
+      ) : (
+        // Placeholder home — two-button screen lands in E2.3 + E3.3.
+        <View style={styles.container}>
+          <Text style={styles.brand}>Lola</Text>
+          <Text style={styles.placeholder}>v0.9 scaffold — Sprint 1 in progress</Text>
+          <StatusBar style="light" />
+        </View>
+      )}
     </SQLiteProvider>
   );
 }
