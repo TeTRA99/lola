@@ -29,6 +29,9 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "owner": "crbernardi"
+    "owner": "crbernardi",
+    "plugins": [
+      "expo-sqlite"
+    ]
   }
 }
