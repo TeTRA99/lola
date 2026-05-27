@@ -1,11 +1,18 @@
-// FR-4 Where-is-X — sighting writes (E5.1) + recall (E5.2).
+// FR-4 Where-is-X — passive sightings log + recall.
+// E5.1 implements recordSighting. E5.2 (Sprint 4 / later) implements recall.
+// E5.4 implements resolveObjectFromUtterance — bridges dad's noun phrasing to
+// catalog object_ids via a 4-step precedence match.
 
-import type { Result } from '@/utils/result';
+import type { SQLiteBindValue } from 'expo-sqlite';
+import { getDb } from '@/adapters/storage';
+import { canonicalize } from './OnboardingService';
+import { ok, err, type Result } from '@/utils/result';
+import { now } from '@/utils/time';
 
 export type Sighting = {
   id: number;
   object_id: number;
-  observed_at: number;          // unix ms
+  observed_at: number;
   snapshot_uri: string | null;
   room_hint: string | null;
   source_action: 'describe' | 'ask';
@@ -13,21 +20,112 @@ export type Sighting = {
 };
 
 export type RecallOutcome =
-  | { freshness: 'fresh'; sighting: Sighting }      // <24h — confident
-  | { freshness: 'hedged'; sighting: Sighting }     // 24–72h — hedge phrasing
-  | { freshness: 'miss' };                          // >72h or no record
+  | { freshness: 'fresh'; sighting: Sighting }
+  | { freshness: 'hedged'; sighting: Sighting }
+  | { freshness: 'miss' };
 
-export async function recordSighting(_input: {
+async function findOrCreateObjectId(
+  canonical: string,
+  display: string,
+): Promise<number | null> {
+  try {
+    const db = await getDb();
+    const existing = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM objects WHERE canonical_name = ?',
+      [canonical],
+    );
+    if (existing) return existing.id;
+    const ts = now();
+    const r = await db.runAsync(
+      'INSERT INTO objects (canonical_name, display_name, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [canonical, display, 'observed', ts, ts],
+    );
+    return r.lastInsertRowId;
+  } catch {
+    return null;
+  }
+}
+
+export async function recordSighting(input: {
   canonical: string;
+  display: string;
   observed_at: number;
   snapshot_uri: string | null;
   room_hint: string | null;
   source_action: 'describe' | 'ask';
   excerpt: string | null;
 }): Promise<Result<{ id: number }, 'storage_error'>> {
-  throw new Error('not_implemented');
+  try {
+    const objectId = await findOrCreateObjectId(input.canonical, input.display);
+    if (objectId === null) return err('storage_error');
+    const db = await getDb();
+    const args: SQLiteBindValue[] = [
+      objectId,
+      input.observed_at,
+      input.snapshot_uri,
+      input.room_hint,
+      input.source_action,
+      input.excerpt,
+    ];
+    const r = await db.runAsync(
+      'INSERT INTO sightings (object_id, observed_at, snapshot_uri, room_hint, source_action, excerpt) VALUES (?, ?, ?, ?, ?, ?)',
+      args,
+    );
+    return ok({ id: r.lastInsertRowId });
+  } catch {
+    return err('storage_error');
+  }
 }
 
+// E5.4 — fuzzy match dad's spoken noun to a catalog/observed object_id.
+
+const POSSESSIVE_RE = /^(mi|tu|su|el|la|los|las)\s+/i;
+
+function stripPossessive(s: string): string {
+  return s.replace(POSSESSIVE_RE, '').trim();
+}
+
+export async function resolveObjectFromUtterance(noun: string): Promise<number | null> {
+  const cleaned = stripPossessive(noun);
+  if (!cleaned) return null;
+  const canonical = canonicalize(cleaned);
+  const db = await getDb();
+
+  // 1. exact canonical
+  if (canonical) {
+    const exact = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM objects WHERE canonical_name = ? LIMIT 1',
+      [canonical],
+    );
+    if (exact) return exact.id;
+  }
+
+  // 2. exact display
+  const disp = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM objects WHERE LOWER(display_name) = LOWER(?) LIMIT 1',
+    [cleaned],
+  );
+  if (disp) return disp.id;
+
+  // 3. display substring
+  const dispSub = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM objects WHERE LOWER(display_name) LIKE LOWER(?) LIMIT 1',
+    [`%${cleaned}%`],
+  );
+  if (dispSub) return dispSub.id;
+
+  // 4. description substring
+  const descSub = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM objects WHERE description IS NOT NULL AND LOWER(description) LIKE LOWER(?) LIMIT 1',
+    [`%${cleaned}%`],
+  );
+  if (descSub) return descSub.id;
+
+  return null;
+}
+
+// E5.2 will implement recall properly. Stub returns miss until then so AskService
+// can ship without blocking on this.
 export async function recall(_objectName: string): Promise<RecallOutcome> {
-  throw new Error('not_implemented');
+  return { freshness: 'miss' };
 }

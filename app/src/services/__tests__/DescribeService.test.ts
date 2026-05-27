@@ -39,6 +39,12 @@ jest.mock('@/services/SnapshotCache', () => ({
   _resetForTests: jest.fn(),
 }));
 
+jest.mock('@/services/MemoryService', () => ({
+  recordSighting: jest.fn(async () => ({ ok: true, value: { id: 1 } })),
+  resolveObjectFromUtterance: jest.fn(async () => null),
+  recall: jest.fn(async () => ({ freshness: 'miss' })),
+}));
+
 import { run, getLastDescribe, _resetForTests } from '../DescribeService';
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';

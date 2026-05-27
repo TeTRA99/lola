@@ -12,6 +12,7 @@ import { getDb } from '@/adapters/storage';
 import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '@/services/errorCopy';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
+import * as MemoryService from '@/services/MemoryService';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
 
@@ -122,6 +123,19 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
     SnapshotCache.attachNarration(persistedUri, narration);
   } catch {
     // Snapshot persistence is best-effort — don't fail the describe flow on disk errors.
+  }
+
+  // 6. Write sightings (E5.1) — passive memory log byproduct.
+  for (const o of objects) {
+    void MemoryService.recordSighting({
+      canonical: o.canonical,
+      display: o.display,
+      observed_at: now(),
+      snapshot_uri: persistedUri,
+      room_hint: o.room_hint,
+      source_action: 'describe',
+      excerpt: o.display,
+    });
   }
 
   await logEvent('describe', !isLowConfidence, now() - t0, isLowConfidence ? 'low_confidence' : null);
