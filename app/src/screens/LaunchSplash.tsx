@@ -1,26 +1,85 @@
-// FR-6.2 — launch greeting fires within 800ms of splash dismiss (AC6.3).
-// The splash itself stays visible for 800ms then calls onDone; the TTS fires
-// on mount in parallel so the audio overlap-with-fade gives a smooth handoff.
+// FR-6.2 launch greeting + hidden gestures for SetupScreen (5s hold) and
+// DebugScreen (10s hold). AC4.1.1–4.1.6.
+//
+// Auto-dismiss after 800ms unless the user is holding — held presses keep
+// the splash visible past the auto-dismiss window. Release-triggered: the
+// highest threshold crossed decides which screen to open.
 
-import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
+import { CONFIG } from '@/config';
 
 const SPLASH_DURATION_MS = 800;
 
-export function LaunchSplash({ onDone }: { onDone: () => void }) {
+type Props = {
+  onDone: () => void;
+  onSetup?: () => void;
+  onDebug?: () => void;
+};
+
+type GestureStage = 'none' | 'setup' | 'debug';
+
+export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
+  const [pressed, setPressed] = useState(false);
+
+  const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debugTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stage = useRef<GestureStage>('none');
+  const greeted = useRef(false);
+
+  // Greet once on mount.
   useEffect(() => {
-    // Fire-and-forget: TTS is async but we don't gate dismiss on it.
-    void speak(COPY.greeting);
-    const t = setTimeout(onDone, SPLASH_DURATION_MS);
-    return () => clearTimeout(t);
-  }, [onDone]);
+    if (!greeted.current) {
+      greeted.current = true;
+      void speak(COPY.greeting);
+    }
+    return () => {
+      [autoDismiss, setupTimer, debugTimer].forEach(t => {
+        if (t.current) clearTimeout(t.current);
+        t.current = null;
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pressed) {
+      // Hold detected — cancel any pending auto-dismiss so the splash stays.
+      if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
+      stage.current = 'none';
+      setupTimer.current = setTimeout(() => {
+        if (stage.current === 'none') stage.current = 'setup';
+      }, CONFIG.SETUP_GESTURE_HOLD_MS);
+      debugTimer.current = setTimeout(() => {
+        stage.current = 'debug';
+      }, CONFIG.DEBUG_GESTURE_HOLD_MS);
+    } else {
+      // Released — clean up timers and fire the appropriate callback.
+      if (setupTimer.current) { clearTimeout(setupTimer.current); setupTimer.current = null; }
+      if (debugTimer.current) { clearTimeout(debugTimer.current); debugTimer.current = null; }
+      const reached = stage.current;
+      stage.current = 'none';
+
+      if (reached === 'debug') {
+        onDebug?.();
+      } else if (reached === 'setup') {
+        onSetup?.();
+      } else if (!autoDismiss.current) {
+        autoDismiss.current = setTimeout(onDone, SPLASH_DURATION_MS);
+      }
+    }
+  }, [pressed, onSetup, onDebug, onDone]);
 
   return (
-    <View style={styles.root}>
+    <Pressable
+      style={styles.root}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+    >
       <Text style={styles.brand}>Lola</Text>
-    </View>
+    </Pressable>
   );
 }
 

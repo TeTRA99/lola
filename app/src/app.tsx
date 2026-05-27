@@ -1,46 +1,29 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import { CONFIG } from '@/config';
 import { SQLiteProvider, migrate } from '@/adapters/storage';
 import { LaunchSplash } from '@/screens/LaunchSplash';
+import { HomeScreen } from '@/screens/HomeScreen';
+import { SetupScreen } from '@/screens/SetupScreen';
+import { DebugScreen } from '@/screens/DebugScreen';
 
-void CONFIG;
+type Screen = 'splash' | 'home' | 'setup' | 'debug';
 
 export default function App() {
-  const [splashDone, setSplashDone] = useState(false);
+  const [screen, setScreen] = useState<Screen>('splash');
 
   return (
     <SQLiteProvider databaseName="lola.db" onInit={migrate}>
-      {!splashDone ? (
-        <LaunchSplash onDone={() => setSplashDone(true)} />
-      ) : (
-        // Placeholder home — two-button screen lands in E2.3 + E3.3.
-        <View style={styles.container}>
-          <Text style={styles.brand}>Lola</Text>
-          <Text style={styles.placeholder}>v0.9 scaffold — Sprint 1 in progress</Text>
-          <StatusBar style="light" />
-        </View>
+      {screen === 'splash' && (
+        <LaunchSplash
+          onDone={() => setScreen('home')}
+          onSetup={() => setScreen('setup')}
+          onDebug={() => setScreen('debug')}
+        />
       )}
+      {screen === 'home' && <HomeScreen />}
+      {screen === 'setup' && <SetupScreen onClose={() => setScreen('home')} />}
+      {screen === 'debug' && <DebugScreen onClose={() => setScreen('home')} />}
+      <StatusBar style="light" />
     </SQLiteProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brand: {
-    color: '#fff',
-    fontSize: 64,
-    fontWeight: '700',
-  },
-  placeholder: {
-    color: '#666',
-    marginTop: 16,
-    fontSize: 14,
-  },
-});

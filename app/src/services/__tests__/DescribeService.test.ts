@@ -32,6 +32,13 @@ jest.mock('@/services/OnboardingService', () => ({
   getCatalog: jest.fn(),
 }));
 
+jest.mock('@/services/SnapshotCache', () => ({
+  saveSnapshot: jest.fn((b64: string) => `file:///snap/${b64.slice(0, 4)}.jpg`),
+  attachNarration: jest.fn(),
+  getLatest: jest.fn(),
+  _resetForTests: jest.fn(),
+}));
+
 import { run, getLastDescribe, _resetForTests } from '../DescribeService';
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';
@@ -39,6 +46,7 @@ import { captureSnapshot } from '@/adapters/camera';
 import { chat } from '@/gateways/openrouter';
 import { getDb } from '@/adapters/storage';
 import * as OnboardingService from '@/services/OnboardingService';
+import * as SnapshotCache from '@/services/SnapshotCache';
 
 const mSpeak = speak as jest.MockedFunction<typeof speak>;
 const mFire = fire as jest.MockedFunction<typeof fire>;
@@ -84,9 +92,22 @@ describe('DescribeService.run', () => {
       expect(r.value.objects).toHaveLength(1);
     }
     expect(mSpeak).toHaveBeenCalledWith('Una taza azul sobre la mesa.');
+    // SnapshotCache.saveSnapshot is called with the base64; attachNarration with the persisted uri + narration.
+    expect(SnapshotCache.saveSnapshot).toHaveBeenCalledWith('BASE64');
+    expect(SnapshotCache.attachNarration).toHaveBeenCalledWith(
+      'file:///snap/BASE.jpg',
+      'Una taza azul sobre la mesa.',
+    );
+    // getLastDescribe is now backed by SnapshotCache.getLatest — mock it.
+    (SnapshotCache.getLatest as jest.Mock).mockReturnValue({
+      uri: 'file:///snap/BASE.jpg',
+      sizeBytes: 100,
+      savedAt: Date.now(),
+      narration: 'Una taza azul sobre la mesa.',
+    });
     expect(getLastDescribe()).toEqual({
       narration: 'Una taza azul sobre la mesa.',
-      snapshotUri: 'file:///photo.jpg',
+      snapshotUri: 'file:///snap/BASE.jpg',
     });
   });
 
