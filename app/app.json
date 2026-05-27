@@ -7,7 +7,10 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "extra": {
-      "primaryLocale": "es-AR"
+      "primaryLocale": "es-AR",
+      "eas": {
+        "projectId": "5fbc0ec9-e9de-448c-afdd-240628971e47"
+      }
     },
     "ios": {
       "supportsTablet": false,
@@ -25,6 +28,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "owner": "crbernardi"
   }
 }
