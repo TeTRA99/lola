@@ -17,6 +17,7 @@ import * as SnapshotCache from '@/services/SnapshotCache';
 import * as MemoryService from '@/services/MemoryService';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
+import { ago } from '@/utils/relativeTime';
 import type { LolaObject } from '@/gateways/openrouter';
 
 export type AskError =
@@ -148,28 +149,42 @@ async function handleExtend(imageBase64: string, t0: number): Promise<Result<Ask
   return ok({ narration, objects: resp.value.objects, route: 'extend' });
 }
 
+/**
+ * Speak a memory-recall sentence with freshness-aware hedging.
+ * E5.2 (hit path) + E5.3 (freshness window).
+ */
+function buildRecallNarration(sighting: MemoryService.Sighting, freshness: 'fresh' | 'hedged'): string {
+  const when = ago(sighting.observed_at);
+  const where = sighting.room_hint;
+  if (freshness === 'fresh') {
+    return where
+      ? `Lo vi ${when} en ${where}.`
+      : `Lo vi ${when}, no estoy segura en qué cuarto.`;
+  }
+  // hedged
+  return where
+    ? `Hace un tiempo lo vi en ${where}, pero puede haberse movido.`
+    : `Lo vi ${when}, pero puede haberse movido.`;
+}
+
 async function handleMemory(
   noun: string,
   imageBase64: string,
   utterance: string,
   t0: number,
 ): Promise<Result<AskOutcome, AskError>> {
-  // E5.2 will use this for proper recall. For v0.9 the recall path returns miss,
-  // so we resolve the object and fall through to the model with extra context.
-  const _objectId = await MemoryService.resolveObjectFromUtterance(noun);
   const outcome = await MemoryService.recall(noun);
-  if (outcome.freshness !== 'miss') {
-    // Future-proofing — E5.2 will fill this branch.
-    const narration = `Lo vi antes — ${outcome.sighting.excerpt ?? noun}`;
+
+  if (outcome.freshness === 'fresh' || outcome.freshness === 'hedged') {
+    const narration = buildRecallNarration(outcome.sighting, outcome.freshness);
     fire('answer_ready');
     await speak(narration);
-    await logEvent(true, now() - t0, 'memory_hit');
+    await logEvent(true, now() - t0, `memory_${outcome.freshness}`);
     return ok({ narration, objects: [], route: 'memory_hit' });
   }
 
-  // Miss — fall through to model call with the original utterance as the question.
+  // Miss — fall through to model call with the original utterance.
   const r = await handleModel(imageBase64, utterance, t0);
-  // Re-tag the route in the outcome so telemetry distinguishes memory_miss.
   if (r.ok) {
     await logEvent(true, now() - t0, 'memory_miss');
     return ok({ ...r.value, route: 'memory_miss' });

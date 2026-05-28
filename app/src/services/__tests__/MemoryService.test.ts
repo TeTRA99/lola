@@ -167,3 +167,56 @@ describe('MemoryService.resolveObjectFromUtterance', () => {
     expect(id).toBeNull();
   });
 });
+
+describe('MemoryService.recall — E5.2 hit + E5.3 freshness', () => {
+  const NOW = new Date('2026-05-27T15:00:00Z').getTime();
+  const HOUR = 3_600_000;
+
+  function setup(sightingAgeHours: number | null) {
+    const db = stubDb();
+    db.getFirstAsync
+      .mockResolvedValueOnce({ id: 7 })  // resolveObjectFromUtterance: exact canonical
+      .mockResolvedValueOnce(sightingAgeHours === null ? null : {
+        id: 99, object_id: 7,
+        observed_at: NOW - sightingAgeHours * HOUR,
+        snapshot_uri: 'file:///x.jpg',
+        room_hint: 'cocina',
+        source_action: 'describe',
+        excerpt: 'la pava',
+      });
+    mGetDb.mockResolvedValue(db as unknown as Awaited<ReturnType<typeof getDb>>);
+  }
+
+  test('fresh: ≤24h → freshness=fresh with sighting', async () => {
+    setup(2);  // 2h ago
+    const r = await MemoryService.recall('mi pava', NOW);
+    expect(r.freshness).toBe('fresh');
+    if (r.freshness === 'fresh') expect(r.sighting.room_hint).toBe('cocina');
+  });
+
+  test('hedged: 24h < age ≤ 72h → freshness=hedged', async () => {
+    setup(48);  // 2 days
+    const r = await MemoryService.recall('mi pava', NOW);
+    expect(r.freshness).toBe('hedged');
+  });
+
+  test('miss: >72h → freshness=miss', async () => {
+    setup(100);  // ~4 days
+    const r = await MemoryService.recall('mi pava', NOW);
+    expect(r.freshness).toBe('miss');
+  });
+
+  test('miss when no sighting row exists', async () => {
+    setup(null);
+    const r = await MemoryService.recall('mi pava', NOW);
+    expect(r.freshness).toBe('miss');
+  });
+
+  test('miss when noun does not resolve to any object', async () => {
+    const db = stubDb();
+    db.getFirstAsync.mockResolvedValue(null);  // all resolve steps miss
+    mGetDb.mockResolvedValue(db as unknown as Awaited<ReturnType<typeof getDb>>);
+    const r = await MemoryService.recall('xyz inexistente', NOW);
+    expect(r.freshness).toBe('miss');
+  });
+});

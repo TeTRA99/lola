@@ -1,13 +1,16 @@
 // FR-4 Where-is-X — passive sightings log + recall.
-// E5.1 implements recordSighting. E5.2 (Sprint 4 / later) implements recall.
-// E5.4 implements resolveObjectFromUtterance — bridges dad's noun phrasing to
-// catalog object_ids via a 4-step precedence match.
+// E5.1 implements recordSighting. E5.2 implements recall hit path. E5.3 layers
+// the freshness window on top. E5.4 implements resolveObjectFromUtterance —
+// bridges dad's noun phrasing to catalog object_ids via 4-step precedence.
 
 import type { SQLiteBindValue } from 'expo-sqlite';
 import { getDb } from '@/adapters/storage';
 import { canonicalize } from './OnboardingService';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
+import { CONFIG } from '@/config';
+
+const HOUR_MS = 3_600_000;
 
 export type Sighting = {
   id: number;
@@ -124,8 +127,32 @@ export async function resolveObjectFromUtterance(noun: string): Promise<number |
   return null;
 }
 
-// E5.2 will implement recall properly. Stub returns miss until then so AskService
-// can ship without blocking on this.
-export async function recall(_objectName: string): Promise<RecallOutcome> {
-  return { freshness: 'miss' };
+/**
+ * E5.2 + E5.3 — resolve the noun to an object_id (E5.4), look up the
+ * most-recent sighting, and classify by NFR-8's freshness window:
+ *   <= MEMORY_FRESH_HOURS  → 'fresh'
+ *   <= MEMORY_HEDGE_HOURS  → 'hedged'
+ *   older OR no sighting   → 'miss' (consumer falls through to model)
+ */
+export async function recall(
+  noun: string,
+  nowMs: number = now(),
+): Promise<RecallOutcome> {
+  const objectId = await resolveObjectFromUtterance(noun);
+  if (objectId === null) return { freshness: 'miss' };
+  try {
+    const db = await getDb();
+    const row = await db.getFirstAsync<Sighting>(
+      'SELECT id, object_id, observed_at, snapshot_uri, room_hint, source_action, excerpt FROM sightings WHERE object_id = ? ORDER BY observed_at DESC LIMIT 1',
+      [objectId],
+    );
+    if (!row) return { freshness: 'miss' };
+
+    const ageH = (nowMs - row.observed_at) / HOUR_MS;
+    if (ageH <= CONFIG.MEMORY_FRESH_HOURS) return { freshness: 'fresh', sighting: row };
+    if (ageH <= CONFIG.MEMORY_HEDGE_HOURS) return { freshness: 'hedged', sighting: row };
+    return { freshness: 'miss' };
+  } catch {
+    return { freshness: 'miss' };
+  }
 }
