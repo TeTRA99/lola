@@ -82,15 +82,17 @@ describe('openrouter.chat', () => {
     if (!r.ok) expect(r.error).toBe('rate_limit');
   });
 
-  // B4 fix: retry budget tightened to 1 retry (was 2) to respect NFR-1.
-  test('503 retries once then bubbles err("network")', async () => {
+  // v1.1: retry budget widened to 2 retries (RETRY_DELAYS_MS = [500, 1500])
+  // after on-device testing showed spotty home Wi-Fi tripping single-retry.
+  test('503 retries twice then bubbles err("network")', async () => {
     mockFetch
+      .mockReturnValueOnce(mockResponse(503, {}))
       .mockReturnValueOnce(mockResponse(503, {}))
       .mockReturnValueOnce(mockResponse(503, {}));
     const r = await chat({ systemPrompt: 's', userText: 'u', imageBase64: 'x' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('network');
-    expect(mockFetch).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
+    expect(mockFetch).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
   });
 
   test('503 then 200 succeeds (retry recovery)', async () => {

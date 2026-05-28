@@ -81,17 +81,14 @@ export function fire(pattern: HapticPattern): void {
       return;
 
     case 'thinking_start':
-      // Initial tick immediate; then schedule repeating impacts every
-      // (HEARTBEAT_THINKING_ON_MS + HEARTBEAT_THINKING_OFF_MS).
-      // Note: setInterval approximates the rhythm — if AC1.6.5 perception
-      // test fails on Charly's iOS, escalate to CHHapticEngine AHAP via
-      // react-native-haptic-feedback custom patterns.
-      // B1 fix (2026-05-27 review): explicit clearThinking to guard against
-      // double-fire — the top-of-function guard skips for thinking_start.
+      // Initial tick immediate; then schedule repeating impacts. Medium impact
+      // is meaningfully more perceptible on Android than Light — Charly couldn't
+      // feel Light during testing on his Galaxy. B1 fix: explicit clearThinking
+      // to guard against double-fire.
       clearThinking();
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       thinkingTimer = setInterval(() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }, CONFIG.HEARTBEAT_THINKING_ON_MS + CONFIG.HEARTBEAT_THINKING_OFF_MS);
       return;
 

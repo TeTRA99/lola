@@ -26,19 +26,31 @@ async function resolveLocale(): Promise<string | null> {
     // On iOS it's optional. Pass empty to let the platform default.
     const result = await ExpoSpeechRecognitionModule.getSupportedLocales({});
     const langs = new Set(result.locales);
+    console.log('[stt] supported locales:', JSON.stringify(result.locales));
+    console.log('[stt] spanish-ish supported:', result.locales.filter(l => l.toLowerCase().startsWith('es')));
     const candidates = [CONFIG.STT_LOCALE, ...CONFIG.STT_LOCALE_FALLBACKS];
     resolvedLocale = candidates.find(loc => langs.has(loc)) ?? null;
+    console.log('[stt] picked locale:', resolvedLocale);
     // Unlike TTS, STT *requires* engine support for the locale — returning
     // err('no_locale') is intentional (a "best-effort" STT would produce garbage).
-  } catch {
+  } catch (e) {
+    console.log('[stt] getSupportedLocales threw:', e);
     resolvedLocale = null;
   }
   return resolvedLocale;
 }
 
 export async function listen(opts: ListenOptions = {}): Promise<Result<string, STTError>> {
-  const lang = await resolveLocale();
-  if (!lang) return err('no_locale');
+  // Force re-resolve so each tap shows the supported locale dump in logs.
+  resolvedLocale = null;
+  let lang = await resolveLocale();
+  if (!lang) {
+    // Engine returned empty supported-locales list (common on Android when no
+    // service package is specified). Try our configured locale anyway — most
+    // engines accept it at start() even if they don't report it in getSupportedLocales.
+    console.log('[stt] supported locales empty, trying CONFIG.STT_LOCALE directly:', CONFIG.STT_LOCALE);
+    lang = CONFIG.STT_LOCALE;
+  }
 
   const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
   if (!perm.granted) return err('permission_denied');
@@ -83,13 +95,15 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
     activeAbort = () => settle(err('timeout'));
 
     try {
+      console.log('[stt] starting with lang:', lang);
       ExpoSpeechRecognitionModule.start({
         lang,
         interimResults: false,
         continuous: false,
         requiresOnDeviceRecognition: false,
       });
-    } catch {
+    } catch (e) {
+      console.log('[stt] start threw:', e);
       settle(err('engine_unavailable'));
       return;
     }

@@ -45,6 +45,32 @@ export async function addObject(input: {
   const ts = now();
   try {
     const db = await getDb();
+
+    // If a row already exists with this canonical (typically auto-created by
+    // DescribeService when the model "observed" it in a scene), promote it to
+    // 'catalog' and overwrite display/description with the user's input.
+    // Same canonical already in 'catalog' is the real duplicate case.
+    const existing = await db.getFirstAsync<{ id: number; source: string }>(
+      'SELECT id, source FROM objects WHERE canonical_name = ?',
+      [canonical],
+    );
+    if (existing) {
+      if (existing.source === 'catalog') return err('duplicate_canonical');
+      await db.runAsync(
+        `UPDATE objects SET source = 'catalog', display_name = ?, description = ?,
+           reference_image_uri = COALESCE(?, reference_image_uri), updated_at = ?
+         WHERE id = ?`,
+        [
+          input.display,
+          input.description ?? null,
+          input.reference_image_uri ?? null,
+          ts,
+          existing.id,
+        ],
+      );
+      return ok({ id: existing.id });
+    }
+
     const result = await db.runAsync(
       'INSERT INTO objects (canonical_name, display_name, description, source, reference_image_uri, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [

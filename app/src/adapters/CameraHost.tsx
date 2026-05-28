@@ -4,25 +4,20 @@
 
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import { _registerCameraRef } from './camera';
 
 export function CameraHost() {
   const ref = useRef<CameraView>(null);
-  const [permission] = useCameraPermissions();
 
   useEffect(() => {
     _registerCameraRef(ref.current);
     return () => _registerCameraRef(null);
-  }, [permission]);
+  }, []);
 
-  if (!permission?.granted) {
-    // Don't mount CameraView until permission is granted — avoids the "no camera"
-    // black surface in the offscreen render. Permission request happens lazily
-    // in captureSnapshot(), which will then trigger a re-render via the hook.
-    return null;
-  }
-
+  // Always mount the hidden CameraView. The 1×1 offscreen surface causes no
+  // visual issue pre-permission, and removing the permission gate eliminates
+  // a race where captureSnapshot fires before useCameraPermissions has settled.
   return (
     <View style={styles.hidden} pointerEvents="none">
       <CameraView ref={ref} facing="back" />

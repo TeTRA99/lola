@@ -6,20 +6,33 @@ import { COPY } from '@/services';
 import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
+import { stop as ttsStop } from '@/adapters/tts';
+import { abort as sttAbort } from '@/adapters/stt';
 
 export function HomeScreen() {
   const [busyDescribe, setBusyDescribe] = useState(false);
   const [busyAsk, setBusyAsk] = useState(false);
 
+  // Tap while Lola is speaking / listening / thinking → just shut her up.
+  // User has to tap again to start a fresh action. Avoids the "I tapped to
+  // interrupt and now she's already pulling a new picture" feeling.
+  const isBusy = busyDescribe || busyAsk;
+  const cancelInflight = () => {
+    ttsStop();
+    sttAbort();
+    setBusyDescribe(false);
+    setBusyAsk(false);
+  };
+
   const onDescribe = async () => {
-    if (busyDescribe) return;
+    if (isBusy) { cancelInflight(); return; }
     setBusyDescribe(true);
     try { await DescribeService.run(); }
     finally { setTimeout(() => setBusyDescribe(false), 100); }
   };
 
   const onAsk = async () => {
-    if (busyAsk) return;
+    if (isBusy) { cancelInflight(); return; }
     setBusyAsk(true);
     try { await AskService.run(); }
     finally { setTimeout(() => setBusyAsk(false), 100); }

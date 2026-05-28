@@ -11,6 +11,7 @@ import {
 } from 'expo-camera';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { ok, err, type Result } from '@/utils/result';
+import * as Settings from '@/services/Settings';
 
 export type CameraError = 'permission_denied' | 'no_camera' | 'capture_failed' | 'unknown';
 
@@ -59,16 +60,25 @@ export async function captureSnapshot(): Promise<Result<Snapshot, CameraError>> 
 
   if (!cameraRef && !(await awaitCameraRef())) return err('no_camera');
 
-  // takePictureAsync is on the CameraView instance via ref.
+  // takePictureAsync is on the CameraView instance via ref. Wrap so native
+  // throws ("Failed to capture image", camera-in-use, etc.) come back as a
+  // typed error instead of an unhandled promise rejection.
   type TakePictureResult = { uri: string; base64?: string; width: number; height: number };
   type CameraViewWithCapture = CameraView & {
-    takePictureAsync(opts: { base64: boolean; quality: number; skipProcessing: boolean }): Promise<TakePictureResult | undefined>;
+    takePictureAsync(opts: { base64: boolean; quality: number; skipProcessing: boolean; shutterSound?: boolean }): Promise<TakePictureResult | undefined>;
   };
-  const photo = await (cameraRef as CameraViewWithCapture).takePictureAsync({
-    base64: true,
-    quality: JPEG_QUALITY,
-    skipProcessing: false,
-  });
+  let photo: TakePictureResult | undefined;
+  try {
+    photo = await (cameraRef as CameraViewWithCapture).takePictureAsync({
+      base64: true,
+      quality: JPEG_QUALITY,
+      skipProcessing: false,
+      shutterSound: !Settings.getBoolSync(Settings.KEYS.quietCapture, false),
+    });
+  } catch (e) {
+    console.log('[camera] takePictureAsync threw:', e);
+    return err('capture_failed');
+  }
 
   if (!photo || !photo.base64) return err('capture_failed');
 
@@ -79,16 +89,21 @@ export async function captureSnapshot(): Promise<Result<Snapshot, CameraError>> 
 
   // Resize via expo-image-manipulator.
   const ratio = MAX_DIMENSION / longer;
-  const resized = await manipulateAsync(
-    photo.uri,
-    [{ resize: { width: Math.round(photo.width * ratio), height: Math.round(photo.height * ratio) } }],
-    { compress: JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
-  );
-  if (!resized.base64) return err('capture_failed');
-  return ok({
-    uri: resized.uri,
-    base64: resized.base64,
-    width: resized.width,
-    height: resized.height,
-  });
+  try {
+    const resized = await manipulateAsync(
+      photo.uri,
+      [{ resize: { width: Math.round(photo.width * ratio), height: Math.round(photo.height * ratio) } }],
+      { compress: JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+    );
+    if (!resized.base64) return err('capture_failed');
+    return ok({
+      uri: resized.uri,
+      base64: resized.base64,
+      width: resized.width,
+      height: resized.height,
+    });
+  } catch (e) {
+    console.log('[camera] manipulateAsync threw:', e);
+    return err('capture_failed');
+  }
 }

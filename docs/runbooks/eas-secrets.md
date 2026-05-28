@@ -8,17 +8,22 @@ Get a key from <https://openrouter.ai/keys> (the free tier is fine — NFR-2a bu
 
 ```bash
 cd app
-npx eas-cli@latest secret:create \
+npx eas-cli@latest env:create \
     --scope project \
+    --environment production \
     --name EXPO_PUBLIC_OPENROUTER_API_KEY \
+    --type string \
+    --visibility secret \
     --value sk-or-v1-REPLACE_WITH_REAL_KEY
 ```
 
-The secret lives in EAS' encrypted store, scoped to this project. Verify:
+The value lives in EAS' encrypted store, scoped to this project's `production` environment. Verify:
 
 ```bash
-npx eas-cli@latest secret:list
+npx eas-cli@latest env:list --environment production
 ```
+
+> Note: the legacy `eas secret:create` command still works but is deprecated. New work should use `env:create`.
 
 ## How the build reads it
 
@@ -37,8 +42,14 @@ Dev builds (the `development` and `preview` profiles) read from your local `.env
 ## Rotating the key
 
 ```bash
-npx eas-cli@latest secret:delete EXPO_PUBLIC_OPENROUTER_API_KEY
-npx eas-cli@latest secret:create --name EXPO_PUBLIC_OPENROUTER_API_KEY --value <new-key>
+npx eas-cli@latest env:delete --environment production --name EXPO_PUBLIC_OPENROUTER_API_KEY
+npx eas-cli@latest env:create \
+    --scope project \
+    --environment production \
+    --name EXPO_PUBLIC_OPENROUTER_API_KEY \
+    --type string \
+    --visibility secret \
+    --value <new-key>
 ```
 
 Then trigger a fresh production build. Old builds keep working until the previous key is revoked in OpenRouter's dashboard.

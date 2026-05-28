@@ -1,18 +1,24 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SQLiteProvider, migrate } from '@/adapters/storage';
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from 'react-native-executorch-expo-resource-fetcher';
 import { LaunchSplash } from '@/screens/LaunchSplash';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { SetupScreen } from '@/screens/SetupScreen';
 import { DebugScreen } from '@/screens/DebugScreen';
 
+// Register the Expo resource fetcher with ExecuTorch once at boot. Required
+// before any module (ImageEmbeddings, LLM, etc.) can download / load weights.
+initExecutorch({ resourceFetcher: ExpoResourceFetcher });
+
 type Screen = 'splash' | 'home' | 'setup' | 'debug';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('splash');
+  console.log('[App] render with screen =', screen);
 
   return (
-    <SQLiteProvider databaseName="lola.db" onInit={migrate}>
+    <>
       {screen === 'splash' && (
         <LaunchSplash
           onDone={() => setScreen('home')}
@@ -24,6 +30,6 @@ export default function App() {
       {screen === 'setup' && <SetupScreen onClose={() => setScreen('home')} />}
       {screen === 'debug' && <DebugScreen onClose={() => setScreen('home')} />}
       <StatusBar style="light" />
-    </SQLiteProvider>
+    </>
   );
 }

@@ -1,5 +1,7 @@
 jest.mock('expo-speech', () => ({
-  speak: jest.fn(),
+  // speak() now resolves only when the engine reports done — fire onDone so
+  // the adapter's awaited promise settles in tests.
+  speak: jest.fn((_text: string, opts?: { onDone?: () => void }) => { opts?.onDone?.(); }),
   stop: jest.fn(),
   getAvailableVoicesAsync: jest.fn(),
 }));
@@ -27,10 +29,10 @@ describe('TTS adapter', () => {
 
     const r = await speak('hola');
     expect(r.ok).toBe(true);
-    expect(mockedSpeak).toHaveBeenCalledWith('hola', {
+    expect(mockedSpeak).toHaveBeenCalledWith('hola', expect.objectContaining({
       language: 'es-AR',
       rate: CONFIG.TTS_RATE,
-    });
+    }));
   });
 
   test('falls back to es-419 when es-AR not installed', async () => {

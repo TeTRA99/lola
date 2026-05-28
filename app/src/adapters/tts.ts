@@ -38,8 +38,25 @@ async function resolveLocale(): Promise<string> {
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<Result<void, TTSError>> {
   try {
     const language = await resolveLocale();
-    Speech.speak(text, { language, rate: opts.rate ?? CONFIG.TTS_RATE });
-    return ok(undefined);
+    // Resolve only when speech finishes (or is stopped externally). Earlier
+    // we resolved immediately, which made callers' `await speak(...)` return
+    // before Lola actually spoke — busy gates cleared too early and the
+    // "tap to interrupt" pattern stopped working.
+    return await new Promise<Result<void, TTSError>>(resolve => {
+      let settled = false;
+      const settle = (r: Result<void, TTSError>) => {
+        if (settled) return;
+        settled = true;
+        resolve(r);
+      };
+      Speech.speak(text, {
+        language,
+        rate: opts.rate ?? CONFIG.TTS_RATE,
+        onDone: () => settle(ok(undefined)),
+        onStopped: () => settle(ok(undefined)),
+        onError: () => settle(err('unknown')),
+      });
+    });
   } catch {
     return err('unknown');
   }

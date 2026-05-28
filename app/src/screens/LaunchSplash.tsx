@@ -7,11 +7,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
+import Constants from 'expo-constants';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
 import { CONFIG } from '@/config';
 
-const SPLASH_DURATION_MS = 800;
+const SPLASH_DURATION_MS = 3000;
+// Native app version (from app.json) — only changes on a real APK rebuild.
+const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
+// JS bundle load time — updates on every hot reload so Charly can tell at a
+// glance whether the latest dev push made it onto the phone.
+const BUNDLE_LOADED_AT = new Date();
+function pad(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
+const BUNDLE_STAMP = `${pad(BUNDLE_LOADED_AT.getHours())}:${pad(BUNDLE_LOADED_AT.getMinutes())}:${pad(BUNDLE_LOADED_AT.getSeconds())}`;
 
 type Props = {
   onDone: () => void;
@@ -30,13 +38,28 @@ export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
   const stage = useRef<GestureStage>('none');
   const greeted = useRef(false);
 
-  // Greet once on mount.
+  // Greet + arm initial auto-dismiss once on mount. Refs to the callbacks let
+  // the timer fire the latest closure without re-running this effect.
+  const onDoneRef = useRef(onDone);
+  const onSetupRef = useRef(onSetup);
+  const onDebugRef = useRef(onDebug);
+  onDoneRef.current = onDone;
+  onSetupRef.current = onSetup;
+  onDebugRef.current = onDebug;
+
   useEffect(() => {
+    console.log('[splash] mount effect ran');
     if (!greeted.current) {
       greeted.current = true;
       void speak(COPY.greeting);
     }
+    // Arm the initial auto-dismiss right at mount — no input needed.
+    autoDismiss.current = setTimeout(() => {
+      console.log('[splash] auto-dismiss timer fired, calling onDone');
+      onDoneRef.current();
+    }, SPLASH_DURATION_MS);
     return () => {
+      console.log('[splash] mount effect CLEANUP running — unmounting');
       [autoDismiss, setupTimer, debugTimer].forEach(t => {
         if (t.current) clearTimeout(t.current);
         t.current = null;
@@ -63,14 +86,14 @@ export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
       stage.current = 'none';
 
       if (reached === 'debug') {
-        onDebug?.();
+        onDebugRef.current?.();
       } else if (reached === 'setup') {
-        onSetup?.();
+        onSetupRef.current?.();
       } else if (!autoDismiss.current) {
-        autoDismiss.current = setTimeout(onDone, SPLASH_DURATION_MS);
+        autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
       }
     }
-  }, [pressed, onSetup, onDebug, onDone]);
+  }, [pressed]);
 
   return (
     <Pressable
@@ -79,6 +102,18 @@ export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
       onPressOut={() => setPressed(false)}
     >
       <Text style={styles.brand}>Lola</Text>
+      <Text style={styles.build}>v{APP_VERSION} · bundle {BUNDLE_STAMP}</Text>
+      <Pressable
+        style={styles.gearBtn}
+        onPress={() => {
+          // Cancel the auto-dismiss before navigating away.
+          if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
+          onSetupRef.current?.();
+        }}
+        accessibilityLabel="Configuración"
+      >
+        <Text style={styles.gearIcon}>⚙</Text>
+      </Pressable>
     </Pressable>
   );
 }
@@ -96,4 +131,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
   },
+  build: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  gearBtn: {
+    position: 'absolute',
+    bottom: 32,
+    right: 24,
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 28,
+  },
+  gearIcon: { color: '#888', fontSize: 32 },
 });
