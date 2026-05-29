@@ -498,7 +498,10 @@ function RoomForm({
           </View>
           <Text style={styles.photoSub}>{t.refPhotosSub}</Text>
           {downloadPct !== null ? (
-            <Text style={styles.photoSub}>{(downloadPct * 100).toFixed(0)}%…</Text>
+            <View style={styles.downloadBanner}>
+              <Icon name="lastSeen" size={16} color={color.primary[700]} />
+              <Text style={styles.downloadText}>{t.modelDownloading(Math.round(downloadPct * 100))}</Text>
+            </View>
           ) : null}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomStrip}>
@@ -605,6 +608,12 @@ const styles = StyleSheet.create({
   counter: { fontFamily: fontFamily.mono, fontSize: 13, color: color.text.medium },
   counterDone: { color: color.status.success },
   photoSub: { fontSize: 13, fontFamily: fontFamily.regular, color: color.text.medium, marginBottom: 12 },
+  downloadBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: color.primary[50], borderRadius: radius.sm,
+    paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12,
+  },
+  downloadText: { flex: 1, fontSize: 13, fontFamily: fontFamily.semibold, fontWeight: '600', color: color.primary[700] },
 
   dropTile: {
     width: '100%', height: 168, borderRadius: radius.lg, borderWidth: 2, borderStyle: 'dashed',

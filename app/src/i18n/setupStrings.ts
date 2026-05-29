@@ -74,6 +74,7 @@ type SetupCopy = {
   photosLow: (n: number) => string;
   photosOk: (n: number) => string;
   photosFull: string;
+  modelDownloading: (pct: number) => string;
   deleteConfirmTitle: string;
   deleteConfirmBody: (n: string) => string;
   cancel: string;
@@ -143,6 +144,7 @@ const en: SetupCopy = {
   photosLow: (n) => `${n} of 5 — add a couple more angles.`,
   photosOk: (n) => `${n} of 5 — looking good.`,
   photosFull: "All 5 captured — that's plenty.",
+  modelDownloading: (pct) => `First time only: downloading the recognition model… ${pct}%`,
   deleteConfirmTitle: 'Delete?',
   deleteConfirmBody: (n) => `Delete “${n}”?`,
   cancel: 'Cancel',
@@ -212,6 +214,7 @@ const es: SetupCopy = {
   photosLow: (n) => `${n} de 5 — agregá un par de ángulos más.`,
   photosOk: (n) => `${n} de 5 — va bien.`,
   photosFull: 'Las 5 listas — con eso alcanza.',
+  modelDownloading: (pct) => `Solo la primera vez: descargando el modelo de reconocimiento… ${pct}%`,
   deleteConfirmTitle: '¿Eliminar?',
   deleteConfirmBody: (n) => `¿Eliminar “${n}”?`,
   cancel: 'Cancelar',

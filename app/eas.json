@@ -17,10 +17,7 @@
     },
     "production": {
       "ios": { "autoIncrement": true },
-      "android": { "buildType": "apk", "autoIncrement": true },
-      "env": {
-        "EXPO_PUBLIC_OPENROUTER_API_KEY": "$EXPO_PUBLIC_OPENROUTER_API_KEY"
-      }
+      "android": { "buildType": "apk", "autoIncrement": true }
     }
   },
   "submit": {
