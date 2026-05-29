@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, PanResponder, ScrollView, useWindowDimensions,
+  View, Text, StyleSheet, Pressable, PanResponder, ScrollView, AppState, useWindowDimensions,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
 import { speak } from '@/adapters/tts';
@@ -53,6 +53,15 @@ export function GuideScreen({
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const notFoundRef = useRef(false); // said "no la encuentro"
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep the camera active only while the app is foregrounded — otherwise the
+  // OS disables the camera and VisionCamera throws "Camera is disabled / fatal
+  // Camera error" on background→foreground.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => setAppActive(s === 'active'));
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!hasPermission) void requestPermission();
@@ -132,12 +141,13 @@ export function GuideScreen({
         <LiveLayer
           device={device}
           hasPermission={hasPermission}
+          active={appActive}
           target={liveTarget}
           setTarget={setLiveTarget}
           onProximity={applyProximity}
         />
       ) : (
-        <MockLayer device={device} hasPermission={hasPermission} onProximity={applyProximity} />
+        <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
       )}
 
       {/* HUD (dev spike — English, like DebugScreen) */}
@@ -166,10 +176,12 @@ export function GuideScreen({
 function MockLayer({
   device,
   hasPermission,
+  active,
   onProximity,
 }: {
   device?: CameraDevice;
   hasPermission: boolean;
+  active: boolean;
   onProximity: (p: number | null) => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -210,7 +222,7 @@ function MockLayer({
   return (
     <>
       {hasPermission && device ? (
-        <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} />
+        <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} />
       ) : (
         <CamFallback hasPermission={hasPermission} />
       )}
@@ -226,12 +238,14 @@ function MockLayer({
 function LiveLayer({
   device,
   hasPermission,
+  active,
   target,
   setTarget,
   onProximity,
 }: {
   device?: CameraDevice;
   hasPermission: boolean;
+  active: boolean;
   target: string | null;
   setTarget: (t: string | null) => void;
   onProximity: (p: number | null) => void;
@@ -278,7 +292,7 @@ function LiveLayer({
 
   return (
     <>
-      <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} outputs={outputs} />
+      <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} outputs={outputs} />
 
       {/* Debug overlay (frame is landscape; back camera rotated 90° CW). The
           actively-tracked target is highlighted. Positions are best-effort. */}
