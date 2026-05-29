@@ -12,7 +12,7 @@
 //     per docs + typechecked, but not yet run on hardware. The model downloads
 //     only when live mode is turned on.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, PanResponder, useWindowDimensions,
 } from 'react-native';
@@ -34,6 +34,7 @@ export function GuideScreen({
   const device = useCameraDevice('back');
   const [live, setLive] = useState(false);
   const [proximity, setProximity] = useState(0);
+  const lastHudAt = useRef(0);
 
   useEffect(() => {
     if (!hasPermission) void requestPermission();
@@ -45,9 +46,16 @@ export function GuideScreen({
   }, []);
 
   // Single sink for proximity from either source (mock touch or live detection).
+  // Haptics read module state (updateGuide), so they update every frame with no
+  // render. The HUD number is cosmetic — throttle it to ~6/s to avoid a
+  // render-per-frame storm (which, with a fresh outputs array, can loop).
   const applyProximity = useCallback((p: number | null) => {
-    setProximity(p ?? 0);
     updateGuide(p);
+    const now = Date.now();
+    if (now - lastHudAt.current > 160) {
+      lastHudAt.current = now;
+      setProximity(p ?? 0);
+    }
   }, []);
 
   const locked = proximity >= CONFIG.GUIDE_LOCK_PROXIMITY;
@@ -150,12 +158,15 @@ function LiveLayer({
     targetCocoLabel,
     onProximity,
   );
+  // Stable identity — a fresh array each render makes VisionCamera re-init and
+  // can spiral into "maximum update depth exceeded".
+  const outputs = useMemo(() => [frameOutput], [frameOutput]);
 
   if (!hasPermission || !device) return <CamFallback hasPermission={hasPermission} />;
 
   return (
     <>
-      <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} outputs={[frameOutput]} />
+      <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} outputs={outputs} />
       <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
       {!isReady ? (
         <View style={styles.banner}>

@@ -38,7 +38,7 @@ export const CONFIG = {
   // "Guide me to it" proximity haptics (feat/guide-me-to-it spike).
   // Pulse RATE (not amplitude) encodes closeness — Android amplitude control is
   // weak; faster ticks read clearly even on Charly's Galaxy.
-  GUIDE_PULSE_MIN_MS: 60,      // fastest tick — target centered / locked
+  GUIDE_PULSE_MIN_MS: 110,     // fastest tick — target centered / locked (raised from 60: 60 felt too intense on the Galaxy)
   GUIDE_PULSE_MAX_MS: 500,     // slowest tick — target far from center
   GUIDE_SEARCH_TICK_MS: 1400,  // soft, sparse tick when no target is in frame
   GUIDE_LOCK_PROXIMITY: 0.92,  // ≥ this counts as locked-on (Heavy tap)

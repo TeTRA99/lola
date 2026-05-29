@@ -39,8 +39,9 @@ function fireTick(p: number | null): void {
       // Searching — soft + sparse so silence doesn't read as "app died".
       void Haptics.selectionAsync();
     } else if (p >= CONFIG.GUIDE_LOCK_PROXIMITY) {
-      // Locked on — strongest tap, fired rapidly ≈ a sustained buzz.
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      // Locked on — same Medium tap as homing, but the fast rate signals "here".
+      // (Heavy here felt too intense on the Galaxy; speed carries the lock.)
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } else {
       // Homing — Medium is the floor reliably felt on the Galaxy.
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
