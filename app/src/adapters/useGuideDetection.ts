@@ -48,9 +48,13 @@ export function useGuideDetection(
       (frame: Frame) => {
         'worklet';
         try {
-          if (!runOnFrame) return;
-          const dets = runOnFrame(frame, false) as RawDetection[] | undefined;
-          scheduleOnRN(handleDetections, dets ?? [], frame.width, frame.height);
+          if (runOnFrame) {
+            const dets = runOnFrame(frame, false) as RawDetection[] | undefined;
+            if (dets) scheduleOnRN(handleDetections, dets, frame.width, frame.height);
+          }
+        } catch {
+          // Model mid-load or being torn down (live→mock toggle) — a frame can
+          // still call in and throw "Model not loaded". Skip this frame quietly.
         } finally {
           frame.dispose();
         }
