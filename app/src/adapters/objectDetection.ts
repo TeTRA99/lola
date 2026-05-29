@@ -18,6 +18,12 @@ export type Detection = {
   box: NormBox;
 };
 
+/** Pixel-space box as returned by executorch (top-left x1,y1 / bottom-right x2,y2). */
+export type PixelBBox = { x1: number; y1: number; x2: number; y2: number };
+
+/** A detection straight off the model — bbox in frame pixels. */
+export type RawDetection = { bbox: PixelBBox; label: string; score: number };
+
 /**
  * Proximity 0..1 of a box centroid to frame-center (1 = dead-center).
  * This is the single scalar the proximity haptic loop consumes — swap the mock
@@ -33,6 +39,21 @@ export function proximityFromBox(box: NormBox): number {
   return 1 - dist;
 }
 
+/** Convert a pixel bbox + frame size into a normalized box (origin top-left). */
+export function normalizePixelBox(b: PixelBBox, frameW: number, frameH: number): NormBox {
+  if (frameW <= 0 || frameH <= 0) return { x: 0, y: 0, width: 0, height: 0 };
+  const x1 = Math.min(b.x1, b.x2);
+  const y1 = Math.min(b.y1, b.y2);
+  const x2 = Math.max(b.x1, b.x2);
+  const y2 = Math.max(b.y1, b.y2);
+  return {
+    x: x1 / frameW,
+    y: y1 / frameH,
+    width: (x2 - x1) / frameW,
+    height: (y2 - y1) / frameH,
+  };
+}
+
 // COCO-80 labels we can offer "guide me to it" for in v1. Describe should only
 // surface the guide affordance when the named object maps to one of these.
 // (Subset — populate from the model's full label map when the detector lands.)
@@ -42,6 +63,20 @@ export const GUIDABLE_COCO_LABELS = [
   'backpack', 'handbag', 'sports ball', 'clock', 'vase', 'wine glass',
 ] as const;
 
-// TODO(spike): wire VisionCamera v5 runOnFrame → executorch YOLO26n detector,
-// returning the best `Detection` for the requested target each frame:
-//   createDetector(target: string): (frame: Frame) => Detection | null
+/**
+ * Pick the single detection to home in on: highest-score match for the target
+ * COCO label, or — when no target is given — the highest-score guidable object.
+ * Returns null when nothing relevant is in frame (→ "searching" haptic).
+ */
+export function bestDetectionFor(
+  dets: RawDetection[],
+  targetLabel: string | null,
+): RawDetection | null {
+  const guidable = GUIDABLE_COCO_LABELS as readonly string[];
+  const pool = targetLabel
+    ? dets.filter(d => d.label === targetLabel)
+    : dets.filter(d => guidable.includes(d.label));
+  let best: RawDetection | null = null;
+  for (const d of pool) if (!best || d.score > best.score) best = d;
+  return best;
+}
