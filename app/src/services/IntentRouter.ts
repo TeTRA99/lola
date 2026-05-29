@@ -13,6 +13,7 @@ const INTENT_SYSTEM_PROMPT = `Sos un clasificador de intenciones para una asiste
 - "repeat": el usuario quiere que repitas LITERAL la última descripción ("¿otra vez?", "repetí", "de nuevo").
 - "extend": el usuario quiere MÁS DETALLE sobre la última escena ("contame más", "seguí", "más detalles").
 - "memory": el usuario pregunta UBICACIÓN/MOMENTO de un objeto que vio antes — dónde está, dónde lo dejaste, cuándo lo viste, qué había alrededor. Es una pregunta sobre EL PASADO. Extraé el sustantivo principal en singular y sin artículo.
+- "guide": el usuario quiere que lo LLEVES o GUÍES físicamente HACIA un objeto que está en el lugar AHORA, para poder agarrarlo o llegar hasta él — "llevame a la taza", "guiame hasta el control", "ayudame a llegar al sillón", "¿me llevás al vaso?". Extraé el sustantivo principal en "noun" (singular, sin artículo). NO confundir con "memory": memory PREGUNTA dónde está; guide PIDE QUE LO LLEVES.
 - "model": cualquier otra pregunta sobre el CONTENIDO visible — qué es, qué dice, qué color, qué marca, cuántas hay, cómo está, está vencido, etc.
 
 Para "model" también tenés que decidir "needsCurrent": ¿hace falta MIRAR LA ESCENA AHORA o se puede responder con la escena que ya describió antes?
@@ -24,7 +25,7 @@ REGLA IMPORTANTE: si te paso un bloque "[CONTEXTO RECIENTE: ...]" con tu última
 Si no hay contexto o el sustantivo no aparece en él, default a needsCurrent=true.
 
 Respondé SOLO con un objeto JSON de esta forma exacta:
-{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null }
+{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null }
 
 Ejemplos:
 - "¿dónde estoy?" → { "intent": "where_am_i", "noun": null, "needsCurrent": null, "chitchatKind": null }
@@ -41,6 +42,9 @@ Ejemplos:
 - "Lola, otra vez" → { "intent": "repeat", "noun": null, "needsCurrent": null, "chitchatKind": null }
 - "contame más sobre esto" → { "intent": "extend", "noun": null, "needsCurrent": null, "chitchatKind": null }
 - "¿dónde está el termo?" → { "intent": "memory", "noun": "termo", "needsCurrent": null, "chitchatKind": null }
+- "llevame a la taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null }
+- "guiame hasta el control" → { "intent": "guide", "noun": "control", "needsCurrent": null, "chitchatKind": null }
+- "ayudame a llegar al sillón" → { "intent": "guide", "noun": "sillón", "needsCurrent": null, "chitchatKind": null }
 - "qué había cerca del termo" → { "intent": "memory", "noun": "termo", "needsCurrent": null, "chitchatKind": null }
 - "sabés de qué marca son las papas" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
 - "de qué color era la bolsa" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
@@ -96,6 +100,11 @@ export async function classifyIntent(utterance: string): Promise<RouteDecision> 
     case 'memory':
       if (typeof raw.noun === 'string' && raw.noun.trim()) {
         return { type: 'memory', object: raw.noun.trim() };
+      }
+      return { type: 'model', needsCurrent };
+    case 'guide':
+      if (typeof raw.noun === 'string' && raw.noun.trim()) {
+        return { type: 'guide', object: raw.noun.trim() };
       }
       return { type: 'model', needsCurrent };
     case 'model':

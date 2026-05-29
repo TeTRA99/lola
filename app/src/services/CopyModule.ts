@@ -36,6 +36,13 @@ export const COPY = {
     errPermSub: 'Tocá para darme permiso.',
     errPermBtn: 'Abrir ajustes',
   },
+  // "Guíame a X" guidance flow (FR voseo). `obj` is the noun the user said.
+  guide: {
+    searching: (obj: string): string => `Buscando ${obj}. Movéme despacio por el lugar.`,
+    cannotGuide: (obj: string): string => `Por ahora no puedo guiarte hasta ${obj}.`,
+    found: '¡Ahí está! Lo tenés enfrente.',
+    notFound: (obj: string): string => `No encuentro ${obj} por acá. ¿Probamos de nuevo?`,
+  },
   // Splash caregiver legend pointing to the OS app-icon setup shortcut.
   splash: {
     // On-screen greeting under the wordmark (distinct from the spoken `greeting`).

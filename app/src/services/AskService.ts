@@ -12,6 +12,8 @@ import { getDb } from '@/adapters/storage';
 import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '@/services/errorCopy';
 import { type RouteDecision } from '@/services/UtteranceRouter';
 import { classifyIntent } from '@/services/IntentRouter';
+import { resolveGuideTarget } from '@/services/GuideTargets';
+import { COPY } from '@/services/CopyModule';
 import { applyCatalogNarration } from '@/services/CatalogResolver';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
@@ -38,6 +40,9 @@ export type AskOutcome = {
   narration: string;
   objects: LolaObject[];
   route: AskRoute;
+  // Set on the "guíame a X" route when the object is guidable — the caller
+  // opens the live guide screen with this target. Absent → no navigation.
+  guide?: { cocoLabel: string; spoken: string };
 };
 
 async function loadCatalogSafe() {
@@ -127,6 +132,8 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
     }
     case 'memory':
       return handleMemory(decision.object, utterance, t0, ensureSnapshot);
+    case 'guide':
+      return handleGuide(decision.object, t0);
     case 'model': {
       // If the question is about something already in cache (needsCurrent=false)
       // and we have a cached snapshot, skip the fresh capture — the user may
@@ -142,6 +149,25 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       return handleModel(s.value, utterance, t0);
     }
   }
+}
+
+// "Guíame a X": resolve the spoken object to a detectable target (LLM). If
+// guidable, return it so the caller opens the live guide (which announces +
+// homes by haptics); if not, say the graceful fallback and stay put.
+async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome, AskError>> {
+  fire('thinking_start');
+  const target = await resolveGuideTarget(noun);
+  fire('thinking_stop');
+  if (!target) {
+    fire('answer_ready');
+    const line = COPY.guide.cannotGuide(noun);
+    await speak(line);
+    await logEvent(true, now() - t0, 'guide_unsupported');
+    return ok({ narration: line, objects: [], route: 'guide' });
+  }
+  fire('answer_ready');
+  await logEvent(true, now() - t0, null);
+  return ok({ narration: '', objects: [], route: 'guide', guide: target });
 }
 
 const CHITCHAT_REPLIES: Record<import('./UtteranceRouter').ChitchatKind, string> = {

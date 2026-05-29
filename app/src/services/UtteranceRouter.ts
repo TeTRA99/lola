@@ -8,6 +8,7 @@ export type RouteDecision =
   | { type: 'repeat' }
   | { type: 'extend' }
   | { type: 'memory'; object: string }
+  | { type: 'guide'; object: string }
   | { type: 'model'; needsCurrent?: boolean }
   | { type: 'chitchat'; kind: ChitchatKind }
   | { type: 'where_am_i' };

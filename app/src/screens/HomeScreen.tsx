@@ -42,7 +42,15 @@ type ErrKind = 'camera' | 'perm';
 const ACCENT_DARK = color.dad.askAccent; // #5AA2F5
 const ACCENT_LIGHT = color.primary[500]; // #1A73E8
 
-export function HomeScreen({ onDevSetup, onDevGuide }: { onDevSetup?: () => void; onDevGuide?: () => void }) {
+export function HomeScreen({
+  onDevSetup,
+  onDevGuide,
+  onOpenGuide,
+}: {
+  onDevSetup?: () => void;
+  onDevGuide?: () => void;
+  onOpenGuide?: (target: { cocoLabel: string; spoken: string }) => void;
+}) {
   const [mode, setMode] = useState<Mode>('describe');
   const [state, setState] = useState<HomeState>('idle');
   const [errKind, setErrKind] = useState<ErrKind>('camera');
@@ -114,6 +122,11 @@ export function HomeScreen({ onDevSetup, onDevGuide }: { onDevSetup?: () => void
       const res = m === 'describe' ? await DescribeService.run() : await AskService.run();
       if (cancelledRef.current) return; // user interrupted — don't clobber idle
       if (res.ok) {
+        // "Guíame a X" → hand off to the live guide screen instead of idling.
+        if ('guide' in res.value && res.value.guide && onOpenGuide) {
+          onOpenGuide(res.value.guide);
+          return;
+        }
         setState('idle');
       } else {
         console.log('[home] run returned error:', res.error);

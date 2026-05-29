@@ -15,6 +15,8 @@ import {
   View, Text, StyleSheet, Pressable, PanResponder, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
+import { speak } from '@/adapters/tts';
+import { COPY } from '@/services/CopyModule';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
@@ -39,10 +41,11 @@ export function GuideScreen({
 }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
-  const [live, setLive] = useState(false);
+  const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
   const [proximity, setProximity] = useState(0);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
+  const foundRef = useRef(false);
 
   useEffect(() => {
     if (!hasPermission) void requestPermission();
@@ -52,6 +55,23 @@ export function GuideScreen({
     startGuide();
     return () => stopGuide();
   }, []);
+
+  // Blind-user audio: announce the search once on open (real flow only).
+  useEffect(() => {
+    if (targetCocoLabel) void speak(COPY.guide.searching(targetLabel));
+  }, []);
+
+  // Say "¡ahí está!" once when first locked on; re-arm after moving away.
+  const locked = proximity >= CONFIG.GUIDE_LOCK_PROXIMITY;
+  useEffect(() => {
+    if (!targetCocoLabel) return;
+    if (locked && !foundRef.current) {
+      foundRef.current = true;
+      void speak(COPY.guide.found);
+    } else if (!locked && proximity < 0.6) {
+      foundRef.current = false;
+    }
+  }, [locked, proximity, targetCocoLabel]);
 
   // Haptics update every frame via module state (no render); HUD number throttled.
   const applyProximity = useCallback((p: number | null) => {
@@ -63,7 +83,6 @@ export function GuideScreen({
     }
   }, []);
 
-  const locked = proximity >= CONFIG.GUIDE_LOCK_PROXIMITY;
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
 
   return (

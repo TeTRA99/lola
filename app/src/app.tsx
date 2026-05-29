@@ -37,6 +37,9 @@ export default function App() {
   // splash + greeting so the caregiver isn't waiting on a brand moment.
   const launchedToSetup = QuickActions.initial?.id === SETUP_ACTION_ID;
   const [screen, setScreen] = useState<Screen>(launchedToSetup ? 'setup' : 'splash');
+  // Target for the guide screen when reached via the "guíame a X" voice flow
+  // (null when opened from the dev shortcut → mock mode).
+  const [guideTarget, setGuideTarget] = useState<{ cocoLabel: string; spoken: string } | null>(null);
   const fontsLoaded = useAppFonts();
 
   // Register the Android shortcut once (iOS uses the static action declared by
@@ -107,7 +110,8 @@ export default function App() {
       {screen === 'home' && (
         <HomeScreen
           onDevSetup={__DEV__ ? () => setScreen('setup') : undefined}
-          onDevGuide={__DEV__ ? () => setScreen('guide') : undefined}
+          onDevGuide={__DEV__ ? () => { setGuideTarget(null); setScreen('guide'); } : undefined}
+          onOpenGuide={(t) => { setGuideTarget(t); setScreen('guide'); }}
         />
       )}
       {/* Setup is only reached via the OS app-icon shortcut, so finishing it
@@ -119,7 +123,11 @@ export default function App() {
       )}
       {screen === 'guide' && (
         <Suspense fallback={<View style={{ flex: 1, backgroundColor: '#000' }} />}>
-          <GuideScreen onClose={() => setScreen('home')} />
+          <GuideScreen
+            targetCocoLabel={guideTarget?.cocoLabel ?? null}
+            targetLabel={guideTarget?.spoken ?? 'el objeto'}
+            onClose={() => { setGuideTarget(null); setScreen('home'); }}
+          />
         </Suspense>
       )}
     </>
