@@ -53,6 +53,12 @@ found for development" line during the build is expected, not an error.
   crashes `expo prebuild`.
 - **Frame processors need the worklets babel plugin:** `react-native-worklets/plugin`
   must be **last** in `app/babel.config.js`.
+- **VisionCamera frame buffers need Android minSdk ≥ 26.** Live frame processing
+  throws `Frame.getNativeBuffer(): HardwareBuffers require minSdk 26 or higher!`
+  on a lower minSdk (Expo's default is 24). Fixed via `expo-build-properties`
+  → `android.minSdkVersion: 26` in app.json. minSdk is native → needs an EAS rebuild.
+- **"Failed to create a worklet"** at runtime usually = stale Metro cache after a
+  babel change; restart with `npx expo start --dev-client -c`.
 - **zsh doesn't treat `#` as a comment by default** — don't paste command lines that
   include trailing `# comments`; they become bad arguments.
 
