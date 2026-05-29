@@ -164,8 +164,9 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
 
   return (
     <View style={styles.root}>
-      {/* Top panel is white → dark status icons. */}
-      <StatusBar style="dark" />
+      {/* Black status-bar strip (with light icons) over the white top panel. */}
+      <StatusBar style="light" />
+      <View style={styles.statusBarBg} />
       <CameraHost />
 
       {/* Dev-only shortcut to Setup (production reaches Setup via the OS
@@ -416,6 +417,10 @@ function Waveform({ accent }: { accent: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.neutral.ink },
+  statusBarBg: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: TOP_INSET,
+    backgroundColor: color.neutral.ink, zIndex: 5,
+  },
   devGear: {
     position: 'absolute', top: TOP_INSET + 8, right: 14, zIndex: 10,
     width: 44, height: 44, borderRadius: 22,
