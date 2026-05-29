@@ -308,7 +308,7 @@ function LiveLayer({
               ? `frame err: ${workletErr}`
               : !isReady
                 ? `Loading model… ${Math.round((downloadProgress ?? 0) * 100)}%`
-                : `tracking: ${target ?? 'best'} · ${det.boxes.length} obj`}
+                : `tracking: ${target ?? 'best'} · ${det.boxes.length} obj${aimReadout}`}
         </Text>
       </View>
 
