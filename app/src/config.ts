@@ -38,7 +38,7 @@ export const CONFIG = {
   // "Guide me to it" proximity haptics (feat/guide-me-to-it spike).
   // Pulse RATE (not amplitude) encodes closeness — Android amplitude control is
   // weak; faster ticks read clearly even on Charly's Galaxy.
-  GUIDE_PULSE_MIN_MS: 110,     // fastest tick — target centered / locked (raised from 60: 60 felt too intense on the Galaxy)
+  GUIDE_PULSE_MIN_MS: 170,     // fastest tick — centered (raised 110→170: centered buzz felt "violent")
   GUIDE_PULSE_MAX_MS: 500,     // slowest tick — target far from center
   GUIDE_SEARCH_TICK_MS: 1400,  // soft, sparse tick when no target is in frame
   GUIDE_LOCK_PROXIMITY: 0.82,  // ≥ this = fastest "you're on it" buzz (was 0.92, unreachable)
@@ -47,6 +47,7 @@ export const CONFIG = {
   GUIDE_NOT_FOUND_MS: 12000,   // if the target is never seen within this, say "no la encuentro"
   GUIDE_SMOOTH_ALPHA: 0.35,    // EMA on the felt proximity (lower = smoother/laggier ramp)
   GUIDE_LOST_GRACE_MS: 500,    // keep homing this long after a dropped frame before "searching"
+  GUIDE_AUTO_CLOSE_MS: 15000,  // after "found", auto-return home this long later (tap exits anytime)
 };
 
 export type Config = typeof CONFIG;

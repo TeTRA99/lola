@@ -46,8 +46,9 @@ function tick(): void {
       interval = CONFIG.GUIDE_SEARCH_TICK_MS;
     } else {
       // Homing — ease toward the target so the felt rate ramps smoothly.
+      // Soft (gentler than Medium) — centered Medium pulses felt "violent".
       smoothed += (target - smoothed) * CONFIG.GUIDE_SMOOTH_ALPHA;
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
       interval = intervalMs(smoothed);
     }
   } catch {

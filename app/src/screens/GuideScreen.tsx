@@ -12,11 +12,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, PanResponder, ScrollView, AppState, useWindowDimensions,
+  View, Text, StyleSheet, Pressable, PanResponder, ScrollView, AppState, Animated, Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services/CopyModule';
+import { color, fontFamily } from '@/theme/tokens';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
@@ -53,6 +55,14 @@ export function GuideScreen({
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const notFoundRef = useRef(false); // said "no la encuentro"
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Real flow (target known) = blind UX: no preview/boxes, branded screen,
+  // tap-to-exit. Dev (no target) keeps the debug preview + chips.
+  const blind = !!targetCocoLabel;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const handleExit = useCallback(() => onCloseRef.current(), []);
 
   // Keep the camera active only while the app is foregrounded — otherwise the
   // OS disables the camera and VisionCamera throws "Camera is disabled / fatal
@@ -116,12 +126,19 @@ export function GuideScreen({
     if (proximity >= CONFIG.GUIDE_FOUND_PROXIMITY && !foundRef.current) {
       foundRef.current = true;
       void speak(COPY.guide.found);
+      // Safety auto-close: task done → wrap up after a grab window (tap exits sooner).
+      if (!autoCloseTimer.current) {
+        autoCloseTimer.current = setTimeout(handleExit, CONFIG.GUIDE_AUTO_CLOSE_MS);
+      }
     } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
       foundRef.current = false;
     }
-  }, [proximity, targetCocoLabel]);
+  }, [proximity, targetCocoLabel, handleExit]);
 
-  useEffect(() => () => { if (lostTimer.current) clearTimeout(lostTimer.current); }, []);
+  useEffect(() => () => {
+    if (lostTimer.current) clearTimeout(lostTimer.current);
+    if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+  }, []);
 
   // Haptics update every frame via module state (no render); HUD number throttled.
   const applyProximity = useCallback((p: number | null) => {
@@ -134,6 +151,9 @@ export function GuideScreen({
   }, []);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
+  const status: GuideStatus = proximity === null
+    ? 'searching'
+    : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted';
 
   return (
     <View style={styles.root}>
@@ -142,6 +162,7 @@ export function GuideScreen({
           device={device}
           hasPermission={hasPermission}
           active={appActive}
+          blind={blind}
           target={liveTarget}
           setTarget={setLiveTarget}
           onProximity={applyProximity}
@@ -150,25 +171,72 @@ export function GuideScreen({
         <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
       )}
 
-      {/* HUD (dev spike — English, like DebugScreen) */}
-      <View style={styles.hud} pointerEvents="none">
-        <Text style={styles.hudText}>
-          Guiding to: {hudTarget} · proximity {((proximity ?? 0) * 100).toFixed(0)}%{locked ? ' · THERE!' : ''}
-        </Text>
-        <Text style={styles.hudHint}>
-          {live
-            ? 'LIVE on-device detection. Pick a target chip below.'
-            : 'MOCK: drag the dot to the center to feel the pattern.'}
-        </Text>
-      </View>
-
-      <Pressable style={styles.toggle} onPress={() => setLive(v => !v)} hitSlop={12}>
-        <Text style={styles.toggleText}>{live ? 'Use mock' : 'Use live detection'}</Text>
-      </Pressable>
-      <Pressable style={styles.close} onPress={onClose} hitSlop={16}>
-        <Text style={styles.closeText}>Close</Text>
-      </Pressable>
+      {blind ? (
+        // Real (blind) flow: branded screen over the hidden camera, tap to exit.
+        <BlindOverlay targetLabel={targetLabel} status={status} onExit={handleExit} />
+      ) : (
+        <>
+          {/* Dev HUD + controls */}
+          <View style={styles.hud} pointerEvents="none">
+            <Text style={styles.hudText}>
+              Guiding to: {hudTarget} · proximity {((proximity ?? 0) * 100).toFixed(0)}%{locked ? ' · THERE!' : ''}
+            </Text>
+            <Text style={styles.hudHint}>
+              {live
+                ? 'LIVE on-device detection. Pick a target chip below.'
+                : 'MOCK: drag the dot to the center to feel the pattern.'}
+            </Text>
+          </View>
+          <Pressable style={styles.toggle} onPress={() => setLive(v => !v)} hitSlop={12}>
+            <Text style={styles.toggleText}>{live ? 'Use mock' : 'Use live detection'}</Text>
+          </Pressable>
+          <Pressable style={styles.close} onPress={handleExit} hitSlop={16}>
+            <Text style={styles.closeText}>Close</Text>
+          </Pressable>
+        </>
+      )}
     </View>
+  );
+}
+
+type GuideStatus = 'searching' | 'spotted' | 'found';
+
+/** Branded, preview-less screen for the real (blind/low-vision) flow. The whole
+ *  screen is the exit target. Camera + boxes are hidden (camera runs underneath
+ *  in LiveLayer for detection). A gentle pulse + status text give low-vision
+ *  users something to see instead of a black "broken" screen. */
+function BlindOverlay({
+  targetLabel,
+  status,
+  onExit,
+}: {
+  targetLabel: string;
+  status: GuideStatus;
+  onExit: () => void;
+}) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const accent = status === 'found' ? '#22d3ee' : status === 'spotted' ? '#4ade80' : 'rgba(255,255,255,0.5)';
+  const title = status === 'found' ? COPY.guide.here : status === 'spotted' ? COPY.guide.seeingIt : COPY.guide.looking(targetLabel);
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, status === 'searching' ? 1.12 : 1.3] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+
+  return (
+    <Pressable style={styles.blindRoot} onPress={onExit} accessibilityRole="button" accessibilityLabel={COPY.guide.tapHint}>
+      <Animated.View style={[styles.blindPulse, { borderColor: accent, transform: [{ scale }], opacity }]} />
+      <Text style={styles.blindTitle}>{title}</Text>
+      <Text style={styles.blindHint}>{COPY.guide.tapHint}</Text>
+    </Pressable>
   );
 }
 
@@ -239,6 +307,7 @@ function LiveLayer({
   device,
   hasPermission,
   active,
+  blind,
   target,
   setTarget,
   onProximity,
@@ -246,6 +315,7 @@ function LiveLayer({
   device?: CameraDevice;
   hasPermission: boolean;
   active: boolean;
+  blind: boolean;
   target: string | null;
   setTarget: (t: string | null) => void;
   onProximity: (p: number | null) => void;
@@ -294,6 +364,10 @@ function LiveLayer({
     <>
       <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} outputs={outputs} />
 
+      {/* Blind/real flow hides all of this — the camera runs only for detection;
+          GuideScreen draws the branded BlindOverlay on top. */}
+      {!blind && (
+      <>
       {/* Debug overlay (frame is landscape; back camera rotated 90° CW). The
           actively-tracked target is highlighted. Positions are best-effort. */}
       {det.w > 0 &&
@@ -340,6 +414,8 @@ function LiveLayer({
           <Chip key={t} label={t} active={target === t} onPress={() => setTarget(t)} />
         ))}
       </ScrollView>
+      </>
+      )}
     </>
   );
 }
@@ -364,6 +440,23 @@ function CamFallback({ hasPermission }: { hasPermission: boolean }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  // Branded preview-less overlay (real/blind flow)
+  blindRoot: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: color.neutral.ink,
+    alignItems: 'center', justifyContent: 'center', gap: 28,
+  },
+  blindPulse: {
+    width: 150, height: 150, borderRadius: 75, borderWidth: 3,
+  },
+  blindTitle: {
+    color: '#fff', fontSize: 30, fontFamily: fontFamily.extrabold, fontWeight: '800',
+    textAlign: 'center', paddingHorizontal: 32, letterSpacing: -0.5,
+  },
+  blindHint: {
+    position: 'absolute', bottom: 56, left: 24, right: 24,
+    color: 'rgba(255,255,255,0.5)', fontSize: 15, fontFamily: fontFamily.medium, textAlign: 'center',
+  },
   noCam: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   noCamText: { color: '#888', fontSize: 16 },
   reticle: {
