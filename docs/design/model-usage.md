@@ -49,3 +49,24 @@ device or when on-device VLMs close the quality gap — re-evaluate periodically
 space moves monthly. Keep everything behind the existing adapter seams
 (`openrouter` gateway, `tts`, `stt`, executorch adapters) so swaps don't touch the
 screens/services.
+
+## On-device VLM candidates (researched 2026-05-29)
+For moving Describe/Ask on-device. The space moves monthly — re-check before acting.
+
+| Model | Sizes | Runtime | Mobile fit |
+|---|---|---|---|
+| **LFM2-VL / LFM2.5-VL** | **450M**, 1.6B (quantized) | **executorch — already in our 0.9.0** (`useLLM` + `LFM2_VL_450M_QUANTIZED` etc.) | 450M is the realistic A12 try; no rebuild |
+| **Gemma 4** E2B / E4B | ~2B / ~4B active (text+image+audio, 128K) | LiteRT-LM (Google), `.litertlm` | E2B ~8GB/RPi5; **E4B = flagship phone** |
+| Qwen3-VL | 2B / 4B (+MoE) | llama.cpp / others | current quality leader; 2B for mobile |
+| SmolVLM2 | 256M / 500M / 2.2B | llama.cpp / transformers | tiniest; 256M/500M for weak phones |
+| Moondream2 | 1.8B | llama.cpp | edge captioning/OCR/counting |
+| MobileVLM V2 | 1.7B / 3B | mllm | purpose-built mobile (~21 tok/s Qualcomm CPU) |
+
+**Cheapest next step:** A/B **LFM2-VL-450M (executorch)** vs Gemini for Describe on
+the *actual A12* — same library, no rebuild, model downloads at runtime. Measure
+latency + quality. **Gemma 4 (Apr 2026)** is the best on-device option quality-wise
+but runs on LiteRT, not executorch — a heavier integration; revisit when targeting a
+capable device or if executorch adds it. Device reality: A12 (weak, ~3-4GB, no NPU)
+→ only sub-1B VLMs are practical and slower/lower-quality than cloud; a modern phone
+(14+) makes Gemma 4 E2B/E4B genuinely viable. Sources: executorch v0.8 blog
+(LFM2-VL), HF/Google Gemma 4 (2026-04-02), LearnOpenCV "VLM on Edge".
