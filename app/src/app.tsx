@@ -35,21 +35,10 @@ export default function App() {
   // Apply any saved language override (device language is the default).
   useEffect(() => { void loadStoredLang(); }, []);
 
-  // Hide the Android system navigation bar app-wide (immersive) so Dad can't
-  // accidentally hit it and it never overlaps content. Dynamically imported in
-  // a try/catch so the current dev-client APK (which predates this native
-  // module) no-ops instead of crashing; it activates once rebuilt.
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    void (async () => {
-      try {
-        const NavigationBar = await import('expo-navigation-bar');
-        // Under Android edge-to-edge the system handles swipe-to-reveal; we
-        // just request the bar hidden. (setBehaviorAsync was removed in SDK 56.)
-        await NavigationBar.setVisibilityAsync('hidden');
-      } catch { /* native module absent until the next build — ignore */ }
-    })();
-  }, []);
+  // Note: the system navigation bar is intentionally LEFT VISIBLE so there is
+  // always an obvious way Home/Back (important for a low-vision user, and it
+  // matches the design mockups). Content clears it via the bottom inset in
+  // @/theme/insets rather than by hiding the bar.
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;

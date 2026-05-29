@@ -19,6 +19,7 @@ import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
 import { CONFIG } from '@/config';
 import { color, fontFamily } from '@/theme/tokens';
+import { BOTTOM_INSET } from '@/theme/insets';
 
 const SPLASH_DURATION_MS = 3000;
 // Native app version (from app.json) — only changes on a real APK rebuild.
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
   },
   legend: {
     position: 'absolute',
-    bottom: 28,
+    bottom: 16 + BOTTOM_INSET,
     left: 24,
     right: 24,
     alignItems: 'center',
