@@ -39,6 +39,7 @@ export const COPY = {
   // "Guíame a X" guidance flow (FR voseo). `obj` is the noun the user said.
   guide: {
     searching: (obj: string): string => `Buscando ${obj}. Movéme despacio por el lugar.`,
+    spotted: 'Creo que lo veo. Movéme despacio.',
     cannotGuide: (obj: string): string => `Por ahora no puedo guiarte hasta ${obj}.`,
     found: '¡Ahí está! Lo tenés enfrente.',
     notFound: (obj: string): string => `No encuentro ${obj} por acá. ¿Probamos de nuevo?`,

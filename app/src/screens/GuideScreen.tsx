@@ -42,10 +42,13 @@ export function GuideScreen({
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
-  const [proximity, setProximity] = useState(0);
+  // null = target not detected in frame; number = how centered (0..1).
+  const [proximity, setProximity] = useState<number | null>(0);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
-  const foundRef = useRef(false);
+  const spottedRef = useRef(false); // said the tentative "creo que lo veo"
+  const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
+  const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!hasPermission) void requestPermission();
@@ -61,17 +64,38 @@ export function GuideScreen({
     if (targetCocoLabel) void speak(COPY.guide.searching(targetLabel));
   }, []);
 
-  // Say "¡ahí está!" once when first locked on; re-arm after moving away.
-  const locked = proximity >= CONFIG.GUIDE_LOCK_PROXIMITY;
+  // Tiered audio (real flow only):
+  //  • detected in frame (any proximity) → tentative "creo que lo veo" once
+  //  • centered enough (reachable threshold) → affirmative "¡ahí está!" once
+  // Re-arm "found" when moving away; re-arm "spotted" only after the object has
+  // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
+  const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
   useEffect(() => {
     if (!targetCocoLabel) return;
-    if (locked && !foundRef.current) {
+    if (proximity === null) {
+      if (!lostTimer.current) {
+        lostTimer.current = setTimeout(() => {
+          spottedRef.current = false;
+          foundRef.current = false;
+          lostTimer.current = null;
+        }, 1500);
+      }
+      return;
+    }
+    if (lostTimer.current) { clearTimeout(lostTimer.current); lostTimer.current = null; }
+    if (!spottedRef.current) {
+      spottedRef.current = true;
+      void speak(COPY.guide.spotted);
+    }
+    if (proximity >= CONFIG.GUIDE_FOUND_PROXIMITY && !foundRef.current) {
       foundRef.current = true;
       void speak(COPY.guide.found);
-    } else if (!locked && proximity < 0.6) {
+    } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
       foundRef.current = false;
     }
-  }, [locked, proximity, targetCocoLabel]);
+  }, [proximity, targetCocoLabel]);
+
+  useEffect(() => () => { if (lostTimer.current) clearTimeout(lostTimer.current); }, []);
 
   // Haptics update every frame via module state (no render); HUD number throttled.
   const applyProximity = useCallback((p: number | null) => {
@@ -79,7 +103,7 @@ export function GuideScreen({
     const now = Date.now();
     if (now - lastHudAt.current > 160) {
       lastHudAt.current = now;
-      setProximity(p ?? 0);
+      setProximity(p);
     }
   }, []);
 
@@ -102,7 +126,7 @@ export function GuideScreen({
       {/* HUD (dev spike — English, like DebugScreen) */}
       <View style={styles.hud} pointerEvents="none">
         <Text style={styles.hudText}>
-          Guiding to: {hudTarget} · proximity {(proximity * 100).toFixed(0)}%{locked ? ' · THERE!' : ''}
+          Guiding to: {hudTarget} · proximity {((proximity ?? 0) * 100).toFixed(0)}%{locked ? ' · THERE!' : ''}
         </Text>
         <Text style={styles.hudHint}>
           {live
@@ -226,6 +250,11 @@ function LiveLayer({
     if (error) console.error('[guide] detector error:', error);
   }, [error]);
   const errMsg = error ? (error as { message?: string }).message ?? String(error) : null;
+
+  // DEBUG: raw normalized frame-centroid of the tracked object (0..1). When the
+  // phone physically points straight at the object, this should read ~0.50,0.50.
+  const bn = det.best ? normalizePixelBox(det.best.bbox, det.w, det.h) : null;
+  const aimReadout = bn ? ` · aim(${(bn.x + bn.width / 2).toFixed(2)},${(bn.y + bn.height / 2).toFixed(2)})` : '';
 
   if (!hasPermission || !device) return <CamFallback hasPermission={hasPermission} />;
 
