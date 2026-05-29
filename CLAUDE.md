@@ -43,7 +43,10 @@ fast and expected to pass.
   orchestration in `src/services`.
 
 ## Where things are documented
-- `docs/design/` — feature/design notes (TTS, directional-haptics, guide-me-to-it).
+- `docs/design/` — feature/design notes (TTS, directional-haptics, guide-me-to-it, model-usage).
+- **Model usage / privacy:** see `docs/design/model-usage.md`. On-device: YOLO26n
+  (guide), CLIP (room ID), TTS, STT. Cloud (OpenRouter → Gemini 2.5 Flash):
+  Describe/Ask (sends the photo), intent + guide-target resolution (text only).
 - `docs/runbooks/` — dev-build-and-run, eas-secrets, android-sideload, testflight.
 - Decisions & rationale that aren't in code live in the per-session memory
   (`MEMORY.md` index).
