@@ -50,6 +50,7 @@ export function GuideScreen({
   const lastHudAt = useRef(0);
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
+  const notFoundRef = useRef(false); // said "no la encuentro"
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -64,6 +65,19 @@ export function GuideScreen({
   // Blind-user audio: announce the search once on open (real flow only).
   useEffect(() => {
     if (targetCocoLabel) void speak(COPY.guide.searching(targetLabel));
+  }, []);
+
+  // If the target is never spotted within the window, it's probably not in this
+  // scene — say so once (we can't navigate the user elsewhere, just tell them).
+  useEffect(() => {
+    if (!targetCocoLabel) return;
+    const t = setTimeout(() => {
+      if (!spottedRef.current && !notFoundRef.current) {
+        notFoundRef.current = true;
+        void speak(COPY.guide.notFound(targetLabel));
+      }
+    }, CONFIG.GUIDE_NOT_FOUND_MS);
+    return () => clearTimeout(t);
   }, []);
 
   // Tiered audio (real flow only):

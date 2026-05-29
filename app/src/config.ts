@@ -44,6 +44,7 @@ export const CONFIG = {
   GUIDE_LOCK_PROXIMITY: 0.82,  // ≥ this = fastest "you're on it" buzz (was 0.92, unreachable)
   GUIDE_FOUND_PROXIMITY: 0.7,  // ≥ this → say "¡ahí está!" once (reachable; centering to 100% is unreliable)
   GUIDE_REARM_PROXIMITY: 0.4,  // proximity must drop below this before "found" can fire again
+  GUIDE_NOT_FOUND_MS: 12000,   // if the target is never seen within this, say "no la encuentro"
 };
 
 export type Config = typeof CONFIG;
