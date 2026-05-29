@@ -116,3 +116,19 @@ export function stop(): void {
   clearThinking();
   clearAnswerReadyDoubleTap();
 }
+
+let heartbeatLub: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Soft "lub-dub" — two light taps ~150ms apart. The idle-heartbeat on Home
+ * calls this on a long interval so a low-vision user can feel the app is alive
+ * and waiting, without it being annoying.
+ */
+export function heartbeat(): void {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  if (heartbeatLub) clearTimeout(heartbeatLub);
+  heartbeatLub = setTimeout(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    heartbeatLub = null;
+  }, 150);
+}

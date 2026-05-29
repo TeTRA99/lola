@@ -17,8 +17,9 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as Application from 'expo-application';
 import type * as Speech from 'expo-speech';
-import { listSpanishVoices, speakPreview } from '@/adapters/tts';
-import { speakPiperTest } from '@/adapters/ttsPiper';
+import { listSpanishVoices, speakPreview, RATE_DEFAULT, PITCH_DEFAULT } from '@/adapters/tts';
+import { speakPiperTest, PIPER_TEST_DIR, PIPER_DANIELA_DIR } from '@/adapters/ttsPiper';
+import { Slider } from '@/components/Slider';
 import { COPY } from '@/services';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as CatalogPhotos from '@/services/CatalogPhotos';
@@ -210,28 +211,45 @@ function SettingsTab() {
   const t = useSetupStrings();
   const lang = useLang();
   const [quietCapture, setQuietCapture] = useState(false);
+  const [heartbeatOn, setHeartbeatOn] = useState(false);
   const [voices, setVoices] = useState<Speech.Voice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('');
+  const [rate, setRate] = useState(RATE_DEFAULT);
+  const [pitch, setPitch] = useState(PITCH_DEFAULT);
 
   useEffect(() => {
     void (async () => {
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
+      setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, false));
       setSelectedVoice(await Settings.getString(Settings.KEYS.voice, ''));
+      const r = parseFloat(await Settings.getString(Settings.KEYS.ttsRate, ''));
+      const p = parseFloat(await Settings.getString(Settings.KEYS.ttsPitch, ''));
+      if (Number.isFinite(r) && r > 0) setRate(r);
+      if (Number.isFinite(p) && p > 0) setPitch(p);
       setVoices(await listSpanishVoices());
     })();
   }, []);
+
+  const changeRate = (v: number) => { setRate(v); void Settings.setString(Settings.KEYS.ttsRate, String(v)); };
+  const changePitch = (v: number) => { setPitch(v); void Settings.setString(Settings.KEYS.ttsPitch, String(v)); };
+  const previewTuning = () => speakPreview(COPY.greeting, { voice: selectedVoice, rate, pitch });
 
   const toggle = async () => {
     const next = !quietCapture;
     setQuietCapture(next);
     await Settings.setBool(Settings.KEYS.quietCapture, next);
   };
+  const toggleHeartbeat = async () => {
+    const next = !heartbeatOn;
+    setHeartbeatOn(next);
+    await Settings.setBool(Settings.KEYS.idleHeartbeat, next);
+  };
 
   const selectVoice = (id: string) => {
     setSelectedVoice(id);
     void Settings.setString(Settings.KEYS.voice, id);
     // Preview the choice immediately with Lola's greeting line.
-    speakPreview(COPY.greeting, id);
+    speakPreview(COPY.greeting, { voice: id, rate, pitch });
   };
 
   const voiceRows: { id: string; label: string }[] = [
@@ -286,14 +304,42 @@ function SettingsTab() {
           )}
         </View>
 
-        {/* Dev-only: Piper on-device TTS feasibility test (gated by __DEV__). */}
+        {/* Voice tuning — speed + pitch for the system voice. */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.voiceTuning}</Text>
+          <Text style={styles.settingHint}>{t.voiceTuningHint}</Text>
+          <Slider
+            label={t.speed}
+            value={rate}
+            min={0.5}
+            max={1.6}
+            step={0.05}
+            onChange={changeRate}
+            onComplete={previewTuning}
+            format={v => `${v.toFixed(2)}×`}
+          />
+          <Slider
+            label={t.pitch}
+            value={pitch}
+            min={0.5}
+            max={1.6}
+            step={0.05}
+            onChange={changePitch}
+            onComplete={previewTuning}
+            format={v => `${v.toFixed(2)}×`}
+          />
+        </View>
+
+        {/* Dev-only: Piper on-device A/B (gated by __DEV__). */}
         {__DEV__ && (
-          <Pressable
-            style={styles.settingRow}
-            onPress={() => { void speakPiperTest(COPY.greeting); }}
-          >
-            <Text style={styles.settingLabel}>🧪 Test Piper voice (dev)</Text>
-          </Pressable>
+          <View style={styles.settingCard}>
+            <Pressable style={{ paddingVertical: 10 }} onPress={() => { void speakPiperTest(COPY.greeting, PIPER_TEST_DIR); }}>
+              <Text style={styles.settingLabel}>🧪 Test Piper — claude (es_MX)</Text>
+            </Pressable>
+            <Pressable style={{ paddingVertical: 10 }} onPress={() => { void speakPiperTest(COPY.greeting, PIPER_DANIELA_DIR); }}>
+              <Text style={styles.settingLabel}>🧪 Test Piper — daniela (es_AR)</Text>
+            </Pressable>
+          </View>
         )}
 
         {/* Quiet capture */}
@@ -304,6 +350,17 @@ function SettingsTab() {
           </View>
           <View style={[styles.toggle, quietCapture && styles.toggleOn]}>
             <View style={[styles.toggleKnob, quietCapture && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+
+        {/* Idle heartbeat */}
+        <Pressable style={styles.settingRow} onPress={toggleHeartbeat}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingLabel}>{t.heartbeat}</Text>
+            <Text style={styles.settingHint}>{t.heartbeatHint}</Text>
+          </View>
+          <View style={[styles.toggle, heartbeatOn && styles.toggleOn]}>
+            <View style={[styles.toggleKnob, heartbeatOn && styles.toggleKnobOn]} />
           </View>
         </Pressable>
       </ScrollView>

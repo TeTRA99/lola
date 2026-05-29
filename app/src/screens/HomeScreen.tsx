@@ -24,9 +24,10 @@ import { COPY } from '@/services';
 import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
-import { subscribeHaptics, type HapticPattern } from '@/adapters/haptics';
+import { subscribeHaptics, heartbeat, type HapticPattern } from '@/adapters/haptics';
 import { subscribeSpeech, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
+import * as Settings from '@/services/Settings';
 import { Icon } from '@/components/Icon';
 import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -78,6 +79,19 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
     });
     return () => { offHaptics(); offSpeech(); };
   }, []);
+
+  // Idle heartbeat (opt-in): a gentle "lub-dub" every few seconds while Home is
+  // idle so a low-vision user can feel the app is alive and waiting. Stops the
+  // moment Lola is doing anything; resumes when idle again.
+  const [heartbeatOn, setHeartbeatOn] = useState(false);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.idleHeartbeat, false).then(setHeartbeatOn);
+  }, []);
+  useEffect(() => {
+    if (!heartbeatOn || state !== 'idle') return;
+    const id = setInterval(heartbeat, 6000);
+    return () => clearInterval(id);
+  }, [heartbeatOn, state]);
 
   // Camera error is calm and self-clearing — Lola says her line and the screen
   // returns to the menu on its own (handoff §3). Tapping returns sooner. The

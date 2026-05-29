@@ -20,12 +20,30 @@ export async function listSpanishVoices(): Promise<Speech.Voice[]> {
   }
 }
 
-/** Speak a one-off preview line with a specific voice (Setup picker). */
-export function speakPreview(text: string, voiceIdentifier: string): void {
+// Tuning defaults — the system voice at 0.85 felt slow, so default to natural
+// 1.0 speed/pitch; the Setup sliders persist overrides.
+export const RATE_DEFAULT = 1.0;
+export const PITCH_DEFAULT = 1.0;
+
+function tunedRate(): number {
+  const v = parseFloat(Settings.getStringSync(Settings.KEYS.ttsRate, ''));
+  return Number.isFinite(v) && v > 0 ? v : RATE_DEFAULT;
+}
+function tunedPitch(): number {
+  const v = parseFloat(Settings.getStringSync(Settings.KEYS.ttsPitch, ''));
+  return Number.isFinite(v) && v > 0 ? v : PITCH_DEFAULT;
+}
+
+/** Speak a one-off preview line (Setup pickers/sliders). */
+export function speakPreview(
+  text: string,
+  opts: { voice?: string; rate?: number; pitch?: number } = {},
+): void {
   Speech.stop();
   Speech.speak(text, {
-    rate: CONFIG.TTS_RATE,
-    ...(voiceIdentifier ? { voice: voiceIdentifier } : {}),
+    rate: opts.rate ?? tunedRate(),
+    pitch: opts.pitch ?? tunedPitch(),
+    ...(opts.voice ? { voice: opts.voice } : {}),
   });
 }
 
@@ -88,11 +106,12 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Resu
       };
       emitSpeech(text);
       // A caregiver-selected voice (Setup picker) overrides the resolved
-      // locale; otherwise fall back to language-based voice selection.
+      // locale; rate/pitch come from the Setup sliders (with sane defaults).
       const voiceId = Settings.getStringSync(Settings.KEYS.voice, '');
       Speech.speak(text, {
         language,
-        rate: opts.rate ?? CONFIG.TTS_RATE,
+        rate: opts.rate ?? tunedRate(),
+        pitch: tunedPitch(),
         ...(voiceId ? { voice: voiceId } : {}),
         onDone: () => settle(ok(undefined)),
         onStopped: () => settle(ok(undefined)),

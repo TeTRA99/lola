@@ -80,4 +80,7 @@ export const KEYS = {
   quietCapture: 'quiet_capture',
   language: 'language',
   voice: 'tts_voice',
+  ttsRate: 'tts_rate',
+  ttsPitch: 'tts_pitch',
+  idleHeartbeat: 'idle_heartbeat',
 } as const;

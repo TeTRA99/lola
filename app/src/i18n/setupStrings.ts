@@ -50,6 +50,8 @@ type SetupCopy = {
   add: string;
   quietCapture: string;
   quietCaptureHint: string;
+  heartbeat: string;
+  heartbeatHint: string;
   language: string;
   langSpanish: string;
   langEnglish: string;
@@ -57,6 +59,10 @@ type SetupCopy = {
   voiceHint: string;
   voiceDefault: string;
   noVoices: string;
+  voiceTuning: string;
+  voiceTuningHint: string;
+  speed: string;
+  pitch: string;
   // photo placeholders shown in the Spanish name fields
   phObjName: string;
   phObjDesc: string;
@@ -127,6 +133,8 @@ const en: SetupCopy = {
   add: 'Add',
   quietCapture: 'Quiet capture',
   quietCaptureHint: 'Mute the shutter sound when Lola takes a picture.',
+  heartbeat: 'Idle heartbeat',
+  heartbeatHint: 'A gentle pulse every few seconds on the home screen so Dad can feel the app is on and ready.',
   language: 'Language',
   langSpanish: 'Español',
   langEnglish: 'English',
@@ -134,6 +142,10 @@ const en: SetupCopy = {
   voiceHint: 'Tap a voice to hear it. Lola will use the selected one.',
   voiceDefault: 'System default',
   noVoices: 'No Spanish voices are installed on this phone.',
+  voiceTuning: 'Voice tuning',
+  voiceTuningHint: 'Adjust speed and pitch. Release a slider to hear it.',
+  speed: 'Speed',
+  pitch: 'Pitch',
   phObjName: 'e.g. Dad’s thermos',
   phObjDesc: 'e.g. the blue one with a red lid',
   phRoomName: 'e.g. Kitchen',
@@ -201,6 +213,8 @@ const es: SetupCopy = {
   add: 'Agregar',
   quietCapture: 'Captura silenciosa',
   quietCaptureHint: 'Silenciar el sonido del obturador cuando Lola saca una foto.',
+  heartbeat: 'Latido en reposo',
+  heartbeatHint: 'Un pulso suave cada pocos segundos en la pantalla principal para que papá sienta que la app está encendida y lista.',
   language: 'Idioma',
   langSpanish: 'Español',
   langEnglish: 'English',
@@ -208,6 +222,10 @@ const es: SetupCopy = {
   voiceHint: 'Tocá una voz para escucharla. Lola va a usar la elegida.',
   voiceDefault: 'Voz del sistema',
   noVoices: 'No hay voces en español instaladas en este teléfono.',
+  voiceTuning: 'Ajuste de voz',
+  voiceTuningHint: 'Ajustá la velocidad y el tono. Soltá el control para escuchar.',
+  speed: 'Velocidad',
+  pitch: 'Tono',
   phObjName: 'ej. Termo de Papá',
   phObjDesc: 'ej. el azul de tapa roja',
   phRoomName: 'ej. Cocina',
