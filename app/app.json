@@ -51,14 +51,6 @@
         }
       ],
       [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "Lola necesita ver para guiarte hacia los objetos.",
-          "enableMicrophonePermission": false,
-          "enableCodeScanner": false
-        }
-      ],
-      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Lola necesita escucharte para responder.",
