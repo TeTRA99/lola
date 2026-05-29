@@ -42,7 +42,7 @@ type ErrKind = 'camera' | 'perm';
 const ACCENT_DARK = color.dad.askAccent; // #5AA2F5
 const ACCENT_LIGHT = color.primary[500]; // #1A73E8
 
-export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
+export function HomeScreen({ onDevSetup, onDevGuide }: { onDevSetup?: () => void; onDevGuide?: () => void }) {
   const [mode, setMode] = useState<Mode>('describe');
   const [state, setState] = useState<HomeState>('idle');
   const [errKind, setErrKind] = useState<ErrKind>('camera');
@@ -178,6 +178,17 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
           accessibilityLabel="Dev: open Setup"
         >
           <Icon name="settings" size={20} color="rgba(255,255,255,0.92)" />
+        </Pressable>
+      )}
+
+      {/* Dev-only shortcut straight to the guide-me-to-it spike. */}
+      {onDevGuide && (
+        <Pressable
+          onPress={onDevGuide}
+          style={styles.devGuide}
+          accessibilityLabel="Dev: open Guide spike"
+        >
+          <Text style={styles.devGuideText}>🎯</Text>
         </Pressable>
       )}
 
@@ -427,6 +438,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(80,80,80,0.45)',
     alignItems: 'center', justifyContent: 'center',
   },
+  devGuide: {
+    position: 'absolute', top: TOP_INSET + 8, right: 66, zIndex: 10,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(80,80,80,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  devGuideText: { fontSize: 20 },
   divider: { height: 1, backgroundColor: 'rgba(0,0,0,0.06)' },
   panel: { flex: 1, overflow: 'hidden' },
   panelInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },

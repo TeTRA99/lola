@@ -105,7 +105,10 @@ export default function App() {
         />
       )}
       {screen === 'home' && (
-        <HomeScreen onDevSetup={__DEV__ ? () => setScreen('setup') : undefined} />
+        <HomeScreen
+          onDevSetup={__DEV__ ? () => setScreen('setup') : undefined}
+          onDevGuide={__DEV__ ? () => setScreen('guide') : undefined}
+        />
       )}
       {/* Setup is only reached via the OS app-icon shortcut, so finishing it
           should return the caregiver to where they came from — i.e. leave the
