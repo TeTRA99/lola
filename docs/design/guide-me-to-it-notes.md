@@ -144,6 +144,43 @@ dev client that includes VisionCamera (build 1016aec5 / versionCode 7+).
 spike — wire `useFrameProcessor` (runOnFrame) → executorch YOLO26n, replace the
 mock with `proximityFromBox(detection.box)`; resolve YOLO26n `.pte` export.
 
+## Spike outcome — PROVEN on hardware (2026-05-29)
+Validated end-to-end on the Galaxy A12: **on-device YOLO26n detection → pick a
+target object → proximity → escalating "Geiger" haptic.** Feasibility is settled.
+
+Key fixes/decisions made during device testing:
+- **minSdk 26 required** (VisionCamera HardwareBuffer); set to 31 (see
+  [[project_android_minsdk_device]]).
+- **Worklet babel plugin + clean Metro cache** needed (`-c`) or "failed to create
+  a worklet".
+- **Model labels are UPPERCASE** (`CUP`, `DINING_TABLE`) — match case/separator-
+  insensitively (was the "proximity stuck at 0%" bug).
+- **Target selection is essential** — without it, the top-scoring object switches
+  every frame and the target jumps. Pick ONE label and home to it.
+- **Proximity = frame-center (camera aim), NOT a screen-space transform.** The
+  blind user has no preview/reticle — they sweep until the buzz peaks = camera
+  aimed at the object = object at frame center. Frame-center needs no fragile
+  rotation/crop math. The dev overlay's screen transform (`frameBoxToScreen`,
+  90° CW + cover) is best-effort/cosmetic only and is offset on-device — DON'T
+  chase pixel-perfect overlay; it's irrelevant to the preview-less feature.
+- **inputSize 384** (not 640) for a snappier loop; preview sluggishness is moot
+  in production (no preview).
+- Detection confidences seen: bowl ~78%, knife 87%, spoon 84%, cup 30–42%.
+
+**Model choice deferred:** YOLO26n is good enough to build around and is a
+one-line swap (`models.object_detection.*`); tune model/inputSize/threshold
+LATER against the real flow, not as a standalone bake-off.
+
+## Next: build the real feature (device-independent first)
+1. **Target mapping** — described object → COCO label; gate the affordance to
+   guidable labels only.
+2. **Trigger/intent** — "guíame al X" → IntentRouter → open guide with target.
+3. **Blind-user flow** — no preview; spoken cues (searching / found / not-found
+   timeout) + haptic homing; Spanish in CopyModule.
+4. **Tracking smoothing** (ByteTrack/IoU) + **camera lifecycle** (mount/teardown,
+   expo-camera handoff) — need the device to tune.
+Steps 1–3 are pure logic (verifiable without the A12); 3–4 feel-tune on device.
+
 ## Sources
 - [ExecuTorch releases](https://github.com/software-mansion/react-native-executorch/releases)
 - [Pulsar RN docs](https://docs.swmansion.com/pulsar/sdk/react-native/)
