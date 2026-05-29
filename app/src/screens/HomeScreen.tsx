@@ -33,7 +33,7 @@ import { ActionIcon } from '@/components/ActionIcon';
 import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { color, fontFamily } from '@/theme/tokens';
-import { TOP_INSET } from '@/theme/insets';
+import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 
 type Mode = 'describe' | 'ask';
 type HomeState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -231,7 +231,15 @@ function Panel({
       accessibilityLabel={label}
       style={[styles.panel, { backgroundColor: dark ? color.dad.askBg : color.dad.describeBg }]}
     >
-      <Animated.View style={[styles.panelInner, { opacity: dim }]}>
+      {/* Pad each panel's content by its system-bar inset so it centers in the
+          VISIBLE half (status bar over the top panel, nav bar over the bottom),
+          keeping the two panels looking evenly split. */}
+      <Animated.View
+        style={[
+          styles.panelInner,
+          { opacity: dim, paddingTop: dark ? 0 : TOP_INSET, paddingBottom: dark ? BOTTOM_INSET : 0 },
+        ]}
+      >
         {active && <GlowBackdrop dark={dark} />}
         <View style={styles.stage}>
           <FieldStage dark={dark} action={action} state={state} spoken={spoken} />
@@ -254,7 +262,7 @@ function FieldStage({
     return (
       <>
         <View style={[styles.idleCircle, { backgroundColor: circleBg }]}>
-          <ActionIcon kind={isAsk ? 'ask' : 'describe'} size={68} color={accent} />
+          <ActionIcon kind={isAsk ? 'ask' : 'describe'} size={84} color={accent} strokeWidth={1.6} />
         </View>
         <Text style={[styles.actionLabel, { color: textColor }]}>{isAsk ? COPY.buttons.askLabel : COPY.buttons.describeLabel}</Text>
       </>
