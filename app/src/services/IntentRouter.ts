@@ -12,8 +12,8 @@ const INTENT_SYSTEM_PROMPT = `Sos un clasificador de intenciones para una asiste
 - "chitchat": cortesías cortas sin contenido informativo — "gracias", "hola", "buenos días", "chau", "ok", "bien". No necesita foto ni llamada al modelo. Devolvé también "chitchatKind": "thanks"|"greeting"|"goodbye"|"affirm"|"other".
 - "repeat": el usuario quiere que repitas LITERAL la última descripción ("¿otra vez?", "repetí", "de nuevo").
 - "extend": el usuario quiere MÁS DETALLE sobre la última escena ("contame más", "seguí", "más detalles").
-- "memory": el usuario pregunta UBICACIÓN/MOMENTO de un objeto que vio antes — dónde está, dónde lo dejaste, cuándo lo viste, qué había alrededor. Es una pregunta sobre EL PASADO. Extraé el sustantivo principal en singular y sin artículo.
-- "guide": el usuario quiere que lo LLEVES o GUÍES físicamente HACIA un objeto que está en el lugar AHORA, para poder agarrarlo o llegar hasta él — "llevame a la taza", "guiame hasta el control", "ayudame a llegar al sillón", "¿me llevás al vaso?". Extraé el sustantivo principal en "noun" (singular, sin artículo). NO confundir con "memory": memory PREGUNTA dónde está; guide PIDE QUE LO LLEVES.
+- "memory": el usuario pregunta por lo que VIO ANTES y NO pide que lo guíes hasta el objeto ahora — dónde ESTABA, dónde lo DEJÓ, CUÁNDO lo vio, qué había alrededor. Es RECUERDO del PASADO ("¿dónde dejé las llaves?", "¿cuándo viste el termo?", "¿qué había cerca del vaso?"). Extraé el sustantivo principal en singular y sin artículo.
+- "guide": el usuario PIDE AYUDA para ENCONTRAR, UBICAR o LLEGAR a un objeto que podría estar en el lugar AHORA, y querés guiarlo con la cámara — "llevame a la taza", "guiame hasta el control", "ayudame a encontrar mi botella", "¿me ayudás a buscar el vaso?", "no encuentro el control, ¿me ayudás?", "ayudame a llegar al sillón". Es del PRESENTE: quiere encontrarlo o llegar AHORA. Extraé el sustantivo principal en "noun" (singular, sin artículo). DISTINCIÓN CLAVE con "memory": si PIDE AYUDA para encontrarlo/llegar ahora → "guide"; si sólo pregunta dónde estaba o cuándo lo viste (recuerdo) → "memory".
 - "model": cualquier otra pregunta sobre el CONTENIDO visible — qué es, qué dice, qué color, qué marca, cuántas hay, cómo está, está vencido, etc.
 
 Para "model" también tenés que decidir "needsCurrent": ¿hace falta MIRAR LA ESCENA AHORA o se puede responder con la escena que ya describió antes?
@@ -45,6 +45,10 @@ Ejemplos:
 - "llevame a la taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null }
 - "guiame hasta el control" → { "intent": "guide", "noun": "control", "needsCurrent": null, "chitchatKind": null }
 - "ayudame a llegar al sillón" → { "intent": "guide", "noun": "sillón", "needsCurrent": null, "chitchatKind": null }
+- "¿me ayudás a encontrar mi botella?" → { "intent": "guide", "noun": "botella", "needsCurrent": null, "chitchatKind": null }
+- "ayudame a buscar el control" → { "intent": "guide", "noun": "control", "needsCurrent": null, "chitchatKind": null }
+- "no encuentro el vaso, ¿me ayudás?" → { "intent": "guide", "noun": "vaso", "needsCurrent": null, "chitchatKind": null }
+- "¿dónde dejé las llaves?" → { "intent": "memory", "noun": "llaves", "needsCurrent": null, "chitchatKind": null }
 - "qué había cerca del termo" → { "intent": "memory", "noun": "termo", "needsCurrent": null, "chitchatKind": null }
 - "sabés de qué marca son las papas" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
 - "de qué color era la bolsa" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }

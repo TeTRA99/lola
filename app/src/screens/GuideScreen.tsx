@@ -43,7 +43,9 @@ export function GuideScreen({
   const device = useCameraDevice('back');
   const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
   // null = target not detected in frame; number = how centered (0..1).
-  const [proximity, setProximity] = useState<number | null>(0);
+  // Starts null (nothing seen yet) so "creo que lo veo" only fires on a real
+  // detection, not on open.
+  const [proximity, setProximity] = useState<number | null>(null);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
