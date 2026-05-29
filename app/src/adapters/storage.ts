@@ -90,6 +90,10 @@ export const MIGRATIONS: Record<number, string> = {
 export const TARGET_VERSION = Math.max(...Object.keys(MIGRATIONS).map(Number));
 
 let dbSingleton: SQLite.SQLiteDatabase | null = null;
+// In-flight open, so concurrent getDb() callers at startup share ONE connection
+// instead of each racing to openDatabaseAsync (which left a broken second handle
+// whose writes were rejected).
+let opening: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Idempotent: applies any pending migrations to reach TARGET_VERSION.
@@ -114,29 +118,26 @@ export async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
  * Service-layer code uses this; React tree should use SQLiteProvider/useSQLiteContext.
  */
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (dbSingleton) {
-    // Liveness probe: a dev hot-reload (Fast Refresh) can close the native
-    // connection while this JS singleton still points at it, so the next query
-    // rejects with a NativeDatabase NPE. Cheaply verify the handle and reopen
-    // if it's dead, so the DB self-heals instead of crashing callers.
-    try {
-      await dbSingleton.getFirstAsync('SELECT 1');
-      return dbSingleton;
-    } catch {
-      dbSingleton = null;
-    }
+  if (dbSingleton) return dbSingleton;
+  // Share a single in-flight open across concurrent callers. Open + migrate
+  // fully before caching — a half-migrated handle must not be cached (B3 from
+  // the 2026-05-27 review). On failure, clear `opening` so a later call retries.
+  if (!opening) {
+    opening = (async () => {
+      const db = await SQLite.openDatabaseAsync(DB_NAME);
+      await migrate(db);
+      dbSingleton = db;
+      return db;
+    })();
+    opening.catch(() => { opening = null; });
   }
-  // Open + migrate before caching — a half-migrated handle must not be cached
-  // (B3 from the 2026-05-27 code review).
-  const db = await SQLite.openDatabaseAsync(DB_NAME);
-  await migrate(db);
-  dbSingleton = db;
-  return dbSingleton;
+  return opening;
 }
 
 /** Test seam — clears the singleton so subsequent getDb() reopens. */
 export function _resetForTests(): void {
   dbSingleton = null;
+  opening = null;
 }
 
 export { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
