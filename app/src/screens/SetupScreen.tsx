@@ -33,7 +33,7 @@ import { Icon } from '@/components/Icon';
 import { Toast, type ToastMessage } from '@/components/Toast';
 import { useSetupStrings, setLang, useLang, type Lang } from '@/i18n';
 import { color, radius, fontFamily } from '@/theme/tokens';
-import { BOTTOM_INSET } from '@/theme/insets';
+import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 import type { SetupCopy } from '@/i18n/setupStrings';
 
 type Tab = 'objects' | 'rooms' | 'settings';
@@ -189,7 +189,6 @@ function EmptyState({ kind, onAdd }: { kind: 'objects' | 'rooms'; onAdd: () => v
         <PrimaryButton
           label={room ? t.emptyRoomCta : t.emptyObjCta}
           leadingIcon="add"
-          arrow
           onPress={onAdd}
         />
       </View>
@@ -386,7 +385,7 @@ function ObjectForm({
         </View>
       </ScrollView>
       <FormFooter>
-        <PrimaryButton label={t.saveObject} arrow disabled={saving} onPress={handleSave} />
+        <PrimaryButton label={t.saveObject} disabled={saving} onPress={handleSave} />
       </FormFooter>
     </View>
   );
@@ -540,7 +539,7 @@ function RoomForm({
         </View>
       </ScrollView>
       <FormFooter>
-        <PrimaryButton label={t.saveRoom} arrow disabled={saving} onPress={handleSave} />
+        <PrimaryButton label={t.saveRoom} disabled={saving} onPress={handleSave} />
       </FormFooter>
     </View>
   );
@@ -566,7 +565,13 @@ const styles = StyleSheet.create({
   addWrap: { paddingHorizontal: 18, paddingBottom: 12 },
   listContent: { paddingHorizontal: 18, paddingBottom: 24 + BOTTOM_INSET, gap: 10 },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
+  // The empty block fills the area below the header + tabs, so a plain center
+  // sits below the true screen middle. Bias it up by ~the top-chrome height
+  // (header minus its status-bar inset ≈ 60 + tabs ≈ 70) so it reads centered.
+  empty: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 36, paddingBottom: TOP_INSET + 130,
+  },
   emptyTile: {
     width: 96, height: 96, borderRadius: radius['2xl'] - 2, backgroundColor: color.primary[50],
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
