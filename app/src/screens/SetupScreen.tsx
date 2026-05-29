@@ -16,6 +16,9 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Application from 'expo-application';
+import type * as Speech from 'expo-speech';
+import { listSpanishVoices, speakPreview } from '@/adapters/tts';
+import { COPY } from '@/services';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as CatalogPhotos from '@/services/CatalogPhotos';
 import * as RoomCatalog from '@/services/RoomCatalog';
@@ -206,49 +209,94 @@ function SettingsTab() {
   const t = useSetupStrings();
   const lang = useLang();
   const [quietCapture, setQuietCapture] = useState(false);
+  const [voices, setVoices] = useState<Speech.Voice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState('');
+
   useEffect(() => {
-    void (async () => setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false)))();
+    void (async () => {
+      setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
+      setSelectedVoice(await Settings.getString(Settings.KEYS.voice, ''));
+      setVoices(await listSpanishVoices());
+    })();
   }, []);
+
   const toggle = async () => {
     const next = !quietCapture;
     setQuietCapture(next);
     await Settings.setBool(Settings.KEYS.quietCapture, next);
   };
+
+  const selectVoice = (id: string) => {
+    setSelectedVoice(id);
+    void Settings.setString(Settings.KEYS.voice, id);
+    // Preview the choice immediately with Lola's greeting line.
+    speakPreview(COPY.greeting, id);
+  };
+
+  const voiceRows: { id: string; label: string }[] = [
+    { id: '', label: t.voiceDefault },
+    ...voices.map(v => ({ id: v.identifier, label: `${v.name} · ${v.language}` })),
+  ];
+
   return (
     <View style={styles.settingsWrap}>
-      {/* Language */}
-      <View style={styles.settingCard}>
-        <Text style={styles.settingLabel}>{t.language}</Text>
-        <View style={styles.segment}>
-          {(['es', 'en'] as Lang[]).map(code => {
-            const active = lang === code;
-            return (
-              <Pressable
-                key={code}
-                onPress={() => setLang(code)}
-                style={[styles.segmentBtn, active && styles.segmentBtnActive]}
-              >
-                <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                  {code === 'es' ? t.langSpanish : t.langEnglish}
-                </Text>
-              </Pressable>
-            );
-          })}
+      <ScrollView contentContainerStyle={styles.settingsScroll} showsVerticalScrollIndicator={false}>
+        {/* Language */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.language}</Text>
+          <View style={styles.segment}>
+            {(['es', 'en'] as Lang[]).map(code => {
+              const active = lang === code;
+              return (
+                <Pressable
+                  key={code}
+                  onPress={() => setLang(code)}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {code === 'es' ? t.langSpanish : t.langEnglish}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
 
-      {/* Quiet capture */}
-      <Pressable style={styles.settingRow} onPress={toggle}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.settingLabel}>{t.quietCapture}</Text>
-          <Text style={styles.settingHint}>{t.quietCaptureHint}</Text>
+        {/* Voice */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.voice}</Text>
+          <Text style={styles.settingHint}>{t.voiceHint}</Text>
+          {voices.length === 0 ? (
+            <Text style={[styles.settingHint, { marginTop: 10 }]}>{t.noVoices}</Text>
+          ) : (
+            <View style={styles.voiceList}>
+              {voiceRows.map(row => {
+                const active = selectedVoice === row.id;
+                return (
+                  <Pressable key={row.id || 'default'} onPress={() => selectVoice(row.id)} style={styles.voiceRow}>
+                    <Text style={[styles.voiceName, active && styles.voiceNameActive]} numberOfLines={1}>
+                      {row.label}
+                    </Text>
+                    {active && <Icon name="check" size={20} color={color.primary[500]} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
-        <View style={[styles.toggle, quietCapture && styles.toggleOn]}>
-          <View style={[styles.toggleKnob, quietCapture && styles.toggleKnobOn]} />
-        </View>
-      </Pressable>
 
-      {/* Version footer pinned to the bottom of the screen. */}
+        {/* Quiet capture */}
+        <Pressable style={styles.settingRow} onPress={toggle}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingLabel}>{t.quietCapture}</Text>
+            <Text style={styles.settingHint}>{t.quietCaptureHint}</Text>
+          </View>
+          <View style={[styles.toggle, quietCapture && styles.toggleOn]}>
+            <View style={[styles.toggleKnob, quietCapture && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+      </ScrollView>
+
       <Text style={styles.version}>Lola v{APP_VERSION} (build {APP_BUILD})</Text>
     </View>
   );
@@ -588,8 +636,17 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fontFamily.regular, color: color.text.medium, lineHeight: 23, textAlign: 'center', marginBottom: 28 },
   emptyCta: { width: '100%', maxWidth: 320 },
 
-  settingsWrap: { flex: 1, padding: 18, paddingBottom: 18 + BOTTOM_INSET, gap: 12 },
-  version: { marginTop: 'auto', textAlign: 'center', fontSize: 12.5, fontFamily: fontFamily.medium, color: color.text.low },
+  settingsWrap: { flex: 1, padding: 18, paddingBottom: 18 + BOTTOM_INSET },
+  settingsScroll: { gap: 12, paddingBottom: 12 },
+  version: { marginTop: 12, textAlign: 'center', fontSize: 12.5, fontFamily: fontFamily.medium, color: color.text.low },
+  voiceList: { marginTop: 10, borderTopWidth: 1, borderTopColor: color.neutral.border },
+  voiceRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 13, gap: 12,
+    borderBottomWidth: 1, borderBottomColor: color.neutral.border,
+  },
+  voiceName: { flex: 1, fontSize: 15, fontFamily: fontFamily.medium, color: color.text.high },
+  voiceNameActive: { fontFamily: fontFamily.bold, fontWeight: '700', color: color.primary[500] },
   settingCard: {
     padding: 16, backgroundColor: color.neutral.white,
     borderWidth: 1, borderColor: color.neutral.border, borderRadius: radius.lg - 2,

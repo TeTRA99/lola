@@ -79,4 +79,5 @@ void ensureLoaded();
 export const KEYS = {
   quietCapture: 'quiet_capture',
   language: 'language',
+  voice: 'tts_voice',
 } as const;

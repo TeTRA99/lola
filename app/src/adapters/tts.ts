@@ -5,7 +5,29 @@
 
 import * as Speech from 'expo-speech';
 import { CONFIG } from '@/config';
+import * as Settings from '@/services/Settings';
 import { ok, err, type Result } from '@/utils/result';
+
+/** Spanish voices installed on this device (for the Setup voice picker). */
+export async function listSpanishVoices(): Promise<Speech.Voice[]> {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    return voices
+      .filter(v => v.language?.toLowerCase().startsWith('es'))
+      .sort((a, b) => (a.language + a.name).localeCompare(b.language + b.name));
+  } catch {
+    return [];
+  }
+}
+
+/** Speak a one-off preview line with a specific voice (Setup picker). */
+export function speakPreview(text: string, voiceIdentifier: string): void {
+  Speech.stop();
+  Speech.speak(text, {
+    rate: CONFIG.TTS_RATE,
+    ...(voiceIdentifier ? { voice: voiceIdentifier } : {}),
+  });
+}
 
 export type TTSError = 'no_voice_available' | 'engine_unavailable' | 'unknown';
 export type SpeakOptions = { rate?: number };
@@ -65,9 +87,13 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Resu
         resolve(r);
       };
       emitSpeech(text);
+      // A caregiver-selected voice (Setup picker) overrides the resolved
+      // locale; otherwise fall back to language-based voice selection.
+      const voiceId = Settings.getStringSync(Settings.KEYS.voice, '');
       Speech.speak(text, {
         language,
         rate: opts.rate ?? CONFIG.TTS_RATE,
+        ...(voiceId ? { voice: voiceId } : {}),
         onDone: () => settle(ok(undefined)),
         onStopped: () => settle(ok(undefined)),
         onError: () => settle(err('unknown')),

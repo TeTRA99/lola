@@ -114,7 +114,18 @@ export async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
  * Service-layer code uses this; React tree should use SQLiteProvider/useSQLiteContext.
  */
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (dbSingleton) return dbSingleton;
+  if (dbSingleton) {
+    // Liveness probe: a dev hot-reload (Fast Refresh) can close the native
+    // connection while this JS singleton still points at it, so the next query
+    // rejects with a NativeDatabase NPE. Cheaply verify the handle and reopen
+    // if it's dead, so the DB self-heals instead of crashing callers.
+    try {
+      await dbSingleton.getFirstAsync('SELECT 1');
+      return dbSingleton;
+    } catch {
+      dbSingleton = null;
+    }
+  }
   // Open + migrate before caching — a half-migrated handle must not be cached
   // (B3 from the 2026-05-27 code review).
   const db = await SQLite.openDatabaseAsync(DB_NAME);

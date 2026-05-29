@@ -53,6 +53,10 @@ type SetupCopy = {
   language: string;
   langSpanish: string;
   langEnglish: string;
+  voice: string;
+  voiceHint: string;
+  voiceDefault: string;
+  noVoices: string;
   // photo placeholders shown in the Spanish name fields
   phObjName: string;
   phObjDesc: string;
@@ -126,6 +130,10 @@ const en: SetupCopy = {
   language: 'Language',
   langSpanish: 'Español',
   langEnglish: 'English',
+  voice: 'Voice',
+  voiceHint: 'Tap a voice to hear it. Lola will use the selected one.',
+  voiceDefault: 'System default',
+  noVoices: 'No Spanish voices are installed on this phone.',
   phObjName: 'e.g. Dad’s thermos',
   phObjDesc: 'e.g. the blue one with a red lid',
   phRoomName: 'e.g. Kitchen',
@@ -196,6 +204,10 @@ const es: SetupCopy = {
   language: 'Idioma',
   langSpanish: 'Español',
   langEnglish: 'English',
+  voice: 'Voz',
+  voiceHint: 'Tocá una voz para escucharla. Lola va a usar la elegida.',
+  voiceDefault: 'Voz del sistema',
+  noVoices: 'No hay voces en español instaladas en este teléfono.',
   phObjName: 'ej. Termo de Papá',
   phObjDesc: 'ej. el azul de tapa roja',
   phRoomName: 'ej. Cocina',

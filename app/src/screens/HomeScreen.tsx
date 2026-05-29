@@ -25,7 +25,8 @@ import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
 import { subscribeHaptics, type HapticPattern } from '@/adapters/haptics';
-import { subscribeSpeech } from '@/adapters/tts';
+import { subscribeSpeech, stop as ttsStop } from '@/adapters/tts';
+import { abort as sttAbort } from '@/adapters/stt';
 import { Icon } from '@/components/Icon';
 import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -47,6 +48,19 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
   const running = state === 'listening' || state === 'thinking' || state === 'speaking';
   const runningRef = useRef(false);
   runningRef.current = running;
+  // Set when the user taps to interrupt, so the in-flight run()'s resolution
+  // doesn't overwrite the idle state we just forced.
+  const cancelledRef = useRef(false);
+
+  // Tap anywhere while Lola is listening/thinking/speaking → stop her and
+  // return to idle. (Re-tap a panel to start fresh.)
+  const stopActive = () => {
+    cancelledRef.current = true;
+    ttsStop();
+    sttAbort();
+    setSpoken('');
+    setState('idle');
+  };
 
   // Map service lifecycle → in-panel state. Only the intermediate states come
   // from haptics; tap sets the optimistic first state and run() resolution
@@ -76,20 +90,25 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
   }, [state, errKind]);
 
   const run = async (m: Mode) => {
-    if (runningRef.current) return; // no interrupt — Lola finishes on her own
+    if (runningRef.current) { stopActive(); return; } // tap during a run = stop
+    cancelledRef.current = false;
     setMode(m);
     setSpoken('');
     setState(m === 'ask' ? 'listening' : 'thinking');
     try {
       const res = m === 'describe' ? await DescribeService.run() : await AskService.run();
+      if (cancelledRef.current) return; // user interrupted — don't clobber idle
       if (res.ok) {
         setState('idle');
       } else {
+        console.log('[home] run returned error:', res.error);
         const perm = res.error === 'permission_denied' || res.error === 'permission_denied_mic';
         setErrKind(perm ? 'perm' : 'camera');
         setState('error');
       }
-    } catch {
+    } catch (e) {
+      console.log('[home] run THREW:', e);
+      if (cancelledRef.current) return;
       setErrKind('camera');
       setState('error');
     }
@@ -152,7 +171,7 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
         state={describeState}
         spoken={spoken}
         dimmed={running && !describeActive}
-        disabled={running}
+        disabled={false}
         onPress={() => run('describe')}
       />
       <View style={styles.divider} />
@@ -162,7 +181,7 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
         state={askState}
         spoken={spoken}
         dimmed={running && !askActive}
-        disabled={running}
+        disabled={false}
         onPress={() => run('ask')}
       />
     </View>
@@ -251,7 +270,13 @@ function FieldStage({
     <>
       <Waveform accent={accent} />
       {spoken ? (
-        <Text style={[styles.spoken, { color: textColor }]}>{spoken}</Text>
+        <Text
+          style={[styles.spoken, { color: textColor }]}
+          numberOfLines={5}
+          ellipsizeMode="tail"
+        >
+          {spoken}
+        </Text>
       ) : null}
     </>
   );

@@ -167,9 +167,13 @@ export async function recall(
   noun: string,
   nowMs: number = now(),
 ): Promise<RecallOutcome> {
-  const objectId = await resolveObjectFromUtterance(noun);
-  if (objectId === null) return { freshness: 'miss' };
+  // Whole body is guarded: any DB error (incl. a stale handle after a dev
+  // hot-reload) must degrade to a 'miss' so the caller falls through to a live
+  // model answer — never crash the Ask flow. resolveObjectFromUtterance also
+  // touches the DB, so it must be inside the try.
   try {
+    const objectId = await resolveObjectFromUtterance(noun);
+    if (objectId === null) return { freshness: 'miss' };
     const db = await getDb();
     const row = await db.getFirstAsync<Sighting>(
       'SELECT id, object_id, observed_at, snapshot_uri, room_hint, source_action, excerpt FROM sightings WHERE object_id = ? ORDER BY observed_at DESC LIMIT 1',
