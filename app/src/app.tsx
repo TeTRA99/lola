@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BackHandler, Platform, View } from 'react-native';
 import * as QuickActions from 'expo-quick-actions';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
+import * as SplashScreen from 'expo-splash-screen';
 import { initExecutorch } from 'react-native-executorch';
 import { ExpoResourceFetcher } from 'react-native-executorch-expo-resource-fetcher';
 import { LaunchSplash } from '@/screens/LaunchSplash';
@@ -15,6 +16,10 @@ import { COPY } from '@/services';
 // Register the Expo resource fetcher with ExecuTorch once at boot. Required
 // before any module (ImageEmbeddings, LLM, etc.) can download / load weights.
 initExecutorch({ resourceFetcher: ExpoResourceFetcher });
+
+// Keep the native (ink) splash up until the JS UI + fonts are ready, so there's
+// no grey window flash between the native splash and our JS splash.
+void SplashScreen.preventAutoHideAsync();
 
 // The OS app-icon "Configuración" shortcut is the real door to Setup (locked
 // decision #3). Its id is matched on cold + warm launch below.
@@ -34,6 +39,12 @@ export default function App() {
   // first run, so this is idempotent.
   // Apply any saved language override (device language is the default).
   useEffect(() => { void loadStoredLang(); }, []);
+
+  // Reveal the app only once fonts are ready — hides the native splash directly
+  // onto our JS splash (both ink), no grey gap.
+  useEffect(() => {
+    if (fontsLoaded) void SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
 
   // Note: the system navigation bar is intentionally LEFT VISIBLE so there is
   // always an obvious way Home/Back (important for a low-vision user, and it
@@ -59,11 +70,14 @@ export default function App() {
     if (action?.id === SETUP_ACTION_ID) setScreen('setup');
   });
 
-  // Leave the app when Setup is dismissed (Android: finish the activity → back
-  // to launcher). iOS can't programmatically exit, so fall back to Home.
+  // Leave the app when Setup is dismissed. Android's BackHandler.exitApp() only
+  // *backgrounds* the task (it doesn't kill the process), so we ALSO reset the
+  // screen to Home first — otherwise a warm resume would drop the caregiver
+  // right back into Setup. Net effect: Done sends the app away, and reopening
+  // behaves like a normal app (resumes to Home; a cold launch shows the splash).
   const closeSetup = () => {
+    setScreen('home');
     if (Platform.OS === 'android') BackHandler.exitApp();
-    else setScreen('home');
   };
 
   console.log('[App] render with screen =', screen, 'fonts =', fontsLoaded);

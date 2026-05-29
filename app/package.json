@@ -17,6 +17,7 @@
     "expo-quick-actions": "^6.0.2",
     "expo-speech": "~56.0.3",
     "expo-speech-recognition": "^56.0.0",
+    "expo-splash-screen": "~56.0.10",
     "expo-sqlite": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",

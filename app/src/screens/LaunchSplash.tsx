@@ -12,7 +12,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import Constants from 'expo-constants';
 import { LolaMark } from '@/components/LolaMark';
 import { Icon } from '@/components/Icon';
 import { speak } from '@/adapters/tts';
@@ -22,13 +21,6 @@ import { color, fontFamily } from '@/theme/tokens';
 import { BOTTOM_INSET } from '@/theme/insets';
 
 const SPLASH_DURATION_MS = 3000;
-// Native app version (from app.json) — only changes on a real APK rebuild.
-const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
-// JS bundle load time — updates on every hot reload so Charly can tell at a
-// glance whether the latest dev push made it onto the phone.
-const BUNDLE_LOADED_AT = new Date();
-function pad(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
-const BUNDLE_STAMP = `${pad(BUNDLE_LOADED_AT.getHours())}:${pad(BUNDLE_LOADED_AT.getMinutes())}:${pad(BUNDLE_LOADED_AT.getSeconds())}`;
 
 type Props = {
   onDone: () => void;
@@ -102,8 +94,6 @@ export function LaunchSplash({ onDone, onDebug }: Props) {
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
     >
-      <Text style={styles.build}>v{APP_VERSION} · bundle {BUNDLE_STAMP}</Text>
-
       <View style={styles.center}>
         <Animated.View style={{ transform: [{ translateY: float }] }}>
           <LolaMark size={92} />
@@ -129,14 +119,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.neutral.ink,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  build: {
-    position: 'absolute',
-    top: 52,
-    color: 'rgba(255,255,255,0.22)',
-    fontSize: 11,
-    fontFamily: fontFamily.regular,
-    fontVariant: ['tabular-nums'],
   },
   center: { alignItems: 'center' },
   wordmark: {
