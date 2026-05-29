@@ -109,9 +109,12 @@ export function proximityFromScreenRect(r: ScreenRect, screenW: number, screenH:
 // surface the guide affordance when the named object maps to one of these.
 // (Subset — populate from the model's full label map when the detector lands.)
 export const GUIDABLE_COCO_LABELS = [
-  'cup', 'bottle', 'book', 'cell phone', 'remote', 'chair', 'couch', 'laptop',
-  'mouse', 'keyboard', 'tv', 'bowl', 'spoon', 'fork', 'knife', 'scissors',
-  'backpack', 'handbag', 'sports ball', 'clock', 'vase', 'wine glass',
+  // Small findables (hunt for on a surface)
+  'cup', 'bottle', 'bowl', 'wine glass', 'fork', 'knife', 'spoon',
+  'cell phone', 'remote', 'laptop', 'keyboard', 'mouse',
+  'book', 'scissors', 'clock', 'vase', 'backpack', 'handbag', 'sports ball',
+  // Key navigation landmarks (orient toward in a room)
+  'chair', 'couch', 'dining table', 'bed', 'toilet', 'refrigerator', 'tv',
 ] as const;
 
 // The model returns labels like "CUP", "DINING_TABLE"; our list is lowercase

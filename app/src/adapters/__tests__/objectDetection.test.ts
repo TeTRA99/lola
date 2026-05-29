@@ -79,10 +79,9 @@ describe('bestDetectionFor', () => {
   it('matches model labels case/separator-insensitively (CUP, DINING_TABLE)', () => {
     const cupUpper: RawDetection = { label: 'CUP', score: 0.3, bbox: { x1: 0, y1: 0, x2: 10, y2: 10 } };
     const table: RawDetection = { label: 'DINING_TABLE', score: 0.9, bbox: { x1: 0, y1: 0, x2: 10, y2: 10 } };
-    // target 'cup' matches 'CUP'
+    // model emits UPPERCASE_UNDERSCORE; our labels are lowercase-with-spaces
     expect(bestDetectionFor([cupUpper, table], 'cup')).toBe(cupUpper);
-    // no target: DINING_TABLE isn't guidable, CUP is → cup wins despite lower score
-    expect(bestDetectionFor([cupUpper, table], null)).toBe(cupUpper);
+    expect(bestDetectionFor([cupUpper, table], 'dining table')).toBe(table);
   });
 });
 

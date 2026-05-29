@@ -1,85 +1,99 @@
-// feat/guide-me-to-it — map a Spanish noun (from intent classification) to a
-// COCO label the on-device detector knows. v1 guides only to common objects
-// (COCO); anything else returns null → "no puedo guiarte a eso".
+// feat/guide-me-to-it — resolve the object the user wants to be guided to into a
+// COCO label the on-device detector knows.
 //
-// The returned cocoLabel matches GUIDABLE_COCO_LABELS (lowercase); the detector
-// normalizes case/separators, so it lines up with the model's UPPERCASE labels.
+// Per product rule: understanding the user's words is done by the LLM, NOT regex
+// or a synonym dictionary. We hand the LLM the detectable set (with Spanish
+// hints) and let it pick the best match, or null. We only *validate* the label
+// it returns against our set (a guard on model output, not user-speech matching).
 
+import { chatJson } from '@/gateways/openrouter';
 import { GUIDABLE_COCO_LABELS } from '@/adapters/objectDetection';
 
-/** Normalize a noun for lookup: lowercase, strip accents/punctuation, collapse spaces. */
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
-    .replace(/[^a-z\s]/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-// Spanish term (normalized — no accents, lowercase) → COCO label.
-// Several synonyms/plurals can map to one label.
-const ES_TO_COCO: Record<string, string> = {
-  taza: 'cup', tazas: 'cup', pocillo: 'cup', vaso: 'cup', vasos: 'cup', jarro: 'cup',
-  botella: 'bottle', botellas: 'bottle',
-  bol: 'bowl', bowl: 'bowl', tazon: 'bowl', cuenco: 'bowl', ensaladera: 'bowl',
-  silla: 'chair', sillas: 'chair',
-  sillon: 'couch', sofa: 'couch',
-  libro: 'book', libros: 'book', cuaderno: 'book',
-  control: 'remote', 'control remoto': 'remote', remoto: 'remote', mando: 'remote',
-  laptop: 'laptop', notebook: 'laptop', computadora: 'laptop', compu: 'laptop',
-  portatil: 'laptop', 'computadora portatil': 'laptop',
-  teclado: 'keyboard',
-  mouse: 'mouse', raton: 'mouse',
-  tele: 'tv', televisor: 'tv', television: 'tv', tv: 'tv', pantalla: 'tv',
-  cuchara: 'spoon', cucharas: 'spoon', cucharita: 'spoon',
-  cuchillo: 'knife', cuchillos: 'knife',
-  tenedor: 'fork', tenedores: 'fork',
-  tijera: 'scissors', tijeras: 'scissors',
-  mochila: 'backpack',
-  cartera: 'handbag', bolso: 'handbag', bolsa: 'handbag',
-  pelota: 'sports ball', pelotas: 'sports ball', balon: 'sports ball',
-  reloj: 'clock',
-  florero: 'vase', jarron: 'vase',
-  copa: 'wine glass', copas: 'wine glass',
-  celular: 'cell phone', telefono: 'cell phone', movil: 'cell phone', smartphone: 'cell phone',
+// Spanish hints per label — reference DATA to ground the LLM + document the set.
+// NOT an utterance matcher.
+const GUIDABLE_ES: Record<string, string> = {
+  cup: 'taza, vaso, pocillo, jarro',
+  bottle: 'botella',
+  bowl: 'bol, tazón, cuenco, ensaladera',
+  'wine glass': 'copa',
+  fork: 'tenedor',
+  knife: 'cuchillo',
+  spoon: 'cuchara, cucharita',
+  'cell phone': 'celular, teléfono, móvil',
+  remote: 'control remoto, control, mando',
+  laptop: 'notebook, laptop, computadora portátil',
+  keyboard: 'teclado',
+  mouse: 'mouse, ratón',
+  book: 'libro, cuaderno',
+  scissors: 'tijera, tijeras',
+  clock: 'reloj de pared',
+  vase: 'florero, jarrón',
+  backpack: 'mochila',
+  handbag: 'cartera, bolso',
+  'sports ball': 'pelota, balón',
+  chair: 'silla',
+  couch: 'sillón, sofá',
+  'dining table': 'mesa, mesa del comedor',
+  bed: 'cama',
+  toilet: 'inodoro',
+  refrigerator: 'heladera, refrigerador, nevera',
+  tv: 'televisor, tele, televisión',
 };
 
-// Build the lookup with normalized keys so accented/multi-word keys match input.
-const NORM_MAP: Record<string, string> = {};
-for (const [k, v] of Object.entries(ES_TO_COCO)) NORM_MAP[normalize(k)] = v;
+const GUIDABLE_SET = new Set(GUIDABLE_COCO_LABELS as readonly string[]);
 
-const GUIDABLE = new Set(GUIDABLE_COCO_LABELS as readonly string[]);
+function buildResolvePrompt(): string {
+  const lines = (GUIDABLE_COCO_LABELS as readonly string[])
+    .map(l => `- ${l}: ${GUIDABLE_ES[l] ?? l}`)
+    .join('\n');
+  return `Sos parte de Lola, una asistente de voz para una persona mayor con baja visión que habla español argentino. El usuario quiere que lo guiemos físicamente hacia un objeto usando la cámara. Sólo podemos detectar los objetos de esta lista.
+
+Lista de objetos detectables (etiqueta en inglés: cómo se dicen en español):
+${lines}
+
+Dada la cosa que el usuario pidió (puede tener errores de transcripción, artículos, adjetivos o posesivos), devolvé la ETIQUETA EN INGLÉS de la lista que mejor corresponde semánticamente. Si lo que pidió NO corresponde a ningún objeto de la lista, devolvé null (no inventes).
+
+Respondé SOLO con JSON de esta forma exacta:
+{ "label": "<una etiqueta EXACTA de la lista>" | null }
+
+Ejemplos:
+- "el control de la tele" → { "label": "remote" }
+- "mi celular" → { "label": "cell phone" }
+- "una taza" → { "label": "cup" }
+- "el sillón" → { "label": "couch" }
+- "la heladera" → { "label": "refrigerator" }
+- "el lápiz" → { "label": null }
+- "las llaves" → { "label": null }
+- "mis anteojos" → { "label": null }`;
+}
+
+const RESOLVE_PROMPT = buildResolvePrompt();
 
 export type GuideTarget = {
   /** COCO label for the detector (e.g. 'cup'). */
   cocoLabel: string;
-  /** The noun to say back to the user (e.g. 'taza'). */
+  /** What the user called it, to say back (e.g. 'el control'). */
   spoken: string;
 };
 
 /**
- * Resolve a Spanish noun to a guidable COCO target, or null if we can't guide
- * to it (unknown word, or not a COCO class we ship in v1). Null is the graceful
- * fallback signal — the flow says "por ahora no puedo guiarte hasta eso".
+ * Resolve what the user asked for into a guidable COCO target via the LLM, or
+ * null if it isn't something we can detect (→ graceful "no puedo guiarte a eso").
  */
-export function resolveGuideTarget(noun: string | null | undefined): GuideTarget | null {
-  if (!noun) return null;
-  const n = normalize(noun);
-  if (!n) return null;
-  // Whole phrase first, then each word (e.g. "control remoto" → remote;
-  // "una taza amarilla" → taza).
-  const candidates = [n, ...n.split(' ')];
-  for (const c of candidates) {
-    const label = NORM_MAP[c];
-    if (label && GUIDABLE.has(label)) {
-      return { cocoLabel: label, spoken: noun.trim() };
-    }
+export async function resolveGuideTarget(noun: string | null | undefined): Promise<GuideTarget | null> {
+  const spoken = (noun ?? '').trim();
+  if (!spoken) return null;
+
+  const resp = await chatJson<{ label?: string | null }>({
+    systemPrompt: RESOLVE_PROMPT,
+    userText: spoken,
+  });
+  if (!resp.ok) return null;
+
+  const label = resp.value.label;
+  // Guard: accept only a label actually in our detectable set.
+  if (typeof label === 'string' && GUIDABLE_SET.has(label)) {
+    return { cocoLabel: label, spoken };
   }
   return null;
-}
-
-/** True if we can guide to this Spanish noun (for gating the offer/intent). */
-export function isGuidable(noun: string | null | undefined): boolean {
-  return resolveGuideTarget(noun) !== null;
 }

@@ -1,39 +1,37 @@
-import { resolveGuideTarget, isGuidable } from '@/services/GuideTargets';
+jest.mock('@/gateways/openrouter', () => ({ chatJson: jest.fn() }));
 
-describe('resolveGuideTarget', () => {
-  it('maps common Spanish nouns to COCO labels', () => {
-    expect(resolveGuideTarget('taza')?.cocoLabel).toBe('cup');
-    expect(resolveGuideTarget('botella')?.cocoLabel).toBe('bottle');
-    expect(resolveGuideTarget('silla')?.cocoLabel).toBe('chair');
-    expect(resolveGuideTarget('cuchillo')?.cocoLabel).toBe('knife');
+import { chatJson } from '@/gateways/openrouter';
+import { resolveGuideTarget } from '@/services/GuideTargets';
+
+const mockChatJson = chatJson as unknown as jest.Mock;
+
+beforeEach(() => mockChatJson.mockReset());
+
+describe('resolveGuideTarget (LLM-based, no regex/dictionary)', () => {
+  it('maps to the label the LLM returns, keeping the spoken noun', async () => {
+    mockChatJson.mockResolvedValue({ ok: true, value: { label: 'cup' } });
+    expect(await resolveGuideTarget('mi vaso')).toEqual({ cocoLabel: 'cup', spoken: 'mi vaso' });
   });
 
-  it('handles accents, case, and plurals', () => {
-    expect(resolveGuideTarget('Teléfono')?.cocoLabel).toBe('cell phone');
-    expect(resolveGuideTarget('TAZÓN')?.cocoLabel).toBe('bowl');
-    expect(resolveGuideTarget('sillas')?.cocoLabel).toBe('chair');
+  it('returns null when the LLM says it is not in the set (graceful fallback)', async () => {
+    mockChatJson.mockResolvedValue({ ok: true, value: { label: null } });
+    expect(await resolveGuideTarget('un lápiz')).toBeNull();
   });
 
-  it('matches multi-word and noun-inside-phrase', () => {
-    expect(resolveGuideTarget('control remoto')?.cocoLabel).toBe('remote');
-    expect(resolveGuideTarget('una taza amarilla')?.cocoLabel).toBe('cup');
+  it('guards against a label the LLM returns that is not actually detectable', async () => {
+    mockChatJson.mockResolvedValue({ ok: true, value: { label: 'airplane' } });
+    expect(await resolveGuideTarget('un avión')).toBeNull();
   });
 
-  it('keeps the original spoken noun', () => {
-    expect(resolveGuideTarget('la botella')?.spoken).toBe('la botella');
+  it('returns null on LLM failure', async () => {
+    mockChatJson.mockResolvedValue({ ok: false, error: 'network' });
+    expect(await resolveGuideTarget('una taza')).toBeNull();
   });
 
-  it('returns null (graceful fallback) for objects we cannot track yet', () => {
-    expect(resolveGuideTarget('lápiz')).toBeNull();
-    expect(resolveGuideTarget('anteojos')).toBeNull();
-    expect(resolveGuideTarget('llaves')).toBeNull();
-    expect(resolveGuideTarget('')).toBeNull();
-    expect(resolveGuideTarget(null)).toBeNull();
-    expect(resolveGuideTarget(undefined)).toBeNull();
-  });
-
-  it('isGuidable mirrors resolveGuideTarget', () => {
-    expect(isGuidable('taza')).toBe(true);
-    expect(isGuidable('lápiz')).toBe(false);
+  it('does not call the LLM for empty input', async () => {
+    expect(await resolveGuideTarget('')).toBeNull();
+    expect(await resolveGuideTarget(null)).toBeNull();
+    expect(await resolveGuideTarget(undefined)).toBeNull();
+    expect(mockChatJson).not.toHaveBeenCalled();
   });
 });
