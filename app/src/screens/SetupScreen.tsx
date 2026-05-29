@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Application from 'expo-application';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as CatalogPhotos from '@/services/CatalogPhotos';
 import * as RoomCatalog from '@/services/RoomCatalog';
@@ -35,6 +36,10 @@ import { useSetupStrings, setLang, useLang, type Lang } from '@/i18n';
 import { color, radius, fontFamily } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 import type { SetupCopy } from '@/i18n/setupStrings';
+
+// Read once at module load — these are synchronous native getters.
+const APP_VERSION = Application.nativeApplicationVersion ?? '0.0.0';
+const APP_BUILD = Application.nativeBuildVersion ?? '—';
 
 type Tab = 'objects' | 'rooms' | 'settings';
 type ObjectMode = { kind: 'list' } | { kind: 'add' } | { kind: 'edit'; obj: CatalogObject };
@@ -242,6 +247,9 @@ function SettingsTab() {
           <View style={[styles.toggleKnob, quietCapture && styles.toggleKnobOn]} />
         </View>
       </Pressable>
+
+      {/* Version footer pinned to the bottom of the screen. */}
+      <Text style={styles.version}>Lola v{APP_VERSION} (build {APP_BUILD})</Text>
     </View>
   );
 }
@@ -580,7 +588,8 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fontFamily.regular, color: color.text.medium, lineHeight: 23, textAlign: 'center', marginBottom: 28 },
   emptyCta: { width: '100%', maxWidth: 320 },
 
-  settingsWrap: { padding: 18, paddingBottom: 18 + BOTTOM_INSET, gap: 12 },
+  settingsWrap: { flex: 1, padding: 18, paddingBottom: 18 + BOTTOM_INSET, gap: 12 },
+  version: { marginTop: 'auto', textAlign: 'center', fontSize: 12.5, fontFamily: fontFamily.medium, color: color.text.low },
   settingCard: {
     padding: 16, backgroundColor: color.neutral.white,
     borderWidth: 1, borderColor: color.neutral.border, borderRadius: radius.lg - 2,
