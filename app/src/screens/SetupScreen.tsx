@@ -4,7 +4,7 @@
 // manual override (see @/i18n); the dad-facing surface stays Spanish. Data
 // logic (OnboardingService / RoomCatalog / CatalogPhotos / Settings) unchanged.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -230,9 +230,18 @@ function SettingsTab() {
     })();
   }, []);
 
-  const changeRate = (v: number) => { setRate(v); void Settings.setString(Settings.KEYS.ttsRate, String(v)); };
-  const changePitch = (v: number) => { setPitch(v); void Settings.setString(Settings.KEYS.ttsPitch, String(v)); };
-  const previewTuning = () => speakPreview(COPY.greeting, { voice: selectedVoice, rate, pitch });
+  // Refs hold the live values so the release-preview uses the latest slider
+  // positions (React state may not have committed yet at release time).
+  const rateRef = useRef(rate);
+  const pitchRef = useRef(pitch);
+  const voiceRef = useRef(selectedVoice);
+  rateRef.current = rate;
+  pitchRef.current = pitch;
+  voiceRef.current = selectedVoice;
+
+  const changeRate = (v: number) => { rateRef.current = v; setRate(v); void Settings.setString(Settings.KEYS.ttsRate, String(v)); };
+  const changePitch = (v: number) => { pitchRef.current = v; setPitch(v); void Settings.setString(Settings.KEYS.ttsPitch, String(v)); };
+  const previewTuning = () => speakPreview(COPY.greeting, { voice: voiceRef.current, rate: rateRef.current, pitch: pitchRef.current });
 
   const toggle = async () => {
     const next = !quietCapture;
@@ -252,10 +261,16 @@ function SettingsTab() {
     speakPreview(COPY.greeting, { voice: id, rate, pitch });
   };
 
-  const voiceRows: { id: string; label: string }[] = [
-    { id: '', label: t.voiceDefault },
-    ...voices.map(v => ({ id: v.identifier, label: `${v.name} · ${v.language}` })),
-  ];
+  // De-dupe by name+language: some engines expose the same voice under several
+  // identifiers (network/local variants) that read as identical to the user.
+  const seenVoiceLabels = new Set<string>();
+  const voiceRows: { id: string; label: string }[] = [{ id: '', label: t.voiceDefault }];
+  for (const v of voices) {
+    const label = `${v.name} · ${v.language}`;
+    if (seenVoiceLabels.has(label)) continue;
+    seenVoiceLabels.add(label);
+    voiceRows.push({ id: v.identifier, label });
+  }
 
   return (
     <View style={styles.settingsWrap}>
