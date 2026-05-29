@@ -83,4 +83,5 @@ export const KEYS = {
   ttsRate: 'tts_rate',
   ttsPitch: 'tts_pitch',
   idleHeartbeat: 'idle_heartbeat',
+  userName: 'user_name',
 } as const;

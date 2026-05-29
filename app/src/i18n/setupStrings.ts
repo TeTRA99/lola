@@ -52,6 +52,9 @@ type SetupCopy = {
   quietCaptureHint: string;
   heartbeat: string;
   heartbeatHint: string;
+  yourName: string;
+  yourNameHint: string;
+  yourNamePh: string;
   language: string;
   langSpanish: string;
   langEnglish: string;
@@ -135,6 +138,9 @@ const en: SetupCopy = {
   quietCaptureHint: 'Mute the shutter sound when Lola takes a picture.',
   heartbeat: 'Idle heartbeat',
   heartbeatHint: 'A gentle pulse every few seconds on the home screen so Dad can feel the app is on and ready.',
+  yourName: 'Your name',
+  yourNameHint: 'How Lola greets you when the app opens.',
+  yourNamePh: 'e.g. Carlos',
   language: 'Language',
   langSpanish: 'Español',
   langEnglish: 'English',
@@ -215,6 +221,9 @@ const es: SetupCopy = {
   quietCaptureHint: 'Silenciar el sonido del obturador cuando Lola saca una foto.',
   heartbeat: 'Latido en reposo',
   heartbeatHint: 'Un pulso suave cada pocos segundos en la pantalla principal para que papá sienta que la app está encendida y lista.',
+  yourName: 'Tu nombre',
+  yourNameHint: 'Cómo te saluda Lola al abrir la app.',
+  yourNamePh: 'ej. Carlos',
   language: 'Idioma',
   langSpanish: 'Español',
   langEnglish: 'English',

@@ -18,7 +18,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as Application from 'expo-application';
 import type * as Speech from 'expo-speech';
 import { listSpanishVoices, speakPreview, RATE_DEFAULT, PITCH_DEFAULT } from '@/adapters/tts';
-import { speakPiperTest, PIPER_TEST_DIR, PIPER_DANIELA_DIR } from '@/adapters/ttsPiper';
 import { Slider } from '@/components/Slider';
 import { COPY } from '@/services';
 import * as OnboardingService from '@/services/OnboardingService';
@@ -212,6 +211,7 @@ function SettingsTab() {
   const lang = useLang();
   const [quietCapture, setQuietCapture] = useState(false);
   const [heartbeatOn, setHeartbeatOn] = useState(false);
+  const [userName, setUserName] = useState('');
   const [voices, setVoices] = useState<Speech.Voice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('');
   const [rate, setRate] = useState(RATE_DEFAULT);
@@ -221,6 +221,7 @@ function SettingsTab() {
     void (async () => {
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
       setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, false));
+      setUserName(await Settings.getString(Settings.KEYS.userName, ''));
       setSelectedVoice(await Settings.getString(Settings.KEYS.voice, ''));
       const r = parseFloat(await Settings.getString(Settings.KEYS.ttsRate, ''));
       const p = parseFloat(await Settings.getString(Settings.KEYS.ttsPitch, ''));
@@ -242,6 +243,7 @@ function SettingsTab() {
   const changeRate = (v: number) => { rateRef.current = v; setRate(v); void Settings.setString(Settings.KEYS.ttsRate, String(v)); };
   const changePitch = (v: number) => { pitchRef.current = v; setPitch(v); void Settings.setString(Settings.KEYS.ttsPitch, String(v)); };
   const previewTuning = () => speakPreview(COPY.greeting, { voice: voiceRef.current, rate: rateRef.current, pitch: pitchRef.current });
+  const changeName = (v: string) => { setUserName(v); void Settings.setString(Settings.KEYS.userName, v.trim()); };
 
   const toggle = async () => {
     const next = !quietCapture;
@@ -274,7 +276,12 @@ function SettingsTab() {
 
   return (
     <View style={styles.settingsWrap}>
-      <ScrollView contentContainerStyle={styles.settingsScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.settingsScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Your name */}
+        <View style={styles.settingCard}>
+          <Field label={t.yourName} value={userName} onChangeText={changeName} placeholder={t.yourNamePh} hint={t.yourNameHint} />
+        </View>
+
         {/* Language */}
         <View style={styles.settingCard}>
           <Text style={styles.settingLabel}>{t.language}</Text>
@@ -344,18 +351,6 @@ function SettingsTab() {
             format={v => `${v.toFixed(2)}×`}
           />
         </View>
-
-        {/* Dev-only: Piper on-device A/B (gated by __DEV__). */}
-        {__DEV__ && (
-          <View style={styles.settingCard}>
-            <Pressable style={{ paddingVertical: 10 }} onPress={() => { void speakPiperTest(COPY.greeting, PIPER_TEST_DIR); }}>
-              <Text style={styles.settingLabel}>🧪 Test Piper — claude (es_MX)</Text>
-            </Pressable>
-            <Pressable style={{ paddingVertical: 10 }} onPress={() => { void speakPiperTest(COPY.greeting, PIPER_DANIELA_DIR); }}>
-              <Text style={styles.settingLabel}>🧪 Test Piper — daniela (es_AR)</Text>
-            </Pressable>
-          </View>
-        )}
 
         {/* Quiet capture */}
         <Pressable style={styles.settingRow} onPress={toggle}>

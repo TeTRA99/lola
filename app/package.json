@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
-    "@dr.pogodin/react-native-fs": "^2.38.2",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "expo": "~56.0.5",
@@ -26,7 +25,6 @@
     "react-native-executorch": "^0.9.0",
     "react-native-executorch-expo-resource-fetcher": "^0.9.0",
     "react-native-haptic-feedback": "^3.0.0",
-    "react-native-sherpa-onnx": "^0.4.3",
     "react-native-svg": "15.15.4"
   },
   "devDependencies": {

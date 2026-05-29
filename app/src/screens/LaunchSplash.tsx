@@ -16,6 +16,7 @@ import { LolaMark } from '@/components/LolaMark';
 import { Icon } from '@/components/Icon';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
+import * as Settings from '@/services/Settings';
 import { CONFIG } from '@/config';
 import { color, fontFamily } from '@/theme/tokens';
 import { BOTTOM_INSET } from '@/theme/insets';
@@ -46,7 +47,8 @@ export function LaunchSplash({ onDone, onDebug }: Props) {
   useEffect(() => {
     if (!greeted.current) {
       greeted.current = true;
-      void speak(COPY.greeting);
+      // Personalize with the caregiver-set name ("Hola, Carlos, …") if present.
+      void Settings.getString(Settings.KEYS.userName, '').then(name => speak(COPY.greetingFor(name)));
     }
     // Gentle float loop on the mark (translateY 0 → -7 → 0, 3600ms).
     const loop = Animated.loop(

@@ -5,6 +5,12 @@
 export const COPY = {
   // Spoken on launch (TTS). The on-screen wordmark greeting is `splash.hello`.
   greeting: 'Hola, ¿en qué puedo ayudarte?',
+  // Personalized launch greeting — uses the caregiver-set name when present
+  // ("Hola, Carlos, ¿en qué puedo ayudarte?"), else falls back to `greeting`.
+  greetingFor: (name?: string): string =>
+    name && name.trim()
+      ? `Hola, ${name.trim()}, ¿en qué puedo ayudarte?`
+      : 'Hola, ¿en qué puedo ayudarte?',
   repeatTrigger: 'Lola, ¿otra vez?',
   extendTrigger: 'Lola, contame más',
   errors: {
