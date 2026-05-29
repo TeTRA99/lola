@@ -180,17 +180,25 @@ function LiveLayer({
   // can spiral into "maximum update depth exceeded".
   const outputs = useMemo(() => [frameOutput], [frameOutput]);
 
+  // Surface the real failure (model load / native frame / runtime) to Metro.
+  useEffect(() => {
+    if (error) console.error('[guide] detector error:', error);
+  }, [error]);
+  const errMsg = error ? (error as { message?: string }).message ?? String(error) : null;
+
   if (!hasPermission || !device) return <CamFallback hasPermission={hasPermission} />;
 
   return (
     <>
       <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} outputs={outputs} />
       <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
-      {!isReady ? (
+      {errMsg ? (
         <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            {error ? 'Detector error' : `Loading model… ${Math.round((downloadProgress ?? 0) * 100)}%`}
-          </Text>
+          <Text style={styles.bannerText}>Detector error: {errMsg}</Text>
+        </View>
+      ) : !isReady ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>Loading model… {Math.round((downloadProgress ?? 0) * 100)}%</Text>
         </View>
       ) : null}
     </>
