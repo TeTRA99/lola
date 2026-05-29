@@ -220,7 +220,7 @@ function SettingsTab() {
   useEffect(() => {
     void (async () => {
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
-      setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, false));
+      setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, true));
       setUserName(await Settings.getString(Settings.KEYS.userName, ''));
       setSelectedVoice(await Settings.getString(Settings.KEYS.voice, ''));
       const r = parseFloat(await Settings.getString(Settings.KEYS.ttsRate, ''));

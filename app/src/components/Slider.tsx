@@ -1,7 +1,10 @@
 // Lightweight touch slider — no native dependency (so it hot-reloads).
-// PanResponder drives it so a drag is claimed cleanly even inside a ScrollView
-// (no jerky hand-off). `onChange` fires continuously during the drag and
-// `onComplete` fires on release (use it to trigger a preview).
+//
+// Uses PanResponder + the ABSOLUTE touch X (gestureState.moveX) minus the
+// track's measured window position. (Using nativeEvent.locationX is jumpy,
+// because it re-bases to whichever child — fill/thumb — is under the finger as
+// you drag.) The track's left/width are measured on layout and refreshed on
+// grant, so the thumb tracks the finger smoothly.
 
 import { useRef, useState } from 'react';
 import { PanResponder, StyleSheet, Text, View } from 'react-native';
@@ -19,11 +22,11 @@ type Props = {
 };
 
 export function Slider({ label, value, min, max, step, onChange, onComplete, format }: Props) {
-  const [width, setWidth] = useState(1);
+  const [, force] = useState(0);
+  const viewRef = useRef<View>(null);
+  const trackLeft = useRef(0);
+  const trackWidth = useRef(1);
 
-  // Refs so the (once-created) PanResponder always sees fresh values/callbacks.
-  const widthRef = useRef(1);
-  widthRef.current = width;
   const valueRef = useRef(value);
   valueRef.current = value;
   const onChangeRef = useRef(onChange);
@@ -31,14 +34,20 @@ export function Slider({ label, value, min, max, step, onChange, onComplete, for
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  const setFromX = useRef((x: number) => {});
-  setFromX.current = (x: number) => {
-    const w = widthRef.current || 1;
-    const clamped = Math.max(0, Math.min(w, x));
-    const raw = min + (clamped / w) * (max - min);
-    const snapped = Math.round(raw / step) * step;
-    const v = Number(snapped.toFixed(2));
-    if (v !== valueRef.current) onChangeRef.current(v);
+  const setFromAbsX = useRef((absX: number) => {});
+  setFromAbsX.current = (absX: number) => {
+    const w = trackWidth.current || 1;
+    const x = Math.max(0, Math.min(w, absX - trackLeft.current));
+    const raw = min + (x / w) * (max - min);
+    const snapped = Number((Math.round(raw / step) * step).toFixed(2));
+    if (snapped !== valueRef.current) onChangeRef.current(snapped);
+  };
+
+  const measure = () => {
+    viewRef.current?.measureInWindow((x, _y, w) => {
+      trackLeft.current = x;
+      if (w) trackWidth.current = w;
+    });
   };
 
   const pan = useRef(
@@ -46,10 +55,9 @@ export function Slider({ label, value, min, max, step, onChange, onComplete, for
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
-      // Don't let the parent ScrollView reclaim the gesture mid-drag.
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: e => setFromX.current(e.nativeEvent.locationX),
-      onPanResponderMove: e => setFromX.current(e.nativeEvent.locationX),
+      onPanResponderGrant: (_e, g) => { measure(); setFromAbsX.current(g.x0); },
+      onPanResponderMove: (_e, g) => setFromAbsX.current(g.moveX),
       onPanResponderRelease: () => onCompleteRef.current?.(valueRef.current),
     }),
   ).current;
@@ -63,8 +71,9 @@ export function Slider({ label, value, min, max, step, onChange, onComplete, for
         <Text style={styles.value}>{format ? format(value) : value.toFixed(2)}</Text>
       </View>
       <View
+        ref={viewRef}
         style={styles.hit}
-        onLayout={e => setWidth(e.nativeEvent.layout.width)}
+        onLayout={() => { measure(); force(n => n + 1); }}
         {...pan.panHandlers}
       >
         <View style={styles.track}>

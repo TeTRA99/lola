@@ -85,7 +85,7 @@ export function HomeScreen({ onDevSetup }: { onDevSetup?: () => void }) {
   // moment Lola is doing anything; resumes when idle again.
   const [heartbeatOn, setHeartbeatOn] = useState(false);
   useEffect(() => {
-    void Settings.getBool(Settings.KEYS.idleHeartbeat, false).then(setHeartbeatOn);
+    void Settings.getBool(Settings.KEYS.idleHeartbeat, true).then(setHeartbeatOn);
   }, []);
   useEffect(() => {
     if (!heartbeatOn || state !== 'idle') return;
