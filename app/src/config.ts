@@ -45,6 +45,8 @@ export const CONFIG = {
   GUIDE_FOUND_PROXIMITY: 0.7,  // ≥ this → say "¡ahí está!" once (reachable; centering to 100% is unreliable)
   GUIDE_REARM_PROXIMITY: 0.4,  // proximity must drop below this before "found" can fire again
   GUIDE_NOT_FOUND_MS: 12000,   // if the target is never seen within this, say "no la encuentro"
+  GUIDE_SMOOTH_ALPHA: 0.35,    // EMA on the felt proximity (lower = smoother/laggier ramp)
+  GUIDE_LOST_GRACE_MS: 500,    // keep homing this long after a dropped frame before "searching"
 };
 
 export type Config = typeof CONFIG;

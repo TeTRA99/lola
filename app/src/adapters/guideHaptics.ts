@@ -2,84 +2,89 @@
 //
 // A single phone motor can't render a *felt* direction (see
 // docs/design/directional-haptics-notes.md), but it renders a 1-D proximity
-// signal well: the user pans the phone and the pulse RATE rises as the target
-// nears frame-center, becoming a near-continuous buzz on lock. Rate — not
-// amplitude — is the lever, because Android amplitude control is weak and
-// Light impacts are imperceptible on Charly's Galaxy.
+// signal well: the pulse RATE rises as the target nears frame-center. Rate —
+// not amplitude — is the lever (Android amplitude control is weak; Light is
+// imperceptible on Charly's Galaxy, so we use Medium).
 //
-// Built on expo-haptics (already bundled) — NOT Pulsar — so it runs in the
-// current dev client with no extra native dependency. Pulsar's
-// useRealtimeComposer (smooth amplitude/frequency) is a later upgrade that
-// would need a native rebuild.
+// Built on expo-haptics (no extra native dep). Two feel-smoothers, because raw
+// per-frame proximity is noisy and low-fps:
+//   • EMA easing → the rate ramps smoothly instead of jumping each detection.
+//   • lost-grace → a dropped detection frame keeps homing briefly instead of
+//     snapping to the slow "searching" tick (kills stutter).
 
 import * as Haptics from 'expo-haptics';
 import { CONFIG } from '@/config';
+import { now } from '@/utils/time';
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
-// null = searching (no target in frame); 0..1 = how centered the target is.
-let proximity: number | null = null;
+let target = 0;       // last detected proximity, 0..1
+let lastSeenAt = 0;   // ms timestamp of last detection (0 = never seen)
+let smoothed = 0;     // eased proximity the buzz rate actually follows
 
 function clamp01(n: number): number {
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
-/** Tick interval for the current proximity. Closer → faster ticks. */
-function intervalMs(p: number | null): number {
-  if (p === null) return CONFIG.GUIDE_SEARCH_TICK_MS;
+/** Tick interval for a proximity. Closer → faster. */
+function intervalMs(p: number): number {
   const t = clamp01(p);
   return Math.round(
     CONFIG.GUIDE_PULSE_MAX_MS + (CONFIG.GUIDE_PULSE_MIN_MS - CONFIG.GUIDE_PULSE_MAX_MS) * t,
   );
 }
 
-function fireTick(p: number | null): void {
+function tick(): void {
+  if (!running) return;
+  const seen = lastSeenAt > 0 && now() - lastSeenAt < CONFIG.GUIDE_LOST_GRACE_MS;
+  let interval: number;
   try {
-    if (p === null) {
-      // Searching — soft + sparse so silence doesn't read as "app died".
+    if (!seen) {
+      // Searching — soft, sparse tick so silence doesn't read as "app died".
+      smoothed = 0;
       void Haptics.selectionAsync();
-    } else if (p >= CONFIG.GUIDE_LOCK_PROXIMITY) {
-      // Locked on — same Medium tap as homing, but the fast rate signals "here".
-      // (Heavy here felt too intense on the Galaxy; speed carries the lock.)
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      interval = CONFIG.GUIDE_SEARCH_TICK_MS;
     } else {
-      // Homing — Medium is the floor reliably felt on the Galaxy.
+      // Homing — ease toward the target so the felt rate ramps smoothly.
+      smoothed += (target - smoothed) * CONFIG.GUIDE_SMOOTH_ALPHA;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      interval = intervalMs(smoothed);
     }
   } catch {
-    /* haptics must never throw into the loop */
+    interval = CONFIG.GUIDE_SEARCH_TICK_MS; // haptics must never throw into the loop
   }
+  timer = setTimeout(tick, interval);
 }
 
-function schedule(): void {
-  if (!running) return;
-  timer = setTimeout(() => {
-    fireTick(proximity);
-    schedule();
-  }, intervalMs(proximity));
-}
-
-/** Begin the loop. Starts in "searching" until updateGuide() is called. */
+/** Begin the loop. Starts in "searching" until updateGuide() reports a detection. */
 export function startGuide(): void {
   if (running) return;
   running = true;
-  proximity = null;
-  schedule();
+  target = 0;
+  lastSeenAt = 0;
+  smoothed = 0;
+  tick();
 }
 
 /**
- * Update how centered the target is.
- * @param p 0..1 (1 = dead-center / locked) or null when no target is detected.
+ * Report how centered the target is.
+ * @param p 0..1 (1 = centered) or null when the target isn't detected this frame.
+ *   A null is treated as a dropped frame: we keep the last target for the grace
+ *   window before falling back to "searching".
  */
 export function updateGuide(p: number | null): void {
-  proximity = p === null ? null : clamp01(p);
+  if (p === null) return;
+  target = clamp01(p);
+  lastSeenAt = now();
 }
 
-/** Stop the loop and clear any pending tick. */
+/** Stop the loop and clear state. */
 export function stopGuide(): void {
   running = false;
   if (timer) { clearTimeout(timer); timer = null; }
-  proximity = null;
+  target = 0;
+  lastSeenAt = 0;
+  smoothed = 0;
 }
 
 /** Test seam — leave the module clean between tests. */
