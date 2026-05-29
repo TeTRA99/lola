@@ -126,7 +126,6 @@ function MockLayer({
   // Initial reading, once. Empty deps → cannot loop.
   useEffect(() => {
     report(dot.x, dot.y);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pan = useRef(
