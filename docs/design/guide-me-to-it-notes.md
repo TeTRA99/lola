@@ -120,6 +120,30 @@ README minimums); use **Python 3.12, not 3.13** (torch 3.13 parse bugs).
 3. **Then decide scope** (common-objects v1 vs open-vocab track) and **camera path**
    (VisionCamera v5 vs expo-camera polling).
 
+## Scaffold status (built 2026-05-29)
+Committed on this branch; `tsc` + 192 tests + lint all clean. Validates the two
+spikes independently, before the YOLO model exists:
+- `src/adapters/guideHaptics.ts` — proximity "Geiger" loop on **expo-haptics**
+  (pulse-rate ramp; Medium/Heavy for Galaxy perceptibility; searching tick when no
+  target). Deliberately NOT Pulsar, so it runs in the current dev client with no
+  extra native dep. Pulsar `useRealtimeComposer` is a later upgrade (needs rebuild).
+- `src/adapters/objectDetection.ts` — `Detection`/`NormBox` types,
+  `proximityFromBox()` geometry, `GUIDABLE_COCO_LABELS`. The live detector
+  (VisionCamera runOnFrame → executorch YOLO26n) is the open spike — stubbed.
+- `src/screens/GuideScreen.tsx` — full-screen VisionCamera preview + a **draggable
+  MOCK target** driving the haptic loop (drag the dot to center to feel it).
+  Lazy-loaded in app.tsx so an older dev client doesn't crash on the native import.
+  English HUD (dev screen, like DebugScreen).
+
+**How to launch (dev):** open the app → from LaunchSplash do the 10-second hold to
+reach **DebugScreen** → tap **"🎯 Open 'Guide me to it' spike"**. Requires the EAS
+dev client that includes VisionCamera (build 1016aec5 / versionCode 7+).
+
+**Next steps:** (1) feel-test the haptic ramp on the Galaxy, tune
+`GUIDE_PULSE_MIN/MAX_MS` + `GUIDE_LOCK_PROXIMITY` in config.ts; (2) the detector
+spike — wire `useFrameProcessor` (runOnFrame) → executorch YOLO26n, replace the
+mock with `proximityFromBox(detection.box)`; resolve YOLO26n `.pte` export.
+
 ## Sources
 - [ExecuTorch releases](https://github.com/software-mansion/react-native-executorch/releases)
 - [Pulsar RN docs](https://docs.swmansion.com/pulsar/sdk/react-native/)
