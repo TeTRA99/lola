@@ -33,7 +33,7 @@ export function useGuideDetection(
           if (runOnFrame) {
             const dets = runOnFrame(frame, false, {
               detectionThreshold: 0.3, // permissive while debugging
-              inputSize: 640,          // YOLO: better accuracy than the 384 default
+              inputSize: 384,          // YOLO default — faster loop (the user never sees the preview)
             }) as RawDetection[] | undefined;
             scheduleOnRN(handle, dets ?? [], frame.width, frame.height);
           }
