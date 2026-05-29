@@ -128,6 +128,35 @@ export async function resolveObjectFromUtterance(noun: string): Promise<number |
 }
 
 /**
+ * Derived "last seen in {room}" hint for the Setup objects list. Returns the
+ * most-recent sighting room per object (only objects that have a room_hint).
+ * Read-only — there is no stored object↔room relationship (handoff §6).
+ */
+export async function lastSeenRooms(objectIds: number[]): Promise<Record<number, string>> {
+  if (objectIds.length === 0) return {};
+  try {
+    const db = await getDb();
+    const placeholders = objectIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<{ object_id: number; room_hint: string }>(
+      `SELECT s.object_id AS object_id, s.room_hint AS room_hint
+         FROM sightings s
+         JOIN (
+           SELECT object_id, MAX(observed_at) AS mo
+             FROM sightings
+            WHERE room_hint IS NOT NULL AND object_id IN (${placeholders})
+            GROUP BY object_id
+         ) m ON s.object_id = m.object_id AND s.observed_at = m.mo`,
+      objectIds,
+    );
+    const out: Record<number, string> = {};
+    for (const r of rows) if (r.room_hint) out[r.object_id] = r.room_hint;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * E5.2 + E5.3 — resolve the noun to an object_id (E5.4), look up the
  * most-recent sighting, and classify by NFR-8's freshness window:
  *   <= MEMORY_FRESH_HOURS  → 'fresh'

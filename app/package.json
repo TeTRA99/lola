@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~56.0.5",
     "expo-camera": "~56.0.7",
     "expo-clipboard": "~56.0.3",
@@ -10,6 +12,8 @@
     "expo-file-system": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-image-manipulator": "~56.0.15",
+    "expo-navigation-bar": "~56.0.3",
+    "expo-quick-actions": "^6.0.2",
     "expo-speech": "~56.0.3",
     "expo-speech-recognition": "^56.0.0",
     "expo-sqlite": "~56.0.4",
@@ -18,7 +22,8 @@
     "react-native": "0.85.3",
     "react-native-executorch": "^0.9.0",
     "react-native-executorch-expo-resource-fetcher": "^0.9.0",
-    "react-native-haptic-feedback": "^3.0.0"
+    "react-native-haptic-feedback": "^3.0.0",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

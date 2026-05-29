@@ -1,16 +1,24 @@
-// FR-6.2 launch greeting + hidden gestures for SetupScreen (5s hold) and
-// DebugScreen (10s hold). AC4.1.1–4.1.6.
+// FR-6.2 launch greeting. Brand moment on the ink surface: floating lens mark,
+// "Lola" wordmark, greeting, and a caregiver legend pointing to the OS app-icon
+// Setup shortcut (handoff §1).
 //
-// Auto-dismiss after 800ms unless the user is holding — held presses keep
-// the splash visible past the auto-dismiss window. Release-triggered: the
-// highest threshold crossed decides which screen to open.
+// The visible UI carries NO settings affordance (locked decision #3). Setup is
+// reached only through the OS app-icon "Configuración" shortcut. The splash
+// keeps a single invisible escape hatch for the developer: a 10-second hold
+// opens the Debug screen (nothing on screen hints at it).
+//
+// Auto-dismiss after the splash window unless the user is holding; a held press
+// past the debug threshold opens Debug on release.
 
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
+import { LolaMark } from '@/components/LolaMark';
+import { Icon } from '@/components/Icon';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
 import { CONFIG } from '@/config';
+import { color, fontFamily } from '@/theme/tokens';
 
 const SPLASH_DURATION_MS = 3000;
 // Native app version (from app.json) — only changes on a real APK rebuild.
@@ -23,72 +31,64 @@ const BUNDLE_STAMP = `${pad(BUNDLE_LOADED_AT.getHours())}:${pad(BUNDLE_LOADED_AT
 
 type Props = {
   onDone: () => void;
-  onSetup?: () => void;
   onDebug?: () => void;
 };
 
-type GestureStage = 'none' | 'setup' | 'debug';
-
-export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
+export function LaunchSplash({ onDone, onDebug }: Props) {
   const [pressed, setPressed] = useState(false);
+  const float = useRef(new Animated.Value(0)).current;
 
   const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const setupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stage = useRef<GestureStage>('none');
+  const reachedDebug = useRef(false);
   const greeted = useRef(false);
 
-  // Greet + arm initial auto-dismiss once on mount. Refs to the callbacks let
-  // the timer fire the latest closure without re-running this effect.
+  // Refs to the callbacks let the timer fire the latest closure without
+  // re-running the mount effect.
   const onDoneRef = useRef(onDone);
-  const onSetupRef = useRef(onSetup);
   const onDebugRef = useRef(onDebug);
   onDoneRef.current = onDone;
-  onSetupRef.current = onSetup;
   onDebugRef.current = onDebug;
 
   useEffect(() => {
-    console.log('[splash] mount effect ran');
     if (!greeted.current) {
       greeted.current = true;
       void speak(COPY.greeting);
     }
+    // Gentle float loop on the mark (translateY 0 → -7 → 0, 3600ms).
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: -7, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
     // Arm the initial auto-dismiss right at mount — no input needed.
-    autoDismiss.current = setTimeout(() => {
-      console.log('[splash] auto-dismiss timer fired, calling onDone');
-      onDoneRef.current();
-    }, SPLASH_DURATION_MS);
+    autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
     return () => {
-      console.log('[splash] mount effect CLEANUP running — unmounting');
-      [autoDismiss, setupTimer, debugTimer].forEach(t => {
+      loop.stop();
+      [autoDismiss, debugTimer].forEach(t => {
         if (t.current) clearTimeout(t.current);
         t.current = null;
       });
     };
-  }, []);
+  }, [float]);
 
   useEffect(() => {
     if (pressed) {
-      // Hold detected — cancel any pending auto-dismiss so the splash stays.
+      // Hold cancels auto-dismiss; crossing the debug threshold arms Debug.
       if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
-      stage.current = 'none';
-      setupTimer.current = setTimeout(() => {
-        if (stage.current === 'none') stage.current = 'setup';
-      }, CONFIG.SETUP_GESTURE_HOLD_MS);
+      reachedDebug.current = false;
       debugTimer.current = setTimeout(() => {
-        stage.current = 'debug';
+        reachedDebug.current = true;
       }, CONFIG.DEBUG_GESTURE_HOLD_MS);
     } else {
-      // Released — clean up timers and fire the appropriate callback.
-      if (setupTimer.current) { clearTimeout(setupTimer.current); setupTimer.current = null; }
       if (debugTimer.current) { clearTimeout(debugTimer.current); debugTimer.current = null; }
-      const reached = stage.current;
-      stage.current = 'none';
+      const wasDebug = reachedDebug.current;
+      reachedDebug.current = false;
 
-      if (reached === 'debug') {
+      if (wasDebug) {
         onDebugRef.current?.();
-      } else if (reached === 'setup') {
-        onSetupRef.current?.();
       } else if (!autoDismiss.current) {
         autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
       }
@@ -101,19 +101,23 @@ export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
     >
-      <Text style={styles.brand}>Lola</Text>
       <Text style={styles.build}>v{APP_VERSION} · bundle {BUNDLE_STAMP}</Text>
-      <Pressable
-        style={styles.gearBtn}
-        onPress={() => {
-          // Cancel the auto-dismiss before navigating away.
-          if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
-          onSetupRef.current?.();
-        }}
-        accessibilityLabel="Configuración"
-      >
-        <Text style={styles.gearIcon}>⚙</Text>
-      </Pressable>
+
+      <View style={styles.center}>
+        <Animated.View style={{ transform: [{ translateY: float }] }}>
+          <LolaMark size={92} />
+        </Animated.View>
+        <Text style={styles.wordmark}>Lola</Text>
+        <Text style={styles.greeting}>{COPY.splash.hello}</Text>
+      </View>
+
+      <View style={styles.legend}>
+        <View style={styles.legendRow}>
+          <Icon name="settings" size={15} color="rgba(255,255,255,0.62)" />
+          <Text style={styles.legendTitle}>{COPY.splash.settings}</Text>
+        </View>
+        <Text style={styles.legendHint}>{COPY.splash.settingsHint}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -121,31 +125,53 @@ export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: color.neutral.ink,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  brand: {
-    color: '#fff',
-    fontSize: 80,
-    fontWeight: '700',
-    letterSpacing: 2,
   },
   build: {
-    color: '#888',
-    fontSize: 14,
-    marginTop: 12,
+    position: 'absolute',
+    top: 52,
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 11,
+    fontFamily: fontFamily.regular,
     fontVariant: ['tabular-nums'],
   },
-  gearBtn: {
-    position: 'absolute',
-    bottom: 32,
-    right: 24,
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 28,
+  center: { alignItems: 'center' },
+  wordmark: {
+    color: '#fff',
+    fontSize: 46,
+    fontFamily: fontFamily.extrabold,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginTop: 30,
   },
-  gearIcon: { color: '#888', fontSize: 32 },
+  greeting: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 19,
+    fontFamily: fontFamily.regular,
+    marginTop: 12,
+  },
+  legend: {
+    position: 'absolute',
+    bottom: 28,
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+    gap: 3,
+  },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  legendTitle: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 13.5,
+    fontFamily: fontFamily.bold,
+    fontWeight: '700',
+  },
+  legendHint: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12.5,
+    fontFamily: fontFamily.medium,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
 });

@@ -22,6 +22,16 @@ export type HapticPattern =
 let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 let answerReadyTimer: ReturnType<typeof setTimeout> | null = null;
 
+// UI observers — the Home screen drives its in-panel state machine off the
+// same lifecycle the haptics fire on, so the visible state and the felt pulse
+// stay in lockstep without the services needing to know about the UI.
+const listeners = new Set<(pattern: HapticPattern) => void>();
+
+export function subscribeHaptics(fn: (pattern: HapticPattern) => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 function clearThinking(): void {
   if (thinkingTimer) {
     clearInterval(thinkingTimer);
@@ -43,6 +53,10 @@ export function _resetForTests(): void {
 }
 
 export function fire(pattern: HapticPattern): void {
+  // Notify UI observers first so the visible transition isn't gated behind the
+  // (async) native haptic call.
+  listeners.forEach(fn => { try { fn(pattern); } catch { /* observer errors never break haptics */ } });
+
   // Any non-thinking_start pattern cancels the rhythmic pulse.
   if (pattern !== 'thinking_start') clearThinking();
 

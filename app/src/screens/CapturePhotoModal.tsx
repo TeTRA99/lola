@@ -1,24 +1,35 @@
-// Full-screen camera preview used by SetupScreen for catalog photo capture.
-// Separate from the hidden CameraHost so Describe/Ask still get the silent
-// 1x1 capture path; Setup gets a real "frame it before you shoot" preview.
+// Full-screen camera capture used by Setup (handoff §7). Live phase shows the
+// viewfinder with a framing guide + top hint and a centered shutter; after a
+// shot we freeze into a review phase ("Retake" / "Use photo") so the caregiver
+// confirms before the embedding pipeline runs. Only "Use photo" calls
+// onCapture. Separate from the hidden CameraHost so Describe/Ask keep the
+// silent 1×1 capture path.
 
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { CameraView, Camera as CameraModule } from 'expo-camera';
 import * as Settings from '@/services/Settings';
+import { Icon } from '@/components/Icon';
+import { useSetupStrings } from '@/i18n';
+import { color, radius, fontFamily } from '@/theme/tokens';
+import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
+
+type Shot = { uri: string; base64: string; width: number; height: number };
 
 type Props = {
-  onCapture: (result: { uri: string; base64: string; width: number; height: number }) => void;
+  hint: string;
+  onCapture: (result: Shot) => void;
   onCancel: () => void;
 };
 
-export function CapturePhotoModal({ onCapture, onCancel }: Props) {
+export function CapturePhotoModal({ hint, onCapture, onCancel }: Props) {
+  const t = useSetupStrings();
   const ref = useRef<CameraView>(null);
   const [capturing, setCapturing] = useState(false);
   const [permState, setPermState] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [review, setReview] = useState<Shot | null>(null);
 
-  // Ask for camera permission on mount — needed when the user comes here for
-  // the first time after install (or after a fresh reinstall that reset perms).
   useEffect(() => {
     void (async () => {
       const p = await CameraModule.requestCameraPermissionsAsync();
@@ -41,7 +52,7 @@ export function CapturePhotoModal({ onCapture, onCancel }: Props) {
         shutterSound: !Settings.getBoolSync(Settings.KEYS.quietCapture, false),
       });
       if (photo && photo.base64) {
-        onCapture({ uri: photo.uri, base64: photo.base64, width: photo.width, height: photo.height });
+        setReview({ uri: photo.uri, base64: photo.base64, width: photo.width, height: photo.height });
       }
     } finally {
       setCapturing(false);
@@ -51,13 +62,12 @@ export function CapturePhotoModal({ onCapture, onCancel }: Props) {
   if (permState === 'denied') {
     return (
       <View style={styles.root}>
+        <StatusBar style="light" />
         <View style={styles.permBox}>
-          <Text style={styles.permTitle}>Camera permission needed</Text>
-          <Text style={styles.permBody}>
-            Enable camera access in Settings → Apps → Lola → Permissions, then come back.
-          </Text>
-          <Pressable style={styles.cancelBtn} onPress={onCancel}>
-            <Text style={styles.cancelBtnText}>Close</Text>
+          <Text style={styles.permTitle}>{t.capPermTitle}</Text>
+          <Text style={styles.permBody}>{t.capPermBody}</Text>
+          <Pressable style={styles.linkBtn} onPress={onCancel}>
+            <Text style={styles.linkText}>{t.capClose}</Text>
           </Pressable>
         </View>
       </View>
@@ -66,23 +76,47 @@ export function CapturePhotoModal({ onCapture, onCancel }: Props) {
 
   return (
     <View style={styles.root}>
-      {permState === 'granted' ? (
-        <CameraView ref={ref} style={styles.preview} facing="back" />
-      ) : (
-        <View style={styles.preview} />
-      )}
+      <StatusBar style="light" />
+      <View style={styles.viewfinder}>
+        {review ? (
+          <Image source={{ uri: review.uri }} style={StyleSheet.absoluteFill} />
+        ) : permState === 'granted' ? (
+          <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" />
+        ) : (
+          <View style={StyleSheet.absoluteFill} />
+        )}
+
+        {!review && <View style={styles.guide} pointerEvents="none" />}
+        <Text style={[styles.hint, { top: TOP_INSET + 6 }]}>{review ? t.capLooksGood : hint}</Text>
+      </View>
+
       <View style={styles.controls}>
-        <Pressable style={styles.cancelBtn} onPress={onCancel} disabled={capturing}>
-          <Text style={styles.cancelBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.shutter, (capturing || permState !== 'granted') && styles.shutterDim]}
-          onPress={handleShutter}
-          disabled={capturing || permState !== 'granted'}
-        >
-          <View style={styles.shutterInner} />
-        </Pressable>
-        <View style={styles.cancelBtn} />
+        {review ? (
+          <View style={styles.reviewRow}>
+            <Pressable style={styles.retakeBtn} onPress={() => setReview(null)}>
+              <Icon name="retake" size={18} color="#fff" />
+              <Text style={styles.retakeText}>{t.capRetake}</Text>
+            </Pressable>
+            <Pressable style={styles.useBtn} onPress={() => onCapture(review)}>
+              <Icon name="check" size={20} color="#fff" />
+              <Text style={styles.useText}>{t.capUse}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.liveRow}>
+            <Pressable style={styles.cancelBtn} onPress={onCancel} disabled={capturing}>
+              <Text style={styles.linkText}>{t.capCancel}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.shutter, (capturing || permState !== 'granted') && styles.shutterDim]}
+              onPress={handleShutter}
+              disabled={capturing || permState !== 'granted'}
+              accessibilityRole="button"
+              accessibilityLabel="Take photo"
+            />
+            <View style={styles.cancelBtn} />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -90,25 +124,41 @@ export function CapturePhotoModal({ onCapture, onCancel }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  preview: { flex: 1 },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    backgroundColor: '#000',
+  viewfinder: { flex: 1, position: 'relative', overflow: 'hidden' },
+  guide: {
+    position: 'absolute', top: 28, left: 28, right: 28, bottom: 28,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)', borderRadius: 18,
   },
+  hint: {
+    position: 'absolute', left: 0, right: 0, textAlign: 'center',
+    color: '#fff', fontSize: 17, fontFamily: fontFamily.semibold, fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6,
+  },
+
+  controls: { backgroundColor: '#000', paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 + BOTTOM_INSET },
+  liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cancelBtn: { width: 80, paddingVertical: 12 },
-  cancelBtnText: { color: '#4af', fontSize: 16, textAlign: 'center' },
+  linkBtn: { paddingVertical: 12 },
+  linkText: { color: color.dad.askAccent, fontSize: 17, fontFamily: fontFamily.semibold, fontWeight: '600' },
   shutter: {
-    width: 80, height: 80, borderRadius: 40,
-    borderWidth: 5, borderColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
+    width: 78, height: 78, borderRadius: 39,
+    backgroundColor: '#fff', borderWidth: 5, borderColor: 'rgba(255,255,255,0.35)',
   },
-  shutterInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff' },
   shutterDim: { opacity: 0.5 },
+
+  reviewRow: { flexDirection: 'row', gap: 12 },
+  retakeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)',
+  },
+  retakeText: { color: '#fff', fontSize: 16, fontFamily: fontFamily.bold, fontWeight: '700' },
+  useBtn: {
+    flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 16, borderRadius: radius.md, backgroundColor: color.primary[500],
+  },
+  useText: { color: '#fff', fontSize: 18, fontFamily: fontFamily.bold, fontWeight: '700' },
+
   permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  permTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 12 },
-  permBody: { color: '#aaa', fontSize: 14, textAlign: 'center', marginBottom: 24 },
+  permTitle: { color: '#fff', fontSize: 18, fontFamily: fontFamily.bold, fontWeight: '700', marginBottom: 12 },
+  permBody: { color: '#aaa', fontSize: 14, fontFamily: fontFamily.regular, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
 });

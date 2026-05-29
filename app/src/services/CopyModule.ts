@@ -3,7 +3,8 @@
 // NO Spanish string literal lives outside this file — enforced by lint (E1.2).
 
 export const COPY = {
-  greeting: 'Hola, listo cuando quieras.',
+  // Spoken on launch (TTS). The on-screen wordmark greeting is `splash.hello`.
+  greeting: 'Hola, ¿en qué puedo ayudarte?',
   repeatTrigger: 'Lola, ¿otra vez?',
   extendTrigger: 'Lola, contame más',
   errors: {
@@ -16,6 +17,28 @@ export const COPY = {
   buttons: {
     describeLabel: 'Describir',
     askLabel: 'Preguntar',
+  },
+  // Dad-facing Home surface (handoff data.jsx → COPY.es). These are the on-
+  // screen labels for each in-panel state and the calm error headings; the
+  // spoken lines are produced separately by errorCopy / the services.
+  home: {
+    listening: 'Te escucho…',
+    thinking: 'Un momento…',
+    errCamera: 'No veo nada',
+    errCameraSub: 'Probá de nuevo desde el menú.',
+    errPerm: 'Necesito la cámara',
+    errPermSub: 'Tocá para darme permiso.',
+    errPermBtn: 'Abrir ajustes',
+  },
+  // Splash caregiver legend pointing to the OS app-icon setup shortcut.
+  splash: {
+    // On-screen greeting under the wordmark (distinct from the spoken `greeting`).
+    hello: 'Hola, soy Lola',
+    settings: 'Configuración',
+    settingsHint: 'Accedé manteniendo presionado el ícono de la app en tu teléfono',
+    // Subtitle shown on the OS app-icon shortcut row (Android dynamic action;
+    // the iOS static action mirrors this in app.json).
+    shortcutSub: 'Para el cuidador',
   },
 } as const;
 

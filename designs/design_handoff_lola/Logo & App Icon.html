@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lola — Logo & App Icon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --primary:#1A73E8;--primary700:#1557B0;--primary50:#EAF2FE;--canvas:#F6F7F9;--white:#fff;--border:#E0E4EA;--ink:#0C0D0F;
+    --high:#1B1E24;--medium:#5C6470;--low:#8A929E;--success:#1E9E5A;
+    --brand:"Plus Jakarta Sans",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+    --sh-md:0 4px 14px rgba(12,13,15,.09);--sh-lg:0 12px 34px rgba(12,13,15,.13);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--brand);background:var(--canvas);color:var(--high);-webkit-font-smoothing:antialiased;}
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,247,249,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);}
+  .topbar-inner{max-width:1160px;margin:0 auto;padding:18px 40px;display:flex;align-items:center;gap:14px;}
+  .topbar h1{font-size:18px;font-weight:800;}.crumb{font-size:14px;color:var(--medium);font-weight:500;}
+  .topbar nav{margin-left:auto;display:flex;gap:6px;}
+  .topbar nav a{font-size:13px;font-weight:600;color:var(--medium);text-decoration:none;padding:8px 12px;border-radius:8px;}
+  .topbar nav a:hover{background:#fff;color:var(--high);}
+  .wrap{max-width:1160px;margin:0 auto;padding:56px 40px 120px;}
+  .eyebrow{font-size:13px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--primary);margin-bottom:16px;}
+  h2.big{font-size:46px;line-height:1.04;letter-spacing:-1.2px;font-weight:300;max-width:20ch;}
+  h2.big b{font-weight:800;}
+  .lead{margin-top:20px;font-size:17px;color:var(--medium);max-width:60ch;line-height:1.6;}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin:64px 0 26px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+  .sec-head .num{font-family:var(--mono);font-size:13px;color:var(--low);}
+  .sec-head h3{font-size:13px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;}
+  .sec-head .desc{margin-left:auto;font-size:14px;color:var(--medium);max-width:46ch;text-align:right;}
+  .concepts{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .concept{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--sh-md);}
+  .concept .stage{height:200px;display:flex;align-items:center;justify-content:center;background:var(--canvas);position:relative;}
+  .concept.rec{outline:2px solid var(--primary);outline-offset:-2px;}
+  .badge{position:absolute;top:14px;left:14px;background:var(--primary);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;padding:5px 10px;border-radius:7px;}
+  .concept .meta{padding:20px 22px 24px;}
+  .concept .cname{font-size:18px;font-weight:800;}
+  .concept .crat{font-size:13.5px;color:var(--medium);line-height:1.5;margin-top:8px;}
+  .duo{display:flex;gap:1px;margin-top:18px;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+  .duo>div{flex:1;height:74px;display:flex;align-items:center;justify-content:center;}
+  .row{display:flex;gap:24px;flex-wrap:wrap;align-items:center;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--sh-md);}
+  .lockup{display:flex;align-items:center;gap:14px;}
+  .word{font-size:38px;font-weight:800;letter-spacing:-1px;}
+  .sizes{display:flex;align-items:flex-end;gap:26px;}
+  .sizes .item{text-align:center;}
+  .sizes .n{font-family:var(--mono);font-size:12px;color:var(--medium);margin-top:8px;}
+  .icons{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .iconcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:26px;box-shadow:var(--sh-md);}
+  .iconcard h4{font-size:15px;font-weight:700;margin-bottom:4px;}
+  .iconcard .sub{font-size:13px;color:var(--medium);margin-bottom:22px;}
+  .iconrow{display:flex;align-items:center;gap:24px;flex-wrap:wrap;}
+  .layerlabel{font-family:var(--mono);font-size:11px;color:var(--low);text-align:center;margin-top:8px;}
+  .homescreen{width:188px;height:300px;border-radius:26px;background:linear-gradient(160deg,#3a4a63,#222b3a);padding:20px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px 12px;align-content:start;box-shadow:var(--sh-lg);position:relative;}
+  .appdot{aspect-ratio:1;border-radius:11px;background:rgba(255,255,255,.18);}
+  .checklist{background:#fff;border:1px solid var(--border);border-radius:16px;padding:8px 0;box-shadow:var(--sh-md);}
+  .ck{display:flex;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border);align-items:flex-start;}
+  .ck:last-child{border-bottom:none;}
+  .ck .file{font-family:var(--mono);font-size:13px;color:var(--high);font-weight:500;flex:none;width:240px;}
+  .ck .spec{font-size:13.5px;color:var(--medium);}
+  .pill{display:inline-block;font-family:var(--mono);font-size:12px;background:var(--primary50);color:var(--primary700);padding:3px 9px;border-radius:6px;}
+  @media(max-width:880px){.concepts,.icons{grid-template-columns:1fr;}.wrap{padding:40px 22px 90px;}h2.big{font-size:34px;}.ck .file{width:auto;}}
+</style>
+</head>
+<body>
+  <div class="topbar"><div class="topbar-inner">
+    <svg width="34" height="34" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg>
+    <h1>Lola</h1><span class="crumb">/ Logo &amp; App Icon</span>
+    <nav><a href="Lola Design.html">Hub</a><a href="Design System.html">System</a><a href="prototype/Prototype.html">Prototype</a></nav>
+  </div></div>
+
+  <div class="wrap">
+    <div class="eyebrow">Brand · Logo exploration</div>
+    <h2 class="big">A friendly eye that <b>looks with you</b>, not at you.</h2>
+    <p class="lead">Lola sees the world for Dad, so the mark is a lens — but a soft, rounded, approachable one, never a clinical eyeball. Three directions below; all read at 48&nbsp;px on a busy home screen and double as the splash long-press target.</p>
+
+    <!-- CONCEPTS -->
+    <div class="sec-head"><span class="num">01</span><h3>Three directions</h3><span class="desc">Same rounded-square container, same blue. The difference is what lives inside the lens.</span></div>
+    <div class="concepts">
+      <div class="concept rec">
+        <div class="stage"><span class="badge">RECOMMENDED</span>
+          <svg width="120" height="120" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg>
+        </div>
+        <div class="meta"><div class="cname">Geometric lens</div><div class="crat">A clean iris with an off-centre catchlight — warm, alive, unmistakable as a tiny glyph. Simplest to render across every density.</div>
+          <div class="duo"><div style="background:#fff"><svg width="44" height="44" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg></div><div style="background:#0C0D0F"><svg width="44" height="44" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg></div></div>
+        </div>
+      </div>
+      <div class="concept">
+        <div class="stage" id="apStage"></div>
+        <div class="meta"><div class="cname">Aperture</div><div class="crat">Six soft blades fan around the centre — a camera nod that says “I’m looking.” A touch more mechanical; great for motion (blades bloom open on launch).</div>
+          <div class="duo"><div style="background:#fff" id="apLight"></div><div style="background:#0C0D0F" id="apDark"></div></div>
+        </div>
+      </div>
+      <div class="concept">
+        <div class="stage" id="blStage"></div>
+        <div class="meta"><div class="cname">Bloom</div><div class="crat">Concentric rings of light radiating from a core — the warmest, most “assistant” feel. Echoes the listening/speaking pulse in the app. Slightly softer at 24&nbsp;px.</div>
+          <div class="duo"><div style="background:#fff" id="blLight"></div><div style="background:#0C0D0F" id="blDark"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WORDMARK -->
+    <div class="sec-head"><span class="num">02</span><h3>Wordmark lockup</h3><span class="desc">Plus Jakarta ExtraBold, −1 tracking. Mark sits at cap-height; the “o” rhymes with the lens.</span></div>
+    <div class="row">
+      <div class="card" style="padding:30px 36px;flex:1;min-width:300px;"><div class="lockup"><svg width="48" height="48" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><span class="word" style="color:var(--ink)">Lola</span></div></div>
+      <div class="card" style="padding:30px 36px;flex:1;min-width:300px;background:var(--ink)"><div class="lockup"><svg width="48" height="48" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><span class="word" style="color:#fff">Lola</span></div></div>
+    </div>
+
+    <!-- SMALL SIZES -->
+    <div class="sec-head"><span class="num">03</span><h3>Small-size legibility</h3><span class="desc">The catchlight survives down to 24&nbsp;px — the test every launcher icon must pass.</span></div>
+    <div class="card" style="padding:34px 40px;"><div class="sizes">
+      <div class="item"><svg width="96" height="96" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><div class="n">96 px</div></div>
+      <div class="item"><svg width="48" height="48" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><div class="n">48 px</div></div>
+      <div class="item"><svg width="32" height="32" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><div class="n">32 px</div></div>
+      <div class="item"><svg width="24" height="24" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg><div class="n">24 px</div></div>
+    </div></div>
+
+    <!-- APP ICONS -->
+    <div class="sec-head"><span class="num">04</span><h3>Launcher icons</h3><span class="desc">Mark centred in the Android safe zone; full-bleed blue for iOS. The OS supplies the corner mask.</span></div>
+    <div class="icons">
+      <div class="iconcard">
+        <h4>Android — adaptive</h4><div class="sub">Foreground + background layers. Mark stays inside the 66% safe zone so any OEM mask (circle, squircle, teardrop) is safe.</div>
+        <div class="iconrow">
+          <div><div style="width:128px;height:128px;border-radius:24px;background:#1A73E8;position:relative;overflow:hidden">
+            <svg width="128" height="128" viewBox="0 0 128 128" style="position:absolute;inset:0"><circle cx="64" cy="64" r="33" fill="#fff"/><circle cx="64" cy="64" r="16.5" fill="#1A73E8"/><circle cx="72" cy="56" r="6" fill="#fff"/></svg>
+            <svg width="128" height="128" viewBox="0 0 128 128" style="position:absolute;inset:0;opacity:.45"><circle cx="64" cy="64" r="42" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="4 4"/></svg>
+          </div><div class="layerlabel">composited · safe zone</div></div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;gap:12px;align-items:center"><div style="width:54px;height:54px;border-radius:50%;background:#1A73E8;position:relative;overflow:hidden"><svg width="54" height="54" viewBox="0 0 128 128"><circle cx="64" cy="64" r="33" fill="#fff"/><circle cx="64" cy="64" r="16.5" fill="#1A73E8"/><circle cx="72" cy="56" r="6" fill="#fff"/></svg></div><span class="layerlabel" style="margin:0">circle mask</span></div>
+            <div style="display:flex;gap:12px;align-items:center"><div style="width:54px;height:54px;border-radius:30%;background:#1A73E8;position:relative;overflow:hidden"><svg width="54" height="54" viewBox="0 0 128 128"><circle cx="64" cy="64" r="33" fill="#fff"/><circle cx="64" cy="64" r="16.5" fill="#1A73E8"/><circle cx="72" cy="56" r="6" fill="#fff"/></svg></div><span class="layerlabel" style="margin:0">squircle mask</span></div>
+          </div>
+        </div>
+        <div style="margin-top:18px;font-size:13px;color:var(--medium)">Background: <span class="pill">#1A73E8</span> &nbsp; Foreground: white lens, centred</div>
+      </div>
+      <div class="iconcard">
+        <h4>iOS — 1024 master</h4><div class="sub">Full-bleed, no transparency, square corners (the OS rounds them). Shown on a home screen.</div>
+        <div class="iconrow">
+          <div><div style="width:128px;height:128px;border-radius:28px;background:#1A73E8;position:relative;overflow:hidden;box-shadow:var(--sh-md)">
+            <svg width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="35" fill="#fff"/><circle cx="64" cy="64" r="17.8" fill="#1A73E8"/><circle cx="72" cy="56" r="6.2" fill="#fff"/></svg>
+          </div><div class="layerlabel">Icon-1024 · masked preview</div></div>
+          <div class="homescreen">
+            <div class="appdot"></div><div class="appdot"></div><div class="appdot"></div><div class="appdot"></div>
+            <div style="aspect-ratio:1;border-radius:11px;background:#1A73E8;position:relative;overflow:hidden"><svg width="100%" height="100%" viewBox="0 0 128 128"><circle cx="64" cy="64" r="35" fill="#fff"/><circle cx="64" cy="64" r="17.8" fill="#1A73E8"/><circle cx="72" cy="56" r="6.2" fill="#fff"/></svg></div>
+            <div class="appdot"></div><div class="appdot"></div><div class="appdot"></div>
+            <div class="appdot"></div><div class="appdot"></div><div class="appdot"></div><div class="appdot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPORT -->
+    <div class="sec-head"><span class="num">05</span><h3>Export checklist</h3><span class="desc">Exact assets for the Expo config. Recreate the recommended mark as vectors at these sizes.</span></div>
+    <div class="checklist">
+      <div class="ck"><span class="file">ic_launcher_foreground.png</span><span class="spec">432×432 · white lens centred in the inner 264×264 safe zone · transparent background</span></div>
+      <div class="ck"><span class="file">ic_launcher_background</span><span class="spec">Single colour — <span class="pill">#1A73E8</span> — set directly in <span class="pill">app.json</span>, no PNG needed</span></div>
+      <div class="ck"><span class="file">ic_launcher.png</span><span class="spec">Legacy mipmaps at 48 / 72 / 96 / 144 / 192 px (mdpi → xxxhdpi)</span></div>
+      <div class="ck"><span class="file">Icon-1024.png</span><span class="spec">1024×1024 · full-bleed blue · no transparency · no rounded corners</span></div>
+      <div class="ck"><span class="file">splash-logo.png</span><span class="spec">Centred lens, ~1242×2436 canvas, transparent · splash <span class="pill">backgroundColor #0C0D0F</span></span></div>
+      <div class="ck"><span class="file">app.json</span><span class="spec"><span class="pill">android.adaptiveIcon.backgroundColor: "#1A73E8"</span> · iOS uses Icon-1024 directly</span></div>
+    </div>
+  </div>
+
+  <script>
+    function svgEl(html){var d=document.createElement('div');d.innerHTML=html;return d.firstElementChild;}
+    function aperture(size){
+      var blades=[0,60,120,180,240,300].map(function(a,i){return '<path d="M0 -11 L9.5 -5.5 L0 0 Z" fill="#fff" opacity="'+(i%2?0.78:1)+'" transform="rotate('+a+')"/>';}).join('');
+      return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><g transform="translate(20 20)">'+blades+'<circle r="3.2" fill="#1A73E8"/></g></svg>';
+    }
+    function bloom(size){
+      var rings=[13.5,10,6.6].map(function(r,i){return '<circle cx="20" cy="20" r="'+r+'" fill="#fff" opacity="'+(0.18+i*0.22)+'"/>';}).join('');
+      return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/>'+rings+'<circle cx="20" cy="20" r="3.6" fill="#fff"/></svg>';
+    }
+    document.getElementById('apStage').appendChild(svgEl(aperture(120)));
+    document.getElementById('apLight').appendChild(svgEl(aperture(44)));
+    document.getElementById('apDark').appendChild(svgEl(aperture(44)));
+    document.getElementById('blStage').appendChild(svgEl(bloom(120)));
+    document.getElementById('blLight').appendChild(svgEl(bloom(44)));
+    document.getElementById('blDark').appendChild(svgEl(bloom(44)));
+  </script>
+</body>
+</html>

@@ -32,6 +32,28 @@ export function getBoolSync(key: string, fallback = false): boolean {
   return v === '1';
 }
 
+export async function getString(key: string, fallback = ''): Promise<string> {
+  await ensureLoaded();
+  return cache.get(key) ?? fallback;
+}
+
+/** Synchronous read after a load() — used by the i18n initial resolve. */
+export function getStringSync(key: string, fallback = ''): string {
+  return cache.get(key) ?? fallback;
+}
+
+export async function setString(key: string, value: string): Promise<void> {
+  await ensureLoaded();
+  cache.set(key, value);
+  try {
+    const db = await getDb();
+    await db.runAsync(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      [key, value],
+    );
+  } catch { /* swallow — cache still reflects */ }
+}
+
 export async function setBool(key: string, value: boolean): Promise<void> {
   await ensureLoaded();
   const v = value ? '1' : '0';
@@ -56,4 +78,5 @@ void ensureLoaded();
 
 export const KEYS = {
   quietCapture: 'quiet_capture',
+  language: 'language',
 } as const;

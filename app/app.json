@@ -4,8 +4,13 @@
     "slug": "lola",
     "version": "0.9.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/launcher/Icon-1024.png",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/launcher/splash-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0C0D0F"
+    },
     "extra": {
       "primaryLocale": "es-AR",
       "eas": {
@@ -14,15 +19,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.carlosbernardi.lola"
+      "bundleIdentifier": "com.carlosbernardi.lola",
+      "icon": "./assets/launcher/Icon-1024.png"
     },
     "android": {
       "package": "com.carlosbernardi.lola",
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1A73E8",
+        "foregroundImage": "./assets/launcher/ic_launcher_foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -43,6 +47,25 @@
         {
           "microphonePermission": "Lola necesita escucharte para responder.",
           "speechRecognitionPermission": "Lola usa el reconocimiento de voz para entenderte."
+        }
+      ],
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "shortcut_setup": {
+              "foregroundImage": "./assets/launcher/ic_launcher_foreground.png",
+              "backgroundColor": "#1A73E8"
+            }
+          },
+          "iosActions": [
+            {
+              "id": "setup",
+              "title": "Configuración",
+              "subtitle": "Para el cuidador",
+              "icon": "symbol:gearshape"
+            }
+          ]
         }
       ]
     ]

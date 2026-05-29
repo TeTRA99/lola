@@ -10,7 +10,9 @@ const SPANISH_CHARS = /[áéíóúñ¿¡]/;
 export default [
   {
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/services/CopyModule.ts', 'src/**/__tests__/**'],
+    // CopyModule holds the dad-facing Spanish; i18n holds the bilingual
+    // caregiver dictionary — both legitimately contain Spanish literals.
+    ignores: ['src/services/CopyModule.ts', 'src/i18n/**', 'src/**/__tests__/**'],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true } },

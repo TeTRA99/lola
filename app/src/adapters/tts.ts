@@ -12,6 +12,20 @@ export type SpeakOptions = { rate?: number };
 
 let resolvedLocale: string | null = null;
 
+// UI observers — the Home "speaking" state renders the exact line Lola is
+// voicing. We emit the text when speech starts and `null` when it ends, so the
+// panel can show the words and then return to idle in step with the audio.
+const speechListeners = new Set<(text: string | null) => void>();
+
+export function subscribeSpeech(fn: (text: string | null) => void): () => void {
+  speechListeners.add(fn);
+  return () => { speechListeners.delete(fn); };
+}
+
+function emitSpeech(text: string | null): void {
+  speechListeners.forEach(fn => { try { fn(text); } catch { /* never break TTS */ } });
+}
+
 /** Test-only seam — clears the cached locale so resolveLocale() re-probes. */
 export function _resetForTests(): void {
   resolvedLocale = null;
@@ -47,8 +61,10 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Resu
       const settle = (r: Result<void, TTSError>) => {
         if (settled) return;
         settled = true;
+        emitSpeech(null);
         resolve(r);
       };
+      emitSpeech(text);
       Speech.speak(text, {
         language,
         rate: opts.rate ?? CONFIG.TTS_RATE,
@@ -64,4 +80,5 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Resu
 
 export function stop(): void {
   Speech.stop();
+  emitSpeech(null);
 }
