@@ -18,6 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Application from 'expo-application';
 import type * as Speech from 'expo-speech';
 import { listSpanishVoices, speakPreview } from '@/adapters/tts';
+import { speakPiperTest } from '@/adapters/ttsPiper';
 import { COPY } from '@/services';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as CatalogPhotos from '@/services/CatalogPhotos';
@@ -284,6 +285,16 @@ function SettingsTab() {
             </View>
           )}
         </View>
+
+        {/* Dev-only: Piper on-device TTS feasibility test (gated by __DEV__). */}
+        {__DEV__ && (
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => { void speakPiperTest(COPY.greeting); }}
+          >
+            <Text style={styles.settingLabel}>🧪 Test Piper voice (dev)</Text>
+          </Pressable>
+        )}
 
         {/* Quiet capture */}
         <Pressable style={styles.settingRow} onPress={toggle}>
