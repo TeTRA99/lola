@@ -110,19 +110,38 @@ function MockLayer({
   const cy = height / 2;
   const [dot, setDot] = useState({ x: width * 0.8, y: height * 0.35 });
 
+  // Latest center + sink in a ref so the once-created PanResponder never goes
+  // stale, and we compute proximity in the handler — NOT in an effect (a
+  // setState-in-effect here caused "maximum update depth exceeded" while dragging).
+  const ctx = useRef({ cx, cy, onProximity });
+  ctx.current = { cx, cy, onProximity };
+
+  const report = (x: number, y: number) => {
+    const c = ctx.current;
+    const dx = (x - c.cx) / c.cx;
+    const dy = (y - c.cy) / c.cy;
+    c.onProximity(1 - Math.min(1, Math.hypot(dx, dy) / Math.SQRT2));
+  };
+
+  // Initial reading, once. Empty deps → cannot loop.
   useEffect(() => {
-    const dx = (dot.x - cx) / cx;
-    const dy = (dot.y - cy) / cy;
-    const dist = Math.min(1, Math.hypot(dx, dy) / Math.SQRT2);
-    onProximity(1 - dist);
-  }, [dot, cx, cy, onProximity]);
+    report(dot.x, dot.y);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => setDot({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }),
-      onPanResponderMove: (_e, g) => setDot({ x: g.moveX, y: g.moveY }),
+      onPanResponderGrant: (e) => {
+        const { pageX, pageY } = e.nativeEvent;
+        setDot({ x: pageX, y: pageY });
+        report(pageX, pageY);
+      },
+      onPanResponderMove: (_e, g) => {
+        setDot({ x: g.moveX, y: g.moveY });
+        report(g.moveX, g.moveY);
+      },
     }),
   ).current;
 
