@@ -69,30 +69,33 @@ export function frameBoxToScreen(
   if (frameW <= 0 || frameH <= 0 || screenW <= 0 || screenH <= 0) {
     return { left: 0, top: 0, width: 0, height: 0 };
   }
-  const nx = Math.min(b.x1, b.x2) / frameW;
-  const ny = Math.min(b.y1, b.y2) / frameH;
-  const nw = Math.abs(b.x2 - b.x1) / frameW;
-  const nh = Math.abs(b.y2 - b.y1) / frameH;
-  // Rotate 90° CW: (fx,fy) → (1 - fy, fx). If boxes look mirrored/rotated wrong,
-  // this is the block to flip (CCW would be dfx = fy, dfy = 1 - fx).
-  const dfx = 1 - (ny + nh);
-  const dfy = nx;
-  const dfw = nh;
-  const dfh = nw;
-  // Display-oriented (portrait) frame size, 'cover'-fit to the screen.
-  const dfW = frameH;
-  const dfH = frameW;
-  const s = Math.max(screenW / dfW, screenH / dfH);
-  const renderW = dfW * s;
-  const renderH = dfH * s;
+  // executorch's runOnFrame already orients boxes to the (portrait) display via
+  // frame.orientation — coords are in screen-space, NOT the native landscape
+  // frame. So the screen-space size is portrait: width = smaller sensor dim,
+  // height = larger. (App is portrait-locked.) No extra rotation here.
+  const sw = Math.min(frameW, frameH);
+  const sh = Math.max(frameW, frameH);
+  const nx = Math.min(b.x1, b.x2) / sw;
+  const ny = Math.min(b.y1, b.y2) / sh;
+  const nw = Math.abs(b.x2 - b.x1) / sw;
+  const nh = Math.abs(b.y2 - b.y1) / sh;
+  // 'cover'-fit the portrait screen-space into the display.
+  const scale = Math.max(screenW / sw, screenH / sh);
+  const renderW = sw * scale;
+  const renderH = sh * scale;
   const offX = (screenW - renderW) / 2;
   const offY = (screenH - renderH) / 2;
   return {
-    left: offX + dfx * renderW,
-    top: offY + dfy * renderH,
-    width: dfw * renderW,
-    height: dfh * renderH,
+    left: offX + nx * renderW,
+    top: offY + ny * renderH,
+    width: nw * renderW,
+    height: nh * renderH,
   };
+}
+
+/** Screen-space (portrait-oriented) dims for a sensor frame on a portrait phone. */
+export function screenSpaceDims(frameW: number, frameH: number): { w: number; h: number } {
+  return { w: Math.min(frameW, frameH), h: Math.max(frameW, frameH) };
 }
 
 /** Proximity 0..1 of a screen rect's center to the screen center (1 = centered). */

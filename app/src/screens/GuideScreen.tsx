@@ -20,7 +20,8 @@ import { COPY } from '@/services/CopyModule';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
-  bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, type RawDetection,
+  bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
+  type RawDetection,
 } from '@/adapters/objectDetection';
 import { CONFIG } from '@/config';
 
@@ -245,11 +246,11 @@ function LiveLayer({
   const onResult = useCallback(
     (boxes: RawDetection[], w: number, h: number) => {
       const best = bestDetectionFor(boxes, target);
-      // Proximity = how centered the object is in the CAMERA FRAME (= where the
-      // camera is aimed). Robust + no rotation/crop math; matches the blind-user
-      // case (sweep until the buzz peaks = camera pointed at the object). The
-      // overlay boxes below are a rough visual only and may be offset.
-      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, w, h)) : null);
+      // Proximity = how centered the object is in the camera's (portrait) view.
+      // executorch returns screen-space coords, so normalize by the portrait
+      // screen-space dims (min,max), not the native landscape frame dims.
+      const ss = screenSpaceDims(w, h);
+      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, ss.w, ss.h)) : null);
       const now = Date.now();
       if (now - lastAt.current > 120) {
         lastAt.current = now;
@@ -269,7 +270,8 @@ function LiveLayer({
 
   // DEBUG: raw normalized frame-centroid of the tracked object (0..1). When the
   // phone physically points straight at the object, this should read ~0.50,0.50.
-  const bn = det.best ? normalizePixelBox(det.best.bbox, det.w, det.h) : null;
+  const bnSS = screenSpaceDims(det.w, det.h);
+  const bn = det.best ? normalizePixelBox(det.best.bbox, bnSS.w, bnSS.h) : null;
   const aimReadout = bn ? ` · aim(${(bn.x + bn.width / 2).toFixed(2)},${(bn.y + bn.height / 2).toFixed(2)})` : '';
 
   if (!hasPermission || !device) return <CamFallback hasPermission={hasPermission} />;
