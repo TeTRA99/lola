@@ -34,6 +34,14 @@ export const CONFIG = {
   // Hidden setup gestures (FR-3, AD-6)
   SETUP_GESTURE_HOLD_MS: 5000,
   DEBUG_GESTURE_HOLD_MS: 10000,
+
+  // "Guide me to it" proximity haptics (feat/guide-me-to-it spike).
+  // Pulse RATE (not amplitude) encodes closeness — Android amplitude control is
+  // weak; faster ticks read clearly even on Charly's Galaxy.
+  GUIDE_PULSE_MIN_MS: 60,      // fastest tick — target centered / locked
+  GUIDE_PULSE_MAX_MS: 500,     // slowest tick — target far from center
+  GUIDE_SEARCH_TICK_MS: 1400,  // soft, sparse tick when no target is in frame
+  GUIDE_LOCK_PROXIMITY: 0.92,  // ≥ this counts as locked-on (Heavy tap)
 };
 
 export type Config = typeof CONFIG;

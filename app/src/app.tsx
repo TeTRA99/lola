@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BackHandler, Platform, View } from 'react-native';
 import * as QuickActions from 'expo-quick-actions';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
@@ -9,6 +9,11 @@ import { LaunchSplash } from '@/screens/LaunchSplash';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { SetupScreen } from '@/screens/SetupScreen';
 import { DebugScreen } from '@/screens/DebugScreen';
+// Lazy so react-native-vision-camera's native module only loads when the guide
+// screen is opened — an older dev client without it won't crash at app launch.
+const GuideScreen = lazy(() =>
+  import('@/screens/GuideScreen').then(m => ({ default: m.GuideScreen })),
+);
 import { useAppFonts } from '@/theme/fonts';
 import { loadStoredLang } from '@/i18n';
 import { COPY } from '@/services';
@@ -25,7 +30,7 @@ void SplashScreen.preventAutoHideAsync();
 // decision #3). Its id is matched on cold + warm launch below.
 const SETUP_ACTION_ID = 'setup';
 
-type Screen = 'splash' | 'home' | 'setup' | 'debug';
+type Screen = 'splash' | 'home' | 'setup' | 'debug' | 'guide';
 
 export default function App() {
   // Cold launch via the app-icon shortcut jumps straight to Setup — skip the
@@ -106,7 +111,14 @@ export default function App() {
           should return the caregiver to where they came from — i.e. leave the
           app — not drop into Dad's Home. */}
       {screen === 'setup' && <SetupScreen onClose={closeSetup} />}
-      {screen === 'debug' && <DebugScreen onClose={() => setScreen('home')} />}
+      {screen === 'debug' && (
+        <DebugScreen onClose={() => setScreen('home')} onOpenGuide={() => setScreen('guide')} />
+      )}
+      {screen === 'guide' && (
+        <Suspense fallback={<View style={{ flex: 1, backgroundColor: '#000' }} />}>
+          <GuideScreen onClose={() => setScreen('home')} />
+        </Suspense>
+      )}
     </>
   );
 }

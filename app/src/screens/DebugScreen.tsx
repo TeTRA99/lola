@@ -14,7 +14,7 @@ import {
   type UsageEvent,
 } from '@/services/UsageStats';
 
-export function DebugScreen({ onClose }: { onClose: () => void }) {
+export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onOpenGuide?: () => void }) {
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [exportNote, setExportNote] = useState<string | null>(null);
 
@@ -52,6 +52,13 @@ export function DebugScreen({ onClose }: { onClose: () => void }) {
           <Text style={styles.headerBtnText}>Close</Text>
         </Pressable>
       </View>
+
+      {/* feat/guide-me-to-it spike entry (dev-only). */}
+      {onOpenGuide ? (
+        <Pressable style={styles.guideBtn} onPress={onOpenGuide}>
+          <Text style={styles.guideBtnText}>🎯 Open "Guide me to it" spike</Text>
+        </Pressable>
+      ) : null}
 
       {/* Working signal */}
       <View style={[styles.panel, signal.kind === 'pass' ? styles.panelPass : signal.kind === 'fail' ? styles.panelFail : styles.panelNeutral]}>
@@ -154,6 +161,10 @@ const styles = StyleSheet.create({
     marginTop: 24, padding: 14, backgroundColor: '#4af', borderRadius: 8, alignItems: 'center',
   },
   exportBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  guideBtn: {
+    marginBottom: 16, padding: 14, backgroundColor: '#1A73E8', borderRadius: 8, alignItems: 'center',
+  },
+  guideBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   exportNote: { color: '#4af', fontSize: 13, marginTop: 8, textAlign: 'center' },
   footer: { color: '#666', fontSize: 12, marginTop: 24, textAlign: 'center' },
 });
