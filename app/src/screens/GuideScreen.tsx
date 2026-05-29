@@ -215,13 +215,18 @@ function LiveLayer({
           are what confirm detection is working. */}
       {det.w > 0 &&
         det.boxes.map((d, i) => {
+          // Frame is landscape (e.g. 1280×720); display is portrait. Back camera
+          // is rotated 90° CW, so map frame coords → display: (fx,fy)→(1-fy,fx).
+          // Best-effort: ignores aspect-crop, so boxes may be slightly scaled.
           const n = normalizePixelBox(d.bbox, det.w, det.h);
           return (
             <View
               key={i}
               style={[styles.detBox, {
-                left: n.x * width, top: n.y * height,
-                width: n.width * width, height: n.height * height,
+                left: (1 - (n.y + n.height)) * width,
+                top: n.x * height,
+                width: n.height * width,
+                height: n.width * height,
               }]}
             >
               <Text style={styles.detLabel}>{String(d.label)} {Math.round(d.score * 100)}%</Text>

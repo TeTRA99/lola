@@ -63,19 +63,27 @@ export const GUIDABLE_COCO_LABELS = [
   'backpack', 'handbag', 'sports ball', 'clock', 'vase', 'wine glass',
 ] as const;
 
+// The model returns labels like "CUP", "DINING_TABLE"; our list is lowercase
+// with spaces ("cup", "dining table"). Normalize both sides before comparing.
+function normLabel(s: string): string {
+  return s.toUpperCase().replace(/[\s_]+/g, '');
+}
+const GUIDABLE_NORM = new Set((GUIDABLE_COCO_LABELS as readonly string[]).map(normLabel));
+
 /**
  * Pick the single detection to home in on: highest-score match for the target
  * COCO label, or — when no target is given — the highest-score guidable object.
  * Returns null when nothing relevant is in frame (→ "searching" haptic).
+ * Label matching is case- and separator-insensitive (model emits "CUP").
  */
 export function bestDetectionFor(
   dets: RawDetection[],
   targetLabel: string | null,
 ): RawDetection | null {
-  const guidable = GUIDABLE_COCO_LABELS as readonly string[];
-  const pool = targetLabel
-    ? dets.filter(d => d.label === targetLabel)
-    : dets.filter(d => guidable.includes(d.label));
+  const target = targetLabel ? normLabel(targetLabel) : null;
+  const pool = target
+    ? dets.filter(d => normLabel(String(d.label)) === target)
+    : dets.filter(d => GUIDABLE_NORM.has(normLabel(String(d.label))));
   let best: RawDetection | null = null;
   for (const d of pool) if (!best || d.score > best.score) best = d;
   return best;
