@@ -19,6 +19,9 @@ import {
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
+import {
+  bestDetectionFor, normalizePixelBox, proximityFromBox, type RawDetection,
+} from '@/adapters/objectDetection';
 import { CONFIG } from '@/config';
 
 export function GuideScreen({
@@ -172,15 +175,30 @@ function LiveLayer({
   onProximity: (p: number | null) => void;
 }) {
   const { width, height } = useWindowDimensions();
-  const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(
-    targetCocoLabel,
-    onProximity,
+  const [det, setDet] = useState<{ boxes: RawDetection[]; w: number; h: number }>({ boxes: [], w: 0, h: 0 });
+  const [workletErr, setWorkletErr] = useState<string | null>(null);
+  const lastAt = useRef(0);
+
+  // Each frame: drive haptics (every frame, no render) + refresh the debug
+  // overlay (throttled).
+  const onResult = useCallback(
+    (boxes: RawDetection[], w: number, h: number) => {
+      const best = bestDetectionFor(boxes, targetCocoLabel);
+      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, w, h)) : null);
+      const now = Date.now();
+      if (now - lastAt.current > 150) {
+        lastAt.current = now;
+        setDet({ boxes, w, h });
+      }
+    },
+    [targetCocoLabel, onProximity],
   );
+
+  const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(onResult, setWorkletErr);
   // Stable identity — a fresh array each render makes VisionCamera re-init and
   // can spiral into "maximum update depth exceeded".
   const outputs = useMemo(() => [frameOutput], [frameOutput]);
 
-  // Surface the real failure (model load / native frame / runtime) to Metro.
   useEffect(() => {
     if (error) console.error('[guide] detector error:', error);
   }, [error]);
@@ -191,16 +209,39 @@ function LiveLayer({
   return (
     <>
       <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} outputs={outputs} />
+
+      {/* Debug overlay: every detection as a box + label/score. Positions are
+          best-effort (frame orientation may offset them) — the count + labels
+          are what confirm detection is working. */}
+      {det.w > 0 &&
+        det.boxes.map((d, i) => {
+          const n = normalizePixelBox(d.bbox, det.w, det.h);
+          return (
+            <View
+              key={i}
+              style={[styles.detBox, {
+                left: n.x * width, top: n.y * height,
+                width: n.width * width, height: n.height * height,
+              }]}
+            >
+              <Text style={styles.detLabel}>{String(d.label)} {Math.round(d.score * 100)}%</Text>
+            </View>
+          );
+        })}
+
       <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
-      {errMsg ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>Detector error: {errMsg}</Text>
-        </View>
-      ) : !isReady ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>Loading model… {Math.round((downloadProgress ?? 0) * 100)}%</Text>
-        </View>
-      ) : null}
+
+      <View style={styles.banner}>
+        <Text style={styles.bannerText}>
+          {errMsg
+            ? `model err: ${errMsg}`
+            : workletErr
+              ? `frame err: ${workletErr}`
+              : !isReady
+                ? `Loading model… ${Math.round((downloadProgress ?? 0) * 100)}%`
+                : `live: ${det.boxes.length} obj · frame ${det.w}×${det.h}`}
+        </Text>
+      </View>
     </>
   );
 }
@@ -235,6 +276,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
   bannerText: { color: '#fff', fontSize: 14 },
+  detBox: { position: 'absolute', borderWidth: 2, borderColor: '#4ade80' },
+  detLabel: {
+    color: '#000', backgroundColor: '#4ade80', fontSize: 11, fontWeight: '700',
+    alignSelf: 'flex-start', paddingHorizontal: 3,
+  },
   toggle: {
     position: 'absolute', top: 48, left: 16,
     backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
