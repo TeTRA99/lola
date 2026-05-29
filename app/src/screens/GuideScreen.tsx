@@ -18,7 +18,7 @@ import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
-  bestDetectionFor, normalizePixelBox, proximityFromBox, type RawDetection,
+  bestDetectionFor, frameBoxToScreen, proximityFromScreenRect, type RawDetection,
 } from '@/adapters/objectDetection';
 import { CONFIG } from '@/config';
 
@@ -186,14 +186,16 @@ function LiveLayer({
   const onResult = useCallback(
     (boxes: RawDetection[], w: number, h: number) => {
       const best = bestDetectionFor(boxes, target);
-      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, w, h)) : null);
+      onProximity(
+        best ? proximityFromScreenRect(frameBoxToScreen(best.bbox, w, h, width, height), width, height) : null,
+      );
       const now = Date.now();
       if (now - lastAt.current > 120) {
         lastAt.current = now;
         setDet({ boxes, w, h, best });
       }
     },
-    [target, onProximity],
+    [target, onProximity, width, height],
   );
 
   const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(onResult, setWorkletErr);
@@ -214,16 +216,13 @@ function LiveLayer({
           actively-tracked target is highlighted. Positions are best-effort. */}
       {det.w > 0 &&
         det.boxes.map((d, i) => {
-          const n = normalizePixelBox(d.bbox, det.w, det.h);
+          const r = frameBoxToScreen(d.bbox, det.w, det.h, width, height);
           const isBest = det.best != null && d === det.best;
           return (
             <View
               key={i}
               style={[isBest ? styles.detBoxActive : styles.detBox, {
-                left: (1 - (n.y + n.height)) * width,
-                top: n.x * height,
-                width: n.height * width,
-                height: n.width * height,
+                left: r.left, top: r.top, width: r.width, height: r.height,
               }]}
             >
               <Text style={[styles.detLabel, isBest && styles.detLabelActive]}>

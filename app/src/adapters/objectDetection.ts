@@ -54,6 +54,57 @@ export function normalizePixelBox(b: PixelBBox, frameW: number, frameH: number):
   };
 }
 
+/** A box in on-screen pixels. */
+export type ScreenRect = { left: number; top: number; width: number; height: number };
+
+/**
+ * Map a frame-pixel box to on-screen pixels, accounting for the back camera's
+ * 90° rotation (landscape frame → portrait display) and the preview's 'cover'
+ * crop. Drawing the overlay AND computing proximity from this same rect keeps
+ * them consistent: an object under the center reticle reads proximity ≈ 1.
+ */
+export function frameBoxToScreen(
+  b: PixelBBox, frameW: number, frameH: number, screenW: number, screenH: number,
+): ScreenRect {
+  if (frameW <= 0 || frameH <= 0 || screenW <= 0 || screenH <= 0) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+  const nx = Math.min(b.x1, b.x2) / frameW;
+  const ny = Math.min(b.y1, b.y2) / frameH;
+  const nw = Math.abs(b.x2 - b.x1) / frameW;
+  const nh = Math.abs(b.y2 - b.y1) / frameH;
+  // Rotate 90° CW: (fx,fy) → (1 - fy, fx). If boxes look mirrored/rotated wrong,
+  // this is the block to flip (CCW would be dfx = fy, dfy = 1 - fx).
+  const dfx = 1 - (ny + nh);
+  const dfy = nx;
+  const dfw = nh;
+  const dfh = nw;
+  // Display-oriented (portrait) frame size, 'cover'-fit to the screen.
+  const dfW = frameH;
+  const dfH = frameW;
+  const s = Math.max(screenW / dfW, screenH / dfH);
+  const renderW = dfW * s;
+  const renderH = dfH * s;
+  const offX = (screenW - renderW) / 2;
+  const offY = (screenH - renderH) / 2;
+  return {
+    left: offX + dfx * renderW,
+    top: offY + dfy * renderH,
+    width: dfw * renderW,
+    height: dfh * renderH,
+  };
+}
+
+/** Proximity 0..1 of a screen rect's center to the screen center (1 = centered). */
+export function proximityFromScreenRect(r: ScreenRect, screenW: number, screenH: number): number {
+  if (screenW <= 0 || screenH <= 0) return 0;
+  const cx = (r.left + r.width / 2) / screenW;
+  const cy = (r.top + r.height / 2) / screenH;
+  const dx = (cx - 0.5) * 2;
+  const dy = (cy - 0.5) * 2;
+  return 1 - Math.min(1, Math.hypot(dx, dy) / Math.SQRT2);
+}
+
 // COCO-80 labels we can offer "guide me to it" for in v1. Describe should only
 // surface the guide affordance when the named object maps to one of these.
 // (Subset — populate from the model's full label map when the detector lands.)

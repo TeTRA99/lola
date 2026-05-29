@@ -2,6 +2,8 @@ import {
   proximityFromBox,
   normalizePixelBox,
   bestDetectionFor,
+  frameBoxToScreen,
+  proximityFromScreenRect,
   type RawDetection,
 } from '@/adapters/objectDetection';
 
@@ -81,5 +83,31 @@ describe('bestDetectionFor', () => {
     expect(bestDetectionFor([cupUpper, table], 'cup')).toBe(cupUpper);
     // no target: DINING_TABLE isn't guidable, CUP is → cup wins despite lower score
     expect(bestDetectionFor([cupUpper, table], null)).toBe(cupUpper);
+  });
+});
+
+describe('frameBoxToScreen + proximityFromScreenRect', () => {
+  const FW = 1280, FH = 720;     // landscape frame
+  const SW = 720, SH = 1545;     // portrait screen
+
+  it('maps a frame-centered box to the screen center → proximity ~1', () => {
+    // centroid (640, 360) = frame center
+    const r = frameBoxToScreen({ x1: 600, y1: 320, x2: 680, y2: 400 }, FW, FH, SW, SH);
+    const cx = (r.left + r.width / 2) / SW;
+    const cy = (r.top + r.height / 2) / SH;
+    expect(cx).toBeCloseTo(0.5, 2);
+    expect(cy).toBeCloseTo(0.5, 2);
+    expect(proximityFromScreenRect(r, SW, SH)).toBeCloseTo(1, 2);
+  });
+
+  it('an off-center box reads lower proximity than a centered one', () => {
+    const centered = frameBoxToScreen({ x1: 600, y1: 320, x2: 680, y2: 400 }, FW, FH, SW, SH);
+    const corner = frameBoxToScreen({ x1: 0, y1: 0, x2: 120, y2: 120 }, FW, FH, SW, SH);
+    expect(proximityFromScreenRect(corner, SW, SH)).toBeLessThan(proximityFromScreenRect(centered, SW, SH));
+  });
+
+  it('guards a zero-sized frame/screen', () => {
+    expect(frameBoxToScreen({ x1: 0, y1: 0, x2: 1, y2: 1 }, 0, 0, SW, SH)).toEqual({ left: 0, top: 0, width: 0, height: 0 });
+    expect(proximityFromScreenRect({ left: 0, top: 0, width: 0, height: 0 }, 0, 0)).toBe(0);
   });
 });
