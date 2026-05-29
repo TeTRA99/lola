@@ -77,7 +77,9 @@ export default function App() {
   // behaves like a normal app (resumes to Home; a cold launch shows the splash).
   const closeSetup = () => {
     setScreen('home');
-    if (Platform.OS === 'android') BackHandler.exitApp();
+    // Exit the app only in production. In dev, exiting would also drop the
+    // Metro connection on every Done — just return to Home instead.
+    if (Platform.OS === 'android' && !__DEV__) BackHandler.exitApp();
   };
 
   console.log('[App] render with screen =', screen, 'fonts =', fontsLoaded);
@@ -97,7 +99,9 @@ export default function App() {
           onDebug={() => setScreen('debug')}
         />
       )}
-      {screen === 'home' && <HomeScreen />}
+      {screen === 'home' && (
+        <HomeScreen onDevSetup={__DEV__ ? () => setScreen('setup') : undefined} />
+      )}
       {/* Setup is only reached via the OS app-icon shortcut, so finishing it
           should return the caregiver to where they came from — i.e. leave the
           app — not drop into Dad's Home. */}
