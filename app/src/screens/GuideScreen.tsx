@@ -18,7 +18,7 @@ import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
-  bestDetectionFor, frameBoxToScreen, proximityFromScreenRect, type RawDetection,
+  bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, type RawDetection,
 } from '@/adapters/objectDetection';
 import { CONFIG } from '@/config';
 
@@ -186,9 +186,11 @@ function LiveLayer({
   const onResult = useCallback(
     (boxes: RawDetection[], w: number, h: number) => {
       const best = bestDetectionFor(boxes, target);
-      onProximity(
-        best ? proximityFromScreenRect(frameBoxToScreen(best.bbox, w, h, width, height), width, height) : null,
-      );
+      // Proximity = how centered the object is in the CAMERA FRAME (= where the
+      // camera is aimed). Robust + no rotation/crop math; matches the blind-user
+      // case (sweep until the buzz peaks = camera pointed at the object). The
+      // overlay boxes below are a rough visual only and may be offset.
+      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, w, h)) : null);
       const now = Date.now();
       if (now - lastAt.current > 120) {
         lastAt.current = now;
