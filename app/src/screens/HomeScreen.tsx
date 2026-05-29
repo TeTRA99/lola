@@ -29,6 +29,7 @@ import { subscribeSpeech, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
 import * as Settings from '@/services/Settings';
 import { Icon } from '@/components/Icon';
+import { ActionIcon } from '@/components/ActionIcon';
 import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { color, fontFamily } from '@/theme/tokens';
@@ -253,7 +254,7 @@ function FieldStage({
     return (
       <>
         <View style={[styles.idleCircle, { backgroundColor: circleBg }]}>
-          <Icon name={isAsk ? 'ask' : 'describe'} size={68} color={accent} />
+          <ActionIcon kind={isAsk ? 'ask' : 'describe'} size={68} color={accent} />
         </View>
         <Text style={[styles.actionLabel, { color: textColor }]}>{isAsk ? COPY.buttons.askLabel : COPY.buttons.describeLabel}</Text>
       </>
