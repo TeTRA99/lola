@@ -54,8 +54,11 @@ export function GuideScreen({
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const notFoundRef = useRef(false); // said "no la encuentro"
+  const preparingRef = useRef(false); // said the "me estoy preparando" first-load cue
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // On-device model readiness (downloads on first use — can take minutes).
+  const [model, setModel] = useState({ isReady: false, downloadProgress: 0 });
 
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
@@ -87,10 +90,23 @@ export function GuideScreen({
     if (targetCocoLabel) void speak(COPY.guide.searching(targetLabel));
   }, []);
 
-  // If the target is never spotted within the window, it's probably not in this
-  // scene — say so once (we can't navigate the user elsewhere, just tell them).
+  // While the on-device model is still loading (first-use download can take
+  // minutes), tell the user it's preparing so it doesn't seem broken.
   useEffect(() => {
-    if (!targetCocoLabel) return;
+    if (!targetCocoLabel || model.isReady) return;
+    const t = setTimeout(() => {
+      if (!model.isReady && !preparingRef.current) {
+        preparingRef.current = true;
+        void speak(COPY.guide.preparing);
+      }
+    }, CONFIG.GUIDE_PREPARING_MS);
+    return () => clearTimeout(t);
+  }, [model.isReady, targetCocoLabel]);
+
+  // "No la encuentro" — only AFTER the model is ready, so the download wait isn't
+  // mistaken for "not in the scene". The window is then real searching time.
+  useEffect(() => {
+    if (!targetCocoLabel || !model.isReady) return;
     const t = setTimeout(() => {
       if (!spottedRef.current && !notFoundRef.current) {
         notFoundRef.current = true;
@@ -98,7 +114,7 @@ export function GuideScreen({
       }
     }, CONFIG.GUIDE_NOT_FOUND_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [model.isReady, targetCocoLabel]);
 
   // Tiered audio (real flow only):
   //  • detected in frame (any proximity) → tentative "creo que lo veo" once
@@ -111,7 +127,9 @@ export function GuideScreen({
     if (proximity === null) {
       if (!lostTimer.current) {
         lostTimer.current = setTimeout(() => {
-          spottedRef.current = false;
+          // Re-arm only "found" on a brief loss; keep "creo que lo veo" said once
+          // per session so detector flicker doesn't repeat it (it fired 3× on the
+          // Redmi as detection stabilized).
           foundRef.current = false;
           lostTimer.current = null;
         }, 1500);
@@ -151,9 +169,11 @@ export function GuideScreen({
   }, []);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
-  const status: GuideStatus = proximity === null
-    ? 'searching'
-    : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted';
+  const status: GuideStatus = !model.isReady
+    ? 'preparing'
+    : proximity === null
+      ? 'searching'
+      : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted';
 
   return (
     <View style={styles.root}>
@@ -166,6 +186,7 @@ export function GuideScreen({
           target={liveTarget}
           setTarget={setLiveTarget}
           onProximity={applyProximity}
+          onModelState={setModel}
         />
       ) : (
         <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
@@ -199,7 +220,7 @@ export function GuideScreen({
   );
 }
 
-type GuideStatus = 'searching' | 'spotted' | 'found';
+type GuideStatus = 'preparing' | 'searching' | 'spotted' | 'found';
 
 /** Branded, preview-less screen for the real (blind/low-vision) flow. The whole
  *  screen is the exit target. Camera + boxes are hidden (camera runs underneath
@@ -227,8 +248,13 @@ function BlindOverlay({
   }, [pulse]);
 
   const accent = status === 'found' ? '#22d3ee' : status === 'spotted' ? '#4ade80' : 'rgba(255,255,255,0.5)';
-  const title = status === 'found' ? COPY.guide.here : status === 'spotted' ? COPY.guide.seeingIt : COPY.guide.looking(targetLabel);
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, status === 'searching' ? 1.12 : 1.3] });
+  const title = status === 'preparing'
+    ? COPY.guide.preparingLegend
+    : status === 'found' ? COPY.guide.here
+      : status === 'spotted' ? COPY.guide.seeingIt
+        : COPY.guide.looking(targetLabel);
+  const homing = status === 'found' || status === 'spotted';
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, homing ? 1.3 : 1.12] });
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
 
   return (
@@ -311,6 +337,7 @@ function LiveLayer({
   target,
   setTarget,
   onProximity,
+  onModelState,
 }: {
   device?: CameraDevice;
   hasPermission: boolean;
@@ -319,6 +346,7 @@ function LiveLayer({
   target: string | null;
   setTarget: (t: string | null) => void;
   onProximity: (p: number | null) => void;
+  onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
 }) {
   const { width, height } = useWindowDimensions();
   const [det, setDet] = useState<{ boxes: RawDetection[]; w: number; h: number; best: RawDetection | null }>({
@@ -346,6 +374,11 @@ function LiveLayer({
 
   const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(onResult, setWorkletErr);
   const outputs = useMemo(() => [frameOutput], [frameOutput]);
+
+  // Report model readiness up so the screen can show "preparando…" + gate audio.
+  useEffect(() => {
+    onModelState({ isReady, downloadProgress: downloadProgress ?? 0 });
+  }, [isReady, downloadProgress, onModelState]);
 
   useEffect(() => {
     if (error) console.error('[guide] detector error:', error);

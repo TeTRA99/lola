@@ -48,6 +48,7 @@ export const CONFIG = {
   GUIDE_SMOOTH_ALPHA: 0.35,    // EMA on the felt proximity (lower = smoother/laggier ramp)
   GUIDE_LOST_GRACE_MS: 500,    // keep homing this long after a dropped frame before "searching"
   GUIDE_AUTO_CLOSE_MS: 15000,  // after "found", auto-return home this long later (tap exits anytime)
+  GUIDE_PREPARING_MS: 6000,    // if the model isn't ready by now, tell the user it's preparing
 };
 
 export type Config = typeof CONFIG;

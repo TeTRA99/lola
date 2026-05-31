@@ -43,10 +43,13 @@ export const COPY = {
     cannotGuide: (obj: string): string => `Por ahora no puedo guiarte hasta ${obj}.`,
     found: '¡Ahí está! Lo tenés enfrente. Tocá la pantalla cuando termines.',
     notFound: (obj: string): string => `No encuentro ${obj} por acá. Tocá la pantalla para volver.`,
+    // Spoken once if the on-device model is still downloading on first use.
+    preparing: 'Esperá un momento, me estoy preparando. La primera vez puede tardar un poco.',
     // On-screen legend (low-vision may see it; matches the app's other screens).
     looking: (obj: string): string => `Buscando ${obj}`,
     seeingIt: '¡La veo!',
     here: '¡Ahí está!',
+    preparingLegend: 'Preparando…',
     tapHint: 'Tocá la pantalla para volver',
   },
   // Splash caregiver legend pointing to the OS app-icon setup shortcut.
