@@ -35,6 +35,7 @@ import { ListRow } from '@/components/ListRow';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Field } from '@/components/Field';
 import { Icon } from '@/components/Icon';
+import { MugIcon } from '@/components/MugIcon';
 import { Toast, type ToastMessage } from '@/components/Toast';
 import { useSetupStrings, setLang, useLang, type Lang } from '@/i18n';
 import { color, radius, fontFamily, shadow } from '@/theme/tokens';
@@ -216,7 +217,9 @@ function EmptyState({ kind, onAdd }: { kind: 'objects' | 'rooms'; onAdd: () => v
   return (
     <View style={styles.empty}>
       <View style={styles.emptyTile}>
-        <Icon name={room ? 'rooms' : 'objects'} size={48} color={color.primary[500]} />
+        {room
+          ? <Icon name="rooms" size={48} color={color.primary[500]} />
+          : <MugIcon size={48} color={color.primary[500]} />}
       </View>
       <Text style={styles.emptyTitle}>{room ? t.emptyRoomTitle : t.emptyObjTitle}</Text>
       <Text style={styles.emptyBody}>{room ? t.emptyRoomBody : t.emptyObjBody}</Text>
