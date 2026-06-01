@@ -84,4 +84,11 @@ export const KEYS = {
   ttsPitch: 'tts_pitch',
   idleHeartbeat: 'idle_heartbeat',
   userName: 'user_name',
+  // First-run onboarding flags (set once, then suppressed forever).
+  welcomeSeen: 'onboarding_welcome_seen',
+  describeHintSeen: 'onboarding_describe_hint_seen',
+  askHintSeen: 'onboarding_ask_hint_seen',
+  guideHintSeen: 'onboarding_guide_hint_seen',
+  heartbeatHintSeen: 'onboarding_heartbeat_hint_seen',
+  caregiverIntroSeen: 'onboarding_caregiver_intro_seen',
 } as const;

@@ -13,6 +13,20 @@ describe('resolveGuideTarget (LLM-based, no regex/dictionary)', () => {
     expect(await resolveGuideTarget('mi vaso')).toEqual({ cocoLabel: 'cup', spoken: 'mi vaso' });
   });
 
+  it('treats an exact match as not-approximate (no warning flag)', async () => {
+    mockChatJson.mockResolvedValue({ ok: true, value: { label: 'cup', match: 'exact' } });
+    const r = await resolveGuideTarget('una taza');
+    expect(r).toEqual({ cocoLabel: 'cup', spoken: 'una taza' });
+    expect(r?.approximate).toBeUndefined();
+  });
+
+  it('flags an approximate match (proxy class) so the caller can warn', async () => {
+    mockChatJson.mockResolvedValue({ ok: true, value: { label: 'bottle', match: 'approx' } });
+    expect(await resolveGuideTarget('el termo')).toEqual({
+      cocoLabel: 'bottle', spoken: 'el termo', approximate: true,
+    });
+  });
+
   it('returns null when the LLM says it is not in the set (graceful fallback)', async () => {
     mockChatJson.mockResolvedValue({ ok: true, value: { label: null } });
     expect(await resolveGuideTarget('un lápiz')).toBeNull();

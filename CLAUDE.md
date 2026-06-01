@@ -43,7 +43,14 @@ fast and expected to pass.
   orchestration in `src/services`.
 
 ## Where things are documented
-- `docs/design/` — feature/design notes (TTS, directional-haptics, guide-me-to-it, model-usage).
+- `docs/design/` — feature/design notes (TTS, directional-haptics, guide-me-to-it,
+  model-usage, home-and-onboarding).
+- **Home / settings / onboarding:** see `docs/design/home-and-onboarding.md`. Home
+  is the "cards" layout; **Setup opens by long-pressing the Home gear** (a plain tap
+  shows a hint) or the OS app-icon shortcut, and **Setup "Done" returns to Home**.
+  **Debug** is reached from a dev-only 🐞 icon on Home (`__DEV__`); there is no
+  splash gesture. First-run onboarding = welcome overlay + per-feature voice hints +
+  a caregiver intro popup (reset from the Debug screen).
 - **Model usage / privacy:** see `docs/design/model-usage.md`. On-device: YOLO26n
   (guide), CLIP (room ID), TTS, STT. Cloud (OpenRouter → Gemini 2.5 Flash):
   Describe/Ask (sends the photo), intent + guide-target resolution (text only).
@@ -51,7 +58,10 @@ fast and expected to pass.
 - Decisions & rationale that aren't in code live in the per-session memory
   (`MEMORY.md` index).
 
-## Current branch focus
-`feat/guide-me-to-it` — "guide me to it" live homing feature. See
-docs/design/guide-me-to-it-notes.md (scope = common-objects v1 / YOLO26n+COCO via
-executorch; camera = VisionCamera v5; haptics = proximity "Geiger" loop).
+## Current status
+The "guide me to it" feature + the Home redesign and first-run onboarding are
+**merged to `main`** (2026-06-01; app `version` 0.10.0). Integrate further work off
+`main`. See docs/design/guide-me-to-it-notes.md (scope = common-objects v1 /
+YOLO26n+COCO via executorch; camera = VisionCamera v5; haptics = proximity "Geiger"
+loop; "guíame a X" has 3-tier target resolution — exact / approx-proxy / unsupported)
+and docs/design/home-and-onboarding.md.

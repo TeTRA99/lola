@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BackHandler, Platform, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as QuickActions from 'expo-quick-actions';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
 import * as SplashScreen from 'expo-splash-screen';
@@ -17,6 +17,8 @@ const GuideScreen = lazy(() =>
 import { useAppFonts } from '@/theme/fonts';
 import { loadStoredLang } from '@/i18n';
 import { COPY } from '@/services';
+import { speak } from '@/adapters/tts';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Register the Expo resource fetcher with ExecuTorch once at boot. Required
 // before any module (ImageEmbeddings, LLM, etc.) can download / load weights.
@@ -26,8 +28,9 @@ initExecutorch({ resourceFetcher: ExpoResourceFetcher });
 // no grey window flash between the native splash and our JS splash.
 void SplashScreen.preventAutoHideAsync();
 
-// The OS app-icon "Configuración" shortcut is the real door to Setup (locked
-// decision #3). Its id is matched on cold + warm launch below.
+// Setup is reached two ways: the gear on Dad's Home (long-press-gated) and the
+// OS app-icon "Configuración" shortcut. This id matches the shortcut on cold +
+// warm launch below.
 const SETUP_ACTION_ID = 'setup';
 
 type Screen = 'splash' | 'home' | 'setup' | 'debug' | 'guide';
@@ -78,17 +81,13 @@ export default function App() {
     if (action?.id === SETUP_ACTION_ID) setScreen('setup');
   });
 
-  // Leave the app when Setup is dismissed. Android's BackHandler.exitApp() only
-  // *backgrounds* the task (it doesn't kill the process), so we ALSO reset the
-  // screen to Home first — otherwise a warm resume would drop the caregiver
-  // right back into Setup. Net effect: Done sends the app away, and reopening
-  // behaves like a normal app (resumes to Home; a cold launch shows the splash).
-  const closeSetup = () => {
-    setScreen('home');
-    // Exit the app only in production. In dev, exiting would also drop the
-    // Metro connection on every Done — just return to Home instead.
-    if (Platform.OS === 'android' && !__DEV__) BackHandler.exitApp();
-  };
+  // In-app door to Setup: the gear on Dad's Home (long-press-gated there).
+  const openSettings = () => setScreen('setup');
+
+  // Done always returns to Dad's Home, whether Setup was reached via the in-app
+  // gear or the OS app-icon shortcut. (Previously the shortcut path exited the
+  // app; the caregiver prefers landing back on Home.)
+  const closeSetup = () => setScreen('home');
 
   console.log('[App] render with screen =', screen, 'fonts =', fontsLoaded);
 
@@ -102,34 +101,58 @@ export default function App() {
   return (
     <>
       {screen === 'splash' && (
-        <LaunchSplash
-          onDone={() => setScreen('home')}
-          onDebug={() => setScreen('debug')}
-        />
+        <LaunchSplash onDone={() => setScreen('home')} />
       )}
       {screen === 'home' && (
         <HomeScreen
-          onDevSetup={__DEV__ ? () => setScreen('setup') : undefined}
+          onOpenSettings={openSettings}
+          onDevDebug={__DEV__ ? () => setScreen('debug') : undefined}
           onDevGuide={__DEV__ ? () => { setGuideTarget(null); setScreen('guide'); } : undefined}
           onOpenGuide={(t) => { setGuideTarget(t); setScreen('guide'); }}
         />
       )}
-      {/* Setup is only reached via the OS app-icon shortcut, so finishing it
-          should return the caregiver to where they came from — i.e. leave the
-          app — not drop into Dad's Home. */}
+      {/* Setup is reached via the OS app-icon shortcut or the in-app Home gear;
+          either way Done returns to Dad's Home (see closeSetup). */}
       {screen === 'setup' && <SetupScreen onClose={closeSetup} />}
       {screen === 'debug' && (
         <DebugScreen onClose={() => setScreen('home')} onOpenGuide={() => setScreen('guide')} />
       )}
       {screen === 'guide' && (
-        <Suspense fallback={<View style={{ flex: 1, backgroundColor: '#000' }} />}>
-          <GuideScreen
-            targetCocoLabel={guideTarget?.cocoLabel ?? null}
-            targetLabel={guideTarget?.spoken ?? 'el objeto'}
-            onClose={() => { setGuideTarget(null); setScreen('home'); }}
-          />
-        </Suspense>
+        <ErrorBoundary
+          fallback={<GuideLoadFallback onClose={() => { setGuideTarget(null); setScreen('home'); }} />}
+        >
+          <Suspense fallback={<View style={{ flex: 1, backgroundColor: '#000' }} />}>
+            <GuideScreen
+              targetCocoLabel={guideTarget?.cocoLabel ?? null}
+              targetLabel={guideTarget?.spoken ?? 'el objeto'}
+              onClose={() => { setGuideTarget(null); setScreen('home'); }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </>
   );
 }
+
+// Calm fallback if the lazy guide screen fails to mount (e.g. its native module
+// can't be resolved). Says one line and returns to Home — tap returns sooner.
+function GuideLoadFallback({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    void speak(COPY.guide.loadError);
+    const t = setTimeout(onClose, 5000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <Pressable style={styles.guideFallback} onPress={onClose} accessibilityRole="button">
+      <Text style={styles.guideFallbackText}>{COPY.guide.loadError}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  guideFallback: {
+    flex: 1, backgroundColor: '#0C0D0F',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36,
+  },
+  guideFallbackText: { color: '#fff', fontSize: 24, fontWeight: '700', textAlign: 'center', lineHeight: 32 },
+});

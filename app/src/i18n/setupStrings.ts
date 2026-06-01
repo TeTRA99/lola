@@ -11,6 +11,10 @@ export type Lang = 'es' | 'en';
 type SetupCopy = {
   setup: string;
   done: string;
+  // One-time caregiver intro card (first Setup open).
+  introTitle: string;
+  introBody: string;
+  introDismiss: string;
   objects: string;
   rooms: string;
   settings: string;
@@ -97,6 +101,9 @@ type SetupCopy = {
 const en: SetupCopy = {
   setup: 'Setup',
   done: 'Done',
+  introTitle: 'Welcome to Lola',
+  introBody: 'This is where you set Lola up — for you, your things, your home. Add the objects that matter most in your daily life, so Lola recognizes them and helps find them. Add the rooms in your home so Lola knows where you are.',
+  introDismiss: 'Got it',
   objects: 'Objects',
   rooms: 'Rooms',
   settings: 'Settings',
@@ -180,6 +187,9 @@ const en: SetupCopy = {
 const es: SetupCopy = {
   setup: 'Configuración',
   done: 'Listo',
+  introTitle: 'Bienvenido a Lola',
+  introBody: 'Acá configurás a Lola para vos, tus cosas, tu casa. Registrá los objetos que más te importan en tu día a día, así Lola los reconoce y ayuda a encontrarlos. Registrá los cuartos de tu casa para que Lola reconozca dónde estás.',
+  introDismiss: 'Entendido',
   objects: 'Objetos',
   rooms: 'Cuartos',
   settings: 'Ajustes',

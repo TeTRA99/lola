@@ -73,8 +73,10 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   // 1. Listen first — many routes (repeat/memory) need no image, so don't
   // burn a snapshot + shutter sound when we don't have to.
   console.log('[ask] step 1: listen (STT)');
-  fire('listening_start');
-  const sttResult = await listen();
+  // Fire the "listening" cue (haptic → Home flips to "Te escucho…") only when
+  // the mic is actually open, not before — otherwise the user starts talking
+  // during the engine's warm-up and the first words get clipped.
+  const sttResult = await listen({ onReady: () => fire('listening_start') });
   fire('listening_stop');
   if (!sttResult.ok) {
     console.log('[ask] STT FAILED with:', sttResult.error);
@@ -160,14 +162,20 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
   fire('thinking_stop');
   if (!target) {
     fire('answer_ready');
-    const line = COPY.guide.cannotGuide(noun);
+    const line = COPY.guide.cannotGuide;
     await speak(line);
     await logEvent(true, now() - t0, 'guide_unsupported');
     return ok({ narration: line, objects: [], route: 'guide' });
   }
   fire('answer_ready');
-  await logEvent(true, now() - t0, null);
-  return ok({ narration: '', objects: [], route: 'guide', guide: target });
+  // Approximate match (e.g. "termo" → bottle): be honest that this kind of
+  // object isn't fully supported, then guide as best we can.
+  if (target.approximate) await speak(COPY.guide.approxWarning);
+  await logEvent(true, now() - t0, target.approximate ? 'guide_approx' : null);
+  return ok({
+    narration: '', objects: [], route: 'guide',
+    guide: { cocoLabel: target.cocoLabel, spoken: target.spoken },
+  });
 }
 
 const CHITCHAT_REPLIES: Record<import('./UtteranceRouter').ChitchatKind, string> = {
@@ -381,7 +389,12 @@ async function handleModel(
       snapshot_uri: persistedUri,
       room_hint: o.room_hint,
       source_action: 'ask',
-      excerpt: narration,
+      // Deliberately NO excerpt for Ask answers: a targeted reply ("el sillón es
+      // gris") is not a scene description, and storing it would make a later
+      // "¿dónde está el sillón?" recall recite that answer as "la escena era…".
+      // The sighting still updates recency/room; the scene excerpt comes only
+      // from Describe. (Memory recall discussion — Option B.)
+      excerpt: null,
     });
   }
 

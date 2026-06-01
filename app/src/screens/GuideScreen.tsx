@@ -18,6 +18,7 @@ import {
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services/CopyModule';
+import * as Settings from '@/services/Settings';
 import { color, fontFamily } from '@/theme/tokens';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
@@ -53,12 +54,17 @@ export function GuideScreen({
   const lastHudAt = useRef(0);
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
+  const lastFoundAt = useRef(0);    // timestamp of the last "¡ahí está!" (cooldown)
   const notFoundRef = useRef(false); // said "no la encuentro"
   const preparingRef = useRef(false); // said the "me estoy preparando" first-load cue
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // On-device model readiness (downloads on first use — can take minutes).
   const [model, setModel] = useState({ isReady: false, downloadProgress: 0 });
+  // Becomes true when the "Buscando… movéme despacio" line is announced (after
+  // the intro hint). The no-find countdown starts from here — NOT from model
+  // readiness — so the intro narration doesn't eat the real searching window.
+  const [searchArmed, setSearchArmed] = useState(false);
 
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
@@ -85,9 +91,24 @@ export function GuideScreen({
     return () => stopGuide();
   }, []);
 
-  // Blind-user audio: announce the search once on open (real flow only).
+  // Diagnostics: surface model load state to Metro (blind flow hides the banner).
   useEffect(() => {
-    if (targetCocoLabel) void speak(COPY.guide.searching(targetLabel));
+    console.log('[guide] model isReady:', model.isReady, 'downloadProgress:', model.downloadProgress);
+  }, [model.isReady, model.downloadProgress]);
+
+  // Blind-user audio: announce the search once on open (real flow only). The
+  // first time the homing flow is ever used, explain the vibration first.
+  useEffect(() => {
+    if (!targetCocoLabel) return;
+    void (async () => {
+      if (!(await Settings.getBool(Settings.KEYS.guideHintSeen, false))) {
+        await Settings.setBool(Settings.KEYS.guideHintSeen, true);
+        await speak(COPY.onboarding.guideHint);
+      }
+      // Arm the no-find window now — the user can start searching as this plays.
+      setSearchArmed(true);
+      void speak(COPY.guide.searching(targetLabel));
+    })();
   }, []);
 
   // While the on-device model is still loading (first-use download can take
@@ -103,10 +124,11 @@ export function GuideScreen({
     return () => clearTimeout(t);
   }, [model.isReady, targetCocoLabel]);
 
-  // "No la encuentro" — only AFTER the model is ready, so the download wait isn't
-  // mistaken for "not in the scene". The window is then real searching time.
+  // "No la encuentro" — starts only once the model is ready AND we've announced
+  // the search (searchArmed), so neither the model download nor the intro
+  // narration eats into the real searching window.
   useEffect(() => {
-    if (!targetCocoLabel || !model.isReady) return;
+    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
     const t = setTimeout(() => {
       if (!spottedRef.current && !notFoundRef.current) {
         notFoundRef.current = true;
@@ -114,7 +136,7 @@ export function GuideScreen({
       }
     }, CONFIG.GUIDE_NOT_FOUND_MS);
     return () => clearTimeout(t);
-  }, [model.isReady, targetCocoLabel]);
+  }, [model.isReady, targetCocoLabel, searchArmed]);
 
   // Tiered audio (real flow only):
   //  • detected in frame (any proximity) → tentative "creo que lo veo" once
@@ -141,8 +163,17 @@ export function GuideScreen({
       spottedRef.current = true;
       void speak(COPY.guide.spotted);
     }
-    if (proximity >= CONFIG.GUIDE_FOUND_PROXIMITY && !foundRef.current) {
+    // "¡ahí está!" fires when reachable, but only once per re-arm AND no sooner
+    // than the cooldown — otherwise small wobbles across the threshold make Lola
+    // repeat it back-to-back. After the cooldown, a genuine lose-and-refind says
+    // it again (which is what we want).
+    if (
+      proximity >= CONFIG.GUIDE_FOUND_PROXIMITY &&
+      !foundRef.current &&
+      Date.now() - lastFoundAt.current >= CONFIG.GUIDE_FOUND_COOLDOWN_MS
+    ) {
       foundRef.current = true;
+      lastFoundAt.current = Date.now();
       void speak(COPY.guide.found);
       // Safety auto-close: task done → wrap up after a grab window (tap exits sooner).
       if (!autoCloseTimer.current) {
@@ -316,7 +347,7 @@ function MockLayer({
   return (
     <>
       {hasPermission && device ? (
-        <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} />
+        <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} onError={onCameraError} />
       ) : (
         <CamFallback hasPermission={hasPermission} />
       )}
@@ -354,6 +385,16 @@ function LiveLayer({
   });
   const [workletErr, setWorkletErr] = useState<string | null>(null);
   const lastAt = useRef(0);
+  const lastLogAt = useRef(0);
+
+  // Diagnostics: the blind flow hides the on-screen banner, so log what the
+  // detector is actually doing (frames arriving? labels? errors?) to Metro.
+  useEffect(() => {
+    console.log('[guide] LiveLayer mounted — hasPermission:', hasPermission, 'device:', device?.id ?? 'NONE', 'active:', active);
+  }, [hasPermission, device, active]);
+  useEffect(() => {
+    if (workletErr) console.log('[guide] FRAME-PROCESSOR ERROR:', workletErr);
+  }, [workletErr]);
 
   const onResult = useCallback(
     (boxes: RawDetection[], w: number, h: number) => {
@@ -364,6 +405,15 @@ function LiveLayer({
       const ss = screenSpaceDims(w, h);
       onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, ss.w, ss.h)) : null);
       const now = Date.now();
+      // Throttled detection log (~1.5s) so we can see if frames flow and what
+      // the model sees vs. the target we're homing on.
+      if (now - lastLogAt.current > 1500) {
+        lastLogAt.current = now;
+        console.log(
+          `[guide] frame ${w}x${h} · ${boxes.length} det · target=${target ?? 'any'} · best=${best ? 'YES' : 'no'} · ` +
+          boxes.slice(0, 6).map(b => `${String(b.label)}:${b.score.toFixed(2)}`).join(', '),
+        );
+      }
       if (now - lastAt.current > 120) {
         lastAt.current = now;
         setDet({ boxes, w, h, best });
@@ -395,7 +445,7 @@ function LiveLayer({
 
   return (
     <>
-      <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} outputs={outputs} />
+      <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} outputs={outputs} onError={onCameraError} />
 
       {/* Blind/real flow hides all of this — the camera runs only for detection;
           GuideScreen draws the branded BlindOverlay on top. */}
@@ -459,6 +509,18 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
+}
+
+// VisionCamera emits native camera errors here. The common ones —
+// "device/camera-is-disabled" and the generic fatal "Encountered a fatal Camera
+// error" — fire when the OS reclaims the camera (app backgrounded, screen lock,
+// or a device-policy/MDM restriction) and recover on their own once the app
+// foregrounds and `isActive` flips back on. Without an onError prop VisionCamera
+// logs them via console.error (the red ERROR spam in Metro); swallow them with a
+// quiet log instead so they don't look like a crash.
+function onCameraError(e: Error) {
+  const code = (e as { code?: string }).code;
+  console.log('[guide] camera error (transient, recovers on foreground):', code ?? '', e.message);
 }
 
 function CamFallback({ hasPermission }: { hasPermission: boolean }) {

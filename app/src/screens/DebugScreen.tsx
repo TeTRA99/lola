@@ -1,10 +1,12 @@
-// E6.4 — DebugScreen. Hidden behind 10-second LaunchSplash hold. Charly-only.
-// English UI (Charly tool). Surfaces local usage_events telemetry per AD-6.
+// E6.4 — DebugScreen. Reached from the dev-only 🐞 icon on Home (debug builds).
+// Charly-only. English UI (Charly tool). Surfaces local usage_events per AD-6.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { getDb } from '@/adapters/storage';
+import * as Settings from '@/services/Settings';
+import { TOP_INSET } from '@/theme/insets';
 import {
   groupByDay,
   workingSignal,
@@ -13,6 +15,16 @@ import {
   recentEventsWithin,
   type UsageEvent,
 } from '@/services/UsageStats';
+
+// All first-run flags, cleared together by "Reset onboarding".
+const ONBOARDING_KEYS = [
+  Settings.KEYS.welcomeSeen,
+  Settings.KEYS.describeHintSeen,
+  Settings.KEYS.askHintSeen,
+  Settings.KEYS.guideHintSeen,
+  Settings.KEYS.heartbeatHintSeen,
+  Settings.KEYS.caregiverIntroSeen,
+];
 
 export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onOpenGuide?: () => void }) {
   const [events, setEvents] = useState<UsageEvent[]>([]);
@@ -42,6 +54,12 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
     await Clipboard.setStringAsync(JSON.stringify(events, null, 2));
     setExportNote(`Exported ${events.length} events to clipboard`);
     setTimeout(() => setExportNote(null), 2500);
+  };
+
+  const onResetOnboarding = async () => {
+    await Promise.all(ONBOARDING_KEYS.map(k => Settings.setBool(k, false)));
+    setExportNote('Onboarding reset — relaunch the app to see the welcome again');
+    setTimeout(() => setExportNote(null), 3500);
   };
 
   return (
@@ -122,6 +140,11 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
       <Pressable style={styles.exportBtn} onPress={onExport}>
         <Text style={styles.exportBtnText}>Export usage_events JSON to clipboard</Text>
       </Pressable>
+
+      {/* Reset first-run onboarding (welcome + first-use hints + caregiver intro) */}
+      <Pressable style={styles.resetBtn} onPress={onResetOnboarding}>
+        <Text style={styles.resetBtnText}>Reset onboarding (welcome + hints)</Text>
+      </Pressable>
       {exportNote ? <Text style={styles.exportNote}>{exportNote}</Text> : null}
 
       <Text style={styles.footer}>Total events stored: {events.length}</Text>
@@ -131,7 +154,7 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#1a1a1a' },
-  content: { padding: 16, paddingBottom: 64 },
+  content: { padding: 16, paddingTop: TOP_INSET + 16, paddingBottom: 64 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333', marginBottom: 16,
@@ -161,6 +184,10 @@ const styles = StyleSheet.create({
     marginTop: 24, padding: 14, backgroundColor: '#4af', borderRadius: 8, alignItems: 'center',
   },
   exportBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  resetBtn: {
+    marginTop: 12, padding: 14, backgroundColor: '#5a3a1e', borderRadius: 8, alignItems: 'center',
+  },
+  resetBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   guideBtn: {
     marginBottom: 16, padding: 14, backgroundColor: '#1A73E8', borderRadius: 8, alignItems: 'center',
   },

@@ -9,7 +9,17 @@ export type STTError =
   | 'permission_denied' | 'no_locale' | 'no_speech'
   | 'timeout' | 'engine_unavailable' | 'unknown';
 
-export type ListenOptions = { hardCapMs?: number };
+export type ListenOptions = {
+  hardCapMs?: number;
+  /** Fired once when the mic is actually capturing audio (engine `audiostart`/
+   *  `start`), i.e. the moment it's safe to start talking. Lets the caller delay
+   *  the "Te escucho…" cue until the mic is truly open instead of guessing. */
+  onReady?: () => void;
+};
+
+// If the engine emits neither `audiostart` nor `start` (rare), surface "ready"
+// anyway after this long so the listening cue never gets stuck.
+const READY_FALLBACK_MS = 1500;
 
 let resolvedLocale: string | null = null;
 let activeAbort: (() => void) | null = null;
@@ -64,15 +74,32 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
     let subResult: { remove: () => void } | null = null;
     let subEnd: { remove: () => void } | null = null;
     let subError: { remove: () => void } | null = null;
+    let subStart: { remove: () => void } | null = null;
+    let subAudioStart: { remove: () => void } | null = null;
+    let readyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Fire onReady exactly once — whichever of audiostart / start / fallback hits first.
+    let readyFired = false;
+    const fireReady = () => {
+      if (readyFired) return;
+      readyFired = true;
+      if (readyTimer) { clearTimeout(readyTimer); readyTimer = null; }
+      subStart?.remove();
+      subAudioStart?.remove();
+      try { opts.onReady?.(); } catch { /* never break listen() */ }
+    };
 
     const settle = (r: Result<string, STTError>) => {
       if (settled) return;
       settled = true;
       if (hardTimeout) clearTimeout(hardTimeout);
+      if (readyTimer) clearTimeout(readyTimer);
       try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
       subResult?.remove();
       subEnd?.remove();
       subError?.remove();
+      subStart?.remove();
+      subAudioStart?.remove();
       activeAbort = null;
       resolve(r);
     };
@@ -91,6 +118,9 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
       const code = e.error ?? '';
       settle(err(code === 'not-allowed' ? 'permission_denied' : 'unknown'));
     });
+    // Mic-open signals — the real "you can talk now" moment.
+    subAudioStart = ExpoSpeechRecognitionModule.addListener('audiostart', fireReady);
+    subStart = ExpoSpeechRecognitionModule.addListener('start', fireReady);
 
     activeAbort = () => settle(err('timeout'));
 
@@ -108,6 +138,7 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
       return;
     }
 
+    readyTimer = setTimeout(fireReady, READY_FALLBACK_MS);
     hardTimeout = setTimeout(
       () => settle(err('timeout')),
       opts.hardCapMs ?? CONFIG.STT_HARD_CAP_MS,

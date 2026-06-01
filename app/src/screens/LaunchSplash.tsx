@@ -1,48 +1,33 @@
 // FR-6.2 launch greeting. Brand moment on the ink surface: floating lens mark,
-// "Lola" wordmark, greeting, and a caregiver legend pointing to the OS app-icon
-// Setup shortcut (handoff §1).
+// "Lola" wordmark, and greeting. Auto-dismisses to Home after the splash window.
 //
-// The visible UI carries NO settings affordance (locked decision #3). Setup is
-// reached only through the OS app-icon "Configuración" shortcut. The splash
-// keeps a single invisible escape hatch for the developer: a 10-second hold
-// opens the Debug screen (nothing on screen hints at it).
-//
-// Auto-dismiss after the splash window unless the user is holding; a held press
-// past the debug threshold opens Debug on release.
+// Setup is reached from the gear on Dad's Home (and the OS app-icon shortcut),
+// and the Debug screen is reached from a dev-only icon on Home (debug builds),
+// so the splash no longer carries any hidden gesture.
 
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { LolaMark } from '@/components/LolaMark';
-import { Icon } from '@/components/Icon';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
 import * as Settings from '@/services/Settings';
-import { CONFIG } from '@/config';
 import { color, fontFamily } from '@/theme/tokens';
-import { BOTTOM_INSET } from '@/theme/insets';
 
 const SPLASH_DURATION_MS = 3000;
 
 type Props = {
   onDone: () => void;
-  onDebug?: () => void;
 };
 
-export function LaunchSplash({ onDone, onDebug }: Props) {
-  const [pressed, setPressed] = useState(false);
+export function LaunchSplash({ onDone }: Props) {
   const float = useRef(new Animated.Value(0)).current;
-
   const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debugTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reachedDebug = useRef(false);
   const greeted = useRef(false);
 
-  // Refs to the callbacks let the timer fire the latest closure without
+  // A ref to the callback lets the timer fire the latest closure without
   // re-running the mount effect.
   const onDoneRef = useRef(onDone);
-  const onDebugRef = useRef(onDebug);
   onDoneRef.current = onDone;
-  onDebugRef.current = onDebug;
 
   useEffect(() => {
     if (!greeted.current) {
@@ -58,44 +43,15 @@ export function LaunchSplash({ onDone, onDebug }: Props) {
       ]),
     );
     loop.start();
-    // Arm the initial auto-dismiss right at mount — no input needed.
     autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
     return () => {
       loop.stop();
-      [autoDismiss, debugTimer].forEach(t => {
-        if (t.current) clearTimeout(t.current);
-        t.current = null;
-      });
+      if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
     };
   }, [float]);
 
-  useEffect(() => {
-    if (pressed) {
-      // Hold cancels auto-dismiss; crossing the debug threshold arms Debug.
-      if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
-      reachedDebug.current = false;
-      debugTimer.current = setTimeout(() => {
-        reachedDebug.current = true;
-      }, CONFIG.DEBUG_GESTURE_HOLD_MS);
-    } else {
-      if (debugTimer.current) { clearTimeout(debugTimer.current); debugTimer.current = null; }
-      const wasDebug = reachedDebug.current;
-      reachedDebug.current = false;
-
-      if (wasDebug) {
-        onDebugRef.current?.();
-      } else if (!autoDismiss.current) {
-        autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
-      }
-    }
-  }, [pressed]);
-
   return (
-    <Pressable
-      style={styles.root}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-    >
+    <View style={styles.root}>
       <View style={styles.center}>
         <Animated.View style={{ transform: [{ translateY: float }] }}>
           <LolaMark size={92} />
@@ -103,15 +59,7 @@ export function LaunchSplash({ onDone, onDebug }: Props) {
         <Text style={styles.wordmark}>Lola</Text>
         <Text style={styles.greeting}>{COPY.splash.hello}</Text>
       </View>
-
-      <View style={styles.legend}>
-        <View style={styles.legendRow}>
-          <Icon name="settings" size={15} color="rgba(255,255,255,0.62)" />
-          <Text style={styles.legendTitle}>{COPY.splash.settings}</Text>
-        </View>
-        <Text style={styles.legendHint}>{COPY.splash.settingsHint}</Text>
-      </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -136,27 +84,5 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontFamily: fontFamily.regular,
     marginTop: 12,
-  },
-  legend: {
-    position: 'absolute',
-    bottom: 16 + BOTTOM_INSET,
-    left: 24,
-    right: 24,
-    alignItems: 'center',
-    gap: 3,
-  },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  legendTitle: {
-    color: 'rgba(255,255,255,0.62)',
-    fontSize: 13.5,
-    fontFamily: fontFamily.bold,
-    fontWeight: '700',
-  },
-  legendHint: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12.5,
-    fontFamily: fontFamily.medium,
-    textAlign: 'center',
-    lineHeight: 17,
   },
 });

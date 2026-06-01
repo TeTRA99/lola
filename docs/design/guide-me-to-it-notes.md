@@ -181,6 +181,54 @@ LATER against the real flow, not as a standalone bake-off.
    expo-camera handoff) — need the device to tune.
 Steps 1–3 are pure logic (verifiable without the A12); 3–4 feel-tune on device.
 
+## Built — the real "guíame a X" flow (2026-06-01)
+Wired the voice trigger end-to-end and hardened the UX. All changes verified with
+`tsc` + `eslint` + jest (235 tests).
+
+- **Trigger:** `"guiame a X"` → IntentRouter `guide` route (bare noun) →
+  `AskService.handleGuide` → `GuideTargets.resolveGuideTarget` → opens GuideScreen
+  with `{ cocoLabel, spoken }`.
+- **3-tier target resolution** (`GuideTargets.ts`, LLM-driven, no synonym dict):
+  the resolver returns `{ label, match: 'exact' | 'approx', spoken }`.
+  - **exact** ("una taza" → cup) → guide silently.
+  - **approx** ("el termo" → bottle — a thermos isn't a COCO class but reads as a
+    bottle) → speak a warning first (`COPY.guide.approxWarning`), then guide. Logged
+    as `guide_approx`.
+  - **unsupported** (label null: "las llaves", "mis anteojos") → warm message that
+    points to Describir (`COPY.guide.cannotGuide`), no navigation. Logged
+    `guide_unsupported`. Truly arbitrary objects still need the open-vocab track.
+- **Natural spoken phrase:** the IntentRouter noun is bare/article-less ("termo")
+  for canonical matching, which read wrong in sentences ("…hasta termo"). The
+  resolver now also returns `spoken` WITH the article ("el termo") for the search /
+  not-found / on-screen lines. The unsupported line drops the noun entirely.
+- **First-use hint** (`COPY.onboarding.guideHint`, gated by `Settings.KEYS.guideHintSeen`):
+  explains the vibration once, before the first search. Does NOT repeat "movéme
+  despacio" (that lives only in the `searching` line — dedup fix).
+- **No-find window timing:** `GUIDE_NOT_FOUND_MS` (12s) now starts when the
+  "Buscando… movéme despacio" line is **announced** (`searchArmed`) AND the model
+  is ready — NOT on model-readiness alone. Previously the intro narration ate the
+  window, so "No encuentro…" fired ~1-2s after searching began.
+- **Found-cue cooldown:** `GUIDE_FOUND_COOLDOWN_MS` (6s) stops "¡ahí está!" from
+  repeating on small wobbles across the threshold; a genuine lose-and-refind after
+  the cooldown still re-announces. ("Creo que lo veo" was already once-per-session.)
+- **Resilience:** the lazy GuideScreen is wrapped in an `ErrorBoundary`
+  (`components/ErrorBoundary.tsx`) → on a load failure it shows a calm
+  `GuideLoadFallback` ("No pude abrir esto…") and returns Home instead of crashing.
+- **Diagnostics:** the blind flow hides the dev banner, so GuideScreen logs
+  `[guide]` lines to Metro (camera permission/device, model ready/progress,
+  throttled per-frame detection counts + labels + best, frame-processor errors).
+
+### ⚠️ Worklets babel plugin — CORRECTION to the 2026-05-29 note
+The "Spike outcome" note above said to **add** `react-native-worklets/plugin` to
+`babel.config.js`. That is now **wrong** and was the cause of a fresh
+`[Worklets] Failed to create a worklet` crash when VisionCamera loaded:
+**`babel-preset-expo` (56.0.13) auto-injects the worklets plugin** (correctly placed
+last) whenever `react-native-worklets` is installed. Having it **also** in
+`babel.config.js` ran the transform **twice** → broken worklets. **Fix: do NOT add
+it manually** — let the preset handle it. After changing babel config, clear Metro
+cache (`npx expo start -c`) and reload; no EAS rebuild needed (native worklets are
+already in the dev client).
+
 ## Sources
 - [ExecuTorch releases](https://github.com/software-mansion/react-native-executorch/releases)
 - [Pulsar RN docs](https://docs.swmansion.com/pulsar/sdk/react-native/)

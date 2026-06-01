@@ -4,9 +4,11 @@ module.exports = function (api) {
     presets: ['babel-preset-expo'],
     plugins: [
       ['module-resolver', { alias: { '@': './src' } }],
-      // VisionCamera v5 frame processors run on a worklet runtime; this plugin
-      // must stay LAST in the list.
-      'react-native-worklets/plugin',
+      // NOTE: do NOT add 'react-native-worklets/plugin' here. babel-preset-expo
+      // (SDK 52+) auto-injects it — correctly placed last — whenever the package
+      // is installed. Adding it manually ran the worklets transform twice, which
+      // caused a runtime "[Worklets] Failed to create a worklet" when VisionCamera
+      // loaded (the guide screen). VisionCamera frame processors still work.
     ],
   };
 };

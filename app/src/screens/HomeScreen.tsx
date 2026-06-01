@@ -1,19 +1,28 @@
-// FR-1 + FR-2 home (handoff §3). Two equal panels — top = Describir (white,
-// camera), bottom = Preguntar (near-black, mic). Tapping a panel runs that
-// action and the active state cycle (listening → thinking → speaking) plays
-// INSIDE the tapped panel; the other panel dims and disables. Lola returns to
-// idle on her own when she finishes — there is no stop button (locked #2).
+// FR-1 + FR-2 home (handoff_home, "cards" layout). A light (sunken) screen with
+// a top bar — prompt left, settings gear right — over two rounded action cards:
+// top = Describir (white, camera), bottom = Preguntar (near-black, mic). The
+// cards sit inside margins with a 14px dead-zone gap between them so taps near
+// the screen edges / the seam don't land on the wrong action.
+//
+// Tapping a card runs that action and the active state cycle (listening →
+// thinking → speaking) plays INSIDE the tapped card; the other card dims. Lola
+// returns to idle on her own when she finishes; tapping again stops her (there
+// is no stop button — locked #2).
 //
 // The visible state is driven off the same lifecycle the services already emit:
 // haptic `fire()` events (listening_start / thinking_start / answer_ready) plus
 // the TTS speaking-text stream. The run() promise resolving returns us to idle
 // (services await speak() before resolving) or surfaces a calm error.
+//
+// The gear is long-press-gated (a plain tap shows a hint) so the low-vision end
+// user can't trip into the caregiver Setup screen.
 
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -25,13 +34,15 @@ import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
 import { subscribeHaptics, heartbeat, type HapticPattern } from '@/adapters/haptics';
-import { subscribeSpeech, stop as ttsStop } from '@/adapters/tts';
+import { subscribeSpeech, speak, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
 import * as Settings from '@/services/Settings';
 import { Icon } from '@/components/Icon';
 import { ActionIcon } from '@/components/ActionIcon';
 import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { Toast, type ToastMessage } from '@/components/Toast';
+import { WelcomeOverlay } from '@/components/WelcomeOverlay';
 import { color, fontFamily } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 
@@ -43,11 +54,13 @@ const ACCENT_DARK = color.dad.askAccent; // #5AA2F5
 const ACCENT_LIGHT = color.primary[500]; // #1A73E8
 
 export function HomeScreen({
-  onDevSetup,
+  onOpenSettings,
+  onDevDebug,
   onDevGuide,
   onOpenGuide,
 }: {
-  onDevSetup?: () => void;
+  onOpenSettings?: () => void;
+  onDevDebug?: () => void;
   onDevGuide?: () => void;
   onOpenGuide?: (target: { cocoLabel: string; spoken: string }) => void;
 }) {
@@ -55,12 +68,29 @@ export function HomeScreen({
   const [state, setState] = useState<HomeState>('idle');
   const [errKind, setErrKind] = useState<ErrKind>('camera');
   const [spoken, setSpoken] = useState('');
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const running = state === 'listening' || state === 'thinking' || state === 'speaking';
   const runningRef = useRef(false);
   runningRef.current = running;
   // Set when the user taps to interrupt, so the in-flight run()'s resolution
   // doesn't overwrite the idle state we just forced.
   const cancelledRef = useRef(false);
+  // True while a first-use hint is being spoken before a flow starts — blocks
+  // re-entry so a second tap doesn't kick off a parallel run.
+  const preparingRef = useRef(false);
+
+  // First-run welcome (item #6): a one-time voice-first interstitial. Shown once
+  // ever, then suppressed via the welcomeSeen flag.
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.welcomeSeen, false).then(seen => {
+      if (!seen) setShowWelcome(true);
+    });
+  }, []);
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    void Settings.setBool(Settings.KEYS.welcomeSeen, true);
+  };
 
   // Tap anywhere while Lola is listening/thinking/speaking → stop her and
   // return to idle. (Re-tap a panel to start fresh.)
@@ -96,11 +126,28 @@ export function HomeScreen({
   useEffect(() => {
     void Settings.getBool(Settings.KEYS.idleHeartbeat, true).then(setHeartbeatOn);
   }, []);
+  // Whether the one-time "that pulse is me" hint still needs to play. Starts
+  // true (suppressed) until the stored flag loads, so we never speak before we
+  // know it's the first time.
+  const heartbeatHintDoneRef = useRef(true);
   useEffect(() => {
-    if (!heartbeatOn || state !== 'idle') return;
-    const id = setInterval(heartbeat, 6000);
+    void Settings.getBool(Settings.KEYS.heartbeatHintSeen, false).then(seen => {
+      heartbeatHintDoneRef.current = seen;
+    });
+  }, []);
+  useEffect(() => {
+    if (!heartbeatOn || state !== 'idle' || showWelcome) return;
+    const id = setInterval(() => {
+      heartbeat();
+      // First heartbeat ever → explain the buzz once, so it isn't a mystery.
+      if (!heartbeatHintDoneRef.current) {
+        heartbeatHintDoneRef.current = true;
+        void Settings.setBool(Settings.KEYS.heartbeatHintSeen, true);
+        void speak(COPY.onboarding.heartbeatHint);
+      }
+    }, 6000);
     return () => clearInterval(id);
-  }, [heartbeatOn, state]);
+  }, [heartbeatOn, state, showWelcome]);
 
   // Camera error is calm and self-clearing — Lola says her line and the screen
   // returns to the menu on its own (handoff §3). Tapping returns sooner. The
@@ -114,10 +161,24 @@ export function HomeScreen({
 
   const run = async (m: Mode) => {
     if (runningRef.current) { stopActive(); return; } // tap during a run = stop
+    if (preparingRef.current) return; // a first-use hint is still playing
     cancelledRef.current = false;
     setMode(m);
     setSpoken('');
-    setState(m === 'ask' ? 'listening' : 'thinking');
+    // First-use hint (once per feature), spoken before the flow so it doesn't
+    // collide with the mic (Preguntar) or Lola's answer (Describir).
+    preparingRef.current = true;
+    const hintKey = m === 'ask' ? Settings.KEYS.askHintSeen : Settings.KEYS.describeHintSeen;
+    if (!(await Settings.getBool(hintKey, false))) {
+      await Settings.setBool(hintKey, true);
+      await speak(m === 'ask' ? COPY.onboarding.askHint : COPY.onboarding.describeHint);
+    }
+    preparingRef.current = false;
+    if (cancelledRef.current) return;
+    // Both modes open on "thinking" (Un momento…). For Ask, the mic isn't open
+    // yet — AskService flips us to "Te escucho…" via the listening_start haptic
+    // the moment it actually is, so the user doesn't talk into a warming-up mic.
+    setState('thinking');
     try {
       const res = m === 'describe' ? await DescribeService.run() : await AskService.run();
       if (cancelledRef.current) return; // user interrupted — don't clobber idle
@@ -141,6 +202,16 @@ export function HomeScreen({
       setState('error');
     }
   };
+
+  // Top bar fades out (and stops taking touches) while a flow is running.
+  // NOTE: must stay above the `state === 'error'` early return below — all hooks
+  // have to run on every render, error state included.
+  const topBarOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(topBarOpacity, {
+      toValue: running ? 0 : 1, duration: 300, useNativeDriver: true,
+    }).start();
+  }, [running, topBarOpacity]);
 
   // ---- ERROR (calm, never alarming) ----
   if (state === 'error') {
@@ -177,100 +248,130 @@ export function HomeScreen({
 
   return (
     <View style={styles.root}>
-      {/* Black status-bar strip (with light icons) over the white top panel. */}
-      <StatusBar style="light" />
-      <View style={styles.statusBarBg} />
+      {/* Light (sunken) surface → dark status-bar icons. */}
+      <StatusBar style="dark" />
       <CameraHost />
 
-      {/* Dev-only shortcut to Setup (production reaches Setup via the OS
-          app-icon shortcut). Rendered only when a handler is passed. */}
-      {onDevSetup && (
-        <Pressable
-          onPress={onDevSetup}
-          style={styles.devGear}
-          accessibilityLabel="Dev: open Setup"
-        >
-          <Icon name="settings" size={20} color="rgba(255,255,255,0.92)" />
-        </Pressable>
-      )}
+      {/* Top bar: prompt (left) + settings gear (right). Long-press the gear to
+          open Setup; a plain tap shows a hint (gated so the end user can't trip
+          into the caregiver screen). The dev-only 🎯 jumps to the guide spike. */}
+      <Animated.View
+        style={[styles.topBar, { opacity: topBarOpacity }]}
+        pointerEvents={running ? 'none' : 'auto'}
+      >
+        <Text style={styles.prompt}>{COPY.home.homePrompt}</Text>
+        <View style={styles.topRight}>
+          {onDevDebug && (
+            <Pressable
+              onPress={onDevDebug}
+              style={styles.devBtn}
+              accessibilityLabel="Dev: open Debug"
+            >
+              <Text style={styles.devBtnText}>🐞</Text>
+            </Pressable>
+          )}
+          {onDevGuide && (
+            <Pressable
+              onPress={onDevGuide}
+              style={styles.devBtn}
+              accessibilityLabel="Dev: open Guide spike"
+            >
+              <Text style={styles.devBtnText}>🎯</Text>
+            </Pressable>
+          )}
+          {onOpenSettings && (
+            <Pressable
+              onPress={() => setToast({ text: COPY.home.settingsHint })}
+              onLongPress={onOpenSettings}
+              delayLongPress={500}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel={COPY.splash.settings}
+              accessibilityHint={COPY.home.settingsHint}
+              style={styles.gearBtn}
+            >
+              <Icon name="settings" size={22} color={color.text.low} />
+            </Pressable>
+          )}
+        </View>
+      </Animated.View>
 
-      {/* Dev-only shortcut straight to the guide-me-to-it spike. */}
-      {onDevGuide && (
-        <Pressable
-          onPress={onDevGuide}
-          style={styles.devGuide}
-          accessibilityLabel="Dev: open Guide spike"
-        >
-          <Text style={styles.devGuideText}>🎯</Text>
-        </Pressable>
-      )}
-
-      <Panel
+      <Card
         dark={false}
         action="describe"
         state={describeState}
         spoken={spoken}
-        dimmed={running && !describeActive}
-        disabled={false}
+        running={running}
+        active={describeActive}
         onPress={() => run('describe')}
       />
-      <View style={styles.divider} />
-      <Panel
+      <View style={styles.cardGap} />
+      <Card
         dark
         action="ask"
         state={askState}
         spoken={spoken}
-        dimmed={running && !askActive}
-        disabled={false}
+        running={running}
+        active={askActive}
         onPress={() => run('ask')}
       />
+
+      <Toast message={toast} onHide={() => setToast(null)} />
+
+      {showWelcome && <WelcomeOverlay onDismiss={dismissWelcome} />}
     </View>
   );
 }
 
-// ---------------- PANEL ----------------
-function Panel({
-  dark, action, state, spoken, dimmed, disabled, onPress,
+// ---------------- CARD ----------------
+// Rounded action card. Idle weights: Describir taller (flex 1.32), Preguntar
+// shorter (0.92). While a flow runs, the active card grows toward flex 1 and the
+// other dims to 0.26. flex/opacity can't use the native driver, so this animates
+// on the JS thread (the inner state animations still run natively).
+function Card({
+  dark, action, state, spoken, running, active, onPress,
 }: {
   dark: boolean;
   action: Mode;
   state: HomeState;
   spoken: string;
-  dimmed: boolean;
-  disabled: boolean;
+  running: boolean;
+  active: boolean;
   onPress: () => void;
 }) {
-  const dim = useRef(new Animated.Value(1)).current;
+  const baseFlex = dark ? 0.92 : 1.32;
+  const flex = useRef(new Animated.Value(baseFlex)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const dimmed = running && !active;
   useEffect(() => {
-    Animated.timing(dim, { toValue: dimmed ? 0.32 : 1, duration: 350, useNativeDriver: true }).start();
-  }, [dimmed, dim]);
+    Animated.parallel([
+      Animated.timing(flex, {
+        toValue: active ? 1 : baseFlex, duration: 350, easing: Easing.inOut(Easing.ease), useNativeDriver: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: dimmed ? 0.26 : 1, duration: 350, easing: Easing.inOut(Easing.ease), useNativeDriver: false,
+      }),
+    ]).start();
+  }, [active, dimmed, baseFlex, flex, opacity]);
 
-  const active = state !== 'idle';
   const label = action === 'ask' ? COPY.buttons.askLabel : COPY.buttons.describeLabel;
 
   return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={[styles.panel, { backgroundColor: dark ? color.dad.askBg : color.dad.describeBg }]}
+    <Animated.View
+      style={[styles.cardWrap, dark ? styles.cardWrapDark : styles.cardWrapLight, { flex, opacity }]}
     >
-      {/* Pad each panel's content by its system-bar inset so it centers in the
-          VISIBLE half (status bar over the top panel, nav bar over the bottom),
-          keeping the two panels looking evenly split. */}
-      <Animated.View
-        style={[
-          styles.panelInner,
-          { opacity: dim, paddingTop: dark ? 0 : TOP_INSET, paddingBottom: dark ? BOTTOM_INSET : 0 },
-        ]}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={[styles.card, dark ? styles.cardDark : styles.cardLight]}
       >
         {active && <GlowBackdrop dark={dark} />}
         <View style={styles.stage}>
           <FieldStage dark={dark} action={action} state={state} spoken={spoken} />
         </View>
-      </Animated.View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -287,7 +388,7 @@ function FieldStage({
     return (
       <>
         <View style={[styles.idleCircle, { backgroundColor: circleBg }]}>
-          <ActionIcon kind={isAsk ? 'ask' : 'describe'} size={84} color={accent} strokeWidth={1.6} />
+          <ActionIcon kind={isAsk ? 'ask' : 'describe'} size={90} color={accent} strokeWidth={1.45} />
         </View>
         <Text style={[styles.actionLabel, { color: textColor }]}>{isAsk ? COPY.buttons.askLabel : COPY.buttons.describeLabel}</Text>
       </>
@@ -439,32 +540,48 @@ function Waveform({ accent }: { accent: string }) {
   );
 }
 
+const cardShadowLight = Platform.select({
+  android: { elevation: 6 },
+  default: { shadowColor: '#0C0D0F', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 30 },
+});
+const cardShadowDark = Platform.select({
+  android: { elevation: 10 },
+  default: { shadowColor: '#0C0D0F', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.4, shadowRadius: 36 },
+});
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.neutral.ink },
-  statusBarBg: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: TOP_INSET,
-    backgroundColor: color.neutral.ink, zIndex: 5,
+  root: {
+    flex: 1,
+    backgroundColor: color.neutral.sunken,
+    paddingHorizontal: 16,
+    paddingTop: TOP_INSET,
+    paddingBottom: BOTTOM_INSET + 20,
   },
-  devGear: {
-    position: 'absolute', top: TOP_INSET + 8, right: 14, zIndex: 10,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(80,80,80,0.45)',
+  topBar: {
+    height: 46, marginVertical: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  prompt: { color: color.text.high, fontSize: 21, fontFamily: fontFamily.extrabold, fontWeight: '800', letterSpacing: -0.2 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  devBtnText: { fontSize: 20 },
+
+  cardWrap: { borderRadius: 34, minHeight: 190 },
+  cardWrapLight: { backgroundColor: color.dad.describeBg, ...cardShadowLight },
+  cardWrapDark: { backgroundColor: color.dad.askBg, ...cardShadowDark },
+  card: {
+    flex: 1, borderRadius: 34, overflow: 'hidden', padding: 24,
     alignItems: 'center', justifyContent: 'center',
   },
-  devGuide: {
-    position: 'absolute', top: TOP_INSET + 8, right: 66, zIndex: 10,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(80,80,80,0.45)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  devGuideText: { fontSize: 20 },
-  divider: { height: 1, backgroundColor: 'rgba(0,0,0,0.06)' },
-  panel: { flex: 1, overflow: 'hidden' },
-  panelInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  stage: { alignItems: 'center', justifyContent: 'center', gap: 20, paddingHorizontal: 28, zIndex: 2 },
+  cardLight: { backgroundColor: color.dad.describeBg, borderWidth: 1.5, borderColor: color.neutral.border },
+  cardDark: { backgroundColor: color.dad.askBg },
+  cardGap: { height: 14 },
+
+  stage: { alignItems: 'center', justifyContent: 'center', gap: 18, paddingHorizontal: 28, zIndex: 2 },
   glow: { position: 'absolute', width: 320, height: 320, borderRadius: 160 },
 
-  idleCircle: { width: 128, height: 128, borderRadius: 64, alignItems: 'center', justifyContent: 'center' },
+  idleCircle: { width: 150, height: 150, borderRadius: 75, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontSize: 44, fontFamily: fontFamily.extrabold, fontWeight: '800', letterSpacing: -0.5 },
   statusLabel: { fontSize: 28, fontFamily: fontFamily.bold, fontWeight: '700' },
   spoken: { fontSize: 23, fontFamily: fontFamily.semibold, fontWeight: '600', lineHeight: 31, textAlign: 'center', maxWidth: 260 },

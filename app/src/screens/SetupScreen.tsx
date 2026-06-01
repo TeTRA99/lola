@@ -37,7 +37,7 @@ import { Field } from '@/components/Field';
 import { Icon } from '@/components/Icon';
 import { Toast, type ToastMessage } from '@/components/Toast';
 import { useSetupStrings, setLang, useLang, type Lang } from '@/i18n';
-import { color, radius, fontFamily } from '@/theme/tokens';
+import { color, radius, fontFamily, shadow } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 import type { SetupCopy } from '@/i18n/setupStrings';
 
@@ -58,6 +58,18 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
   const [objectMode, setObjectMode] = useState<ObjectMode>({ kind: 'list' });
   const [roomMode, setRoomMode] = useState<RoomMode>({ kind: 'list' });
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // One-time caregiver intro card on first Setup open (item #6).
+  const [showIntro, setShowIntro] = useState(false);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.caregiverIntroSeen, false).then(seen => {
+      if (!seen) setShowIntro(true);
+    });
+  }, []);
+  const dismissIntro = () => {
+    setShowIntro(false);
+    void Settings.setBool(Settings.KEYS.caregiverIntroSeen, true);
+  };
 
   const refresh = useCallback(async () => {
     const cat = await OnboardingService.getCatalog();
@@ -172,6 +184,20 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
       )}
 
       <Toast message={toast} onHide={() => setToast(null)} />
+
+      {/* One-time caregiver intro — an overlay popup over the whole screen.
+          Tap anywhere (scrim or the card) to dismiss; the CTA is there too. */}
+      {showIntro && (
+        <Pressable style={styles.introOverlay} onPress={dismissIntro} accessibilityRole="button">
+          <View style={styles.introCard}>
+            <Text style={styles.introTitle}>{t.introTitle}</Text>
+            <Text style={styles.introBody}>{t.introBody}</Text>
+            <Pressable style={styles.introBtn} onPress={dismissIntro} accessibilityRole="button">
+              <Text style={styles.introBtnText}>{t.introDismiss}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -697,6 +723,24 @@ const styles = StyleSheet.create({
   formRoot: { flex: 1, backgroundColor: color.neutral.canvas },
   tabsWrap: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10 },
   addWrap: { paddingHorizontal: 18, paddingBottom: 12 },
+  introOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 100, elevation: 100,
+    backgroundColor: 'rgba(12,13,15,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  introCard: {
+    width: '100%', maxWidth: 420, padding: 22, gap: 12,
+    backgroundColor: color.neutral.white, borderRadius: radius.xl,
+    ...shadow('lg'),
+  },
+  introTitle: { fontSize: 20, fontFamily: fontFamily.bold, fontWeight: '700', color: color.text.high },
+  introBody: { fontSize: 15, fontFamily: fontFamily.regular, color: color.text.medium, lineHeight: 21 },
+  introBtn: {
+    alignSelf: 'flex-start', backgroundColor: color.primary[50],
+    borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 9, marginTop: 2,
+  },
+  introBtnText: { color: color.primary[600], fontSize: 15, fontFamily: fontFamily.bold, fontWeight: '700' },
   listContent: { paddingHorizontal: 18, paddingBottom: 24 + BOTTOM_INSET, gap: 10 },
 
   // The empty block fills the area below the header + tabs, so a plain center
