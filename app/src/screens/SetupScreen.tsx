@@ -133,10 +133,7 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
           <EmptyState kind="objects" onAdd={() => setObjectMode({ kind: 'add' })} />
         ) : (
           <>
-            <View style={styles.addWrap}>
-              <PrimaryButton label={t.addObject} leadingIcon="add" onPress={() => setObjectMode({ kind: 'add' })} />
-            </View>
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {catalog.map(item => (
                 <ListRow
                   key={item.id}
@@ -154,6 +151,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                 />
               ))}
             </ScrollView>
+            <View style={styles.addFooter}>
+              <PrimaryButton label={t.addObject} leadingIcon="add" onPress={() => setObjectMode({ kind: 'add' })} />
+            </View>
           </>
         )
       ) : (
@@ -161,10 +161,7 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
           <EmptyState kind="rooms" onAdd={() => setRoomMode({ kind: 'add' })} />
         ) : (
           <>
-            <View style={styles.addWrap}>
-              <PrimaryButton label={t.addRoom} leadingIcon="add" onPress={() => setRoomMode({ kind: 'add' })} />
-            </View>
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {rooms.map(item => (
                 <ListRow
                   key={item.id}
@@ -180,6 +177,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                 />
               ))}
             </ScrollView>
+            <View style={styles.addFooter}>
+              <PrimaryButton label={t.addRoom} leadingIcon="add" onPress={() => setRoomMode({ kind: 'add' })} />
+            </View>
           </>
         )
       )}
@@ -725,7 +725,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.neutral.canvas },
   formRoot: { flex: 1, backgroundColor: color.neutral.canvas },
   tabsWrap: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10 },
-  addWrap: { paddingHorizontal: 18, paddingBottom: 12 },
+  list: { flex: 1 },
+  addFooter: {
+    paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12 + BOTTOM_INSET,
+    borderTopWidth: 1, borderTopColor: color.neutral.border, backgroundColor: color.neutral.canvas,
+  },
   introOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 100, elevation: 100,
@@ -744,7 +748,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 9, marginTop: 2,
   },
   introBtnText: { color: color.primary[600], fontSize: 15, fontFamily: fontFamily.bold, fontWeight: '700' },
-  listContent: { paddingHorizontal: 18, paddingBottom: 24 + BOTTOM_INSET, gap: 10 },
+  listContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 16, gap: 10 },
 
   // The empty block fills the area below the header + tabs, so a plain center
   // sits below the true screen middle. Bias it up by ~the top-chrome height
