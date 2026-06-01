@@ -119,7 +119,7 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
           value={tab}
           onChange={setTab}
           items={[
-            { key: 'objects', label: t.objects, icon: 'objects' },
+            { key: 'objects', label: t.objects, icon: 'objects', renderIcon: ({ size, color: c }) => <MugIcon size={size} color={c} /> },
             { key: 'rooms', label: t.rooms, icon: 'rooms' },
             { key: 'settings', label: t.settings, icon: 'settings' },
           ]}

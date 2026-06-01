@@ -1,6 +1,7 @@
 // Segmented control on a sunken track. Active pill = white + small shadow.
 // Used for Objects / Rooms in Setup.
 
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { color, radius, fontFamily, shadow } from '@/theme/tokens';
 import { Icon } from './Icon';
@@ -9,6 +10,8 @@ export type TabItem<K extends string> = {
   key: K;
   label: string;
   icon: React.ComponentProps<typeof Icon>['name'];
+  /** Optional custom icon (e.g. an SVG) overriding the named Ionicon. */
+  renderIcon?: (props: { size: number; color: string }) => ReactNode;
 };
 
 type Props<K extends string> = {
@@ -30,7 +33,9 @@ export function Tabs<K extends string>({ value, onChange, items }: Props<K>) {
             accessibilityState={{ selected: active }}
             style={[styles.tab, active && [styles.tabActive, shadow('sm')]]}
           >
-            <Icon name={it.icon} size={18} color={active ? color.text.high : color.text.medium} />
+            {it.renderIcon
+              ? it.renderIcon({ size: 18, color: active ? color.text.high : color.text.medium })
+              : <Icon name={it.icon} size={18} color={active ? color.text.high : color.text.medium} />}
             <Text style={[styles.label, { color: active ? color.text.high : color.text.medium }]}>
               {it.label}
             </Text>
