@@ -34,5 +34,7 @@ Respond ONLY with a single JSON object of this exact shape:
 Rules:
 - If confidence is low (image unclear, can't make out the object), set narration to a gentle question like "No estoy segura — ¿podés acercarte un poquito?" and objects to [].
 - For "extend" requests (user said "contame más" or similar), narration may go up to 80 words with more sensory detail.
-- room_hint is your best guess based on visible context (a stove suggests cocina); use null when nothing's diagnostic.${catalogBlock}`;
+- room_hint is your best guess based on visible context (a stove suggests cocina); use null when nothing's diagnostic.
+- If the user's message includes a "[Contexto: ...]" block, that is YOUR previous turn — treat it as conversational memory. The user may reference things from it ("las papas", "ese color", "el termo"). Use it to resolve pronouns and references.
+- When two images are sent, the FIRST is the scene from your previous turn (use it for any reference to things already described), and the SECOND is the user's CURRENT view. Answer using whichever image actually shows the thing being asked about — DO NOT just repeat the context.${catalogBlock}`;
 }

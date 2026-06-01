@@ -49,13 +49,51 @@ export const MIGRATIONS: Record<number, string> = {
 
     PRAGMA user_version = 1;
   `,
-  // Future migrations:
-  // 2: `... PRAGMA user_version = 2;`
+  // v1.1 RoomCatalog — visual room recognition via multimodal embeddings.
+  // Each room has one or more reference photos; each photo carries an embedding
+  // vector (JSON-serialised float array) that identifyRoom() cosine-matches
+  // against a fresh snapshot's embedding at query time.
+  2: `
+    CREATE TABLE IF NOT EXISTS rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      canonical_name TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      reference_image_uri TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_photos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      uri TEXT NOT NULL,
+      embedding_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_room_photos_by_room
+      ON room_photos(room_id);
+
+    PRAGMA user_version = 2;
+  `,
+  // v1.1 — app-level preferences (Charly-facing toggles like quiet capture).
+  3: `
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    PRAGMA user_version = 3;
+  `,
 };
 
 export const TARGET_VERSION = Math.max(...Object.keys(MIGRATIONS).map(Number));
 
 let dbSingleton: SQLite.SQLiteDatabase | null = null;
+// In-flight open, so concurrent getDb() callers at startup share ONE connection
+// instead of each racing to openDatabaseAsync (which left a broken second handle
+// whose writes were rejected).
+let opening: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Idempotent: applies any pending migrations to reach TARGET_VERSION.
@@ -81,17 +119,25 @@ export async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
  */
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbSingleton) return dbSingleton;
-  // Open + migrate before caching — a half-migrated handle must not be cached
-  // (B3 from the 2026-05-27 code review).
-  const db = await SQLite.openDatabaseAsync(DB_NAME);
-  await migrate(db);
-  dbSingleton = db;
-  return dbSingleton;
+  // Share a single in-flight open across concurrent callers. Open + migrate
+  // fully before caching — a half-migrated handle must not be cached (B3 from
+  // the 2026-05-27 review). On failure, clear `opening` so a later call retries.
+  if (!opening) {
+    opening = (async () => {
+      const db = await SQLite.openDatabaseAsync(DB_NAME);
+      await migrate(db);
+      dbSingleton = db;
+      return db;
+    })();
+    opening.catch(() => { opening = null; });
+  }
+  return opening;
 }
 
 /** Test seam — clears the singleton so subsequent getDb() reopens. */
 export function _resetForTests(): void {
   dbSingleton = null;
+  opening = null;
 }
 
 export { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';

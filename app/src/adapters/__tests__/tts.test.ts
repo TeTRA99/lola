@@ -1,12 +1,13 @@
 jest.mock('expo-speech', () => ({
-  speak: jest.fn(),
+  // speak() now resolves only when the engine reports done — fire onDone so
+  // the adapter's awaited promise settles in tests.
+  speak: jest.fn((_text: string, opts?: { onDone?: () => void }) => { opts?.onDone?.(); }),
   stop: jest.fn(),
   getAvailableVoicesAsync: jest.fn(),
 }));
 
 import * as Speech from 'expo-speech';
-import { speak, stop, _resetForTests } from '../tts';
-import { CONFIG } from '@/config';
+import { speak, stop, _resetForTests, RATE_DEFAULT } from '../tts';
 
 const mockedSpeak = Speech.speak as jest.MockedFunction<typeof Speech.speak>;
 const mockedStop = Speech.stop as jest.MockedFunction<typeof Speech.stop>;
@@ -20,17 +21,17 @@ beforeEach(() => {
 });
 
 describe('TTS adapter', () => {
-  test('speak defaults to es-AR + rate 0.85 when voice available', async () => {
+  test('speak defaults to es-AR + default rate when voice available', async () => {
     mockedVoices.mockResolvedValue([
       { language: 'es-AR', identifier: 'x', name: 'y', quality: 'Default' },
     ] as Awaited<ReturnType<typeof Speech.getAvailableVoicesAsync>>);
 
     const r = await speak('hola');
     expect(r.ok).toBe(true);
-    expect(mockedSpeak).toHaveBeenCalledWith('hola', {
+    expect(mockedSpeak).toHaveBeenCalledWith('hola', expect.objectContaining({
       language: 'es-AR',
-      rate: CONFIG.TTS_RATE,
-    });
+      rate: RATE_DEFAULT,
+    }));
   });
 
   test('falls back to es-419 when es-AR not installed', async () => {

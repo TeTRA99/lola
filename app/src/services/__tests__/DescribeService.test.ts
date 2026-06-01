@@ -45,6 +45,12 @@ jest.mock('@/services/MemoryService', () => ({
   recall: jest.fn(async () => ({ freshness: 'miss' })),
 }));
 
+// Room recognition is best-effort context; default to "no room matched" so the
+// base describe flow (no "Estás en X" prefix) is what these assertions cover.
+jest.mock('@/services/RoomCatalog', () => ({
+  identifyRoom: jest.fn(async () => ({ ok: true, value: null })),
+}));
+
 import { run, getLastDescribe, _resetForTests } from '../DescribeService';
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';

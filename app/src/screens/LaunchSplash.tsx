@@ -1,99 +1,88 @@
-// FR-6.2 launch greeting + hidden gestures for SetupScreen (5s hold) and
-// DebugScreen (10s hold). AC4.1.1–4.1.6.
+// FR-6.2 launch greeting. Brand moment on the ink surface: floating lens mark,
+// "Lola" wordmark, and greeting. Auto-dismisses to Home after the splash window.
 //
-// Auto-dismiss after 800ms unless the user is holding — held presses keep
-// the splash visible past the auto-dismiss window. Release-triggered: the
-// highest threshold crossed decides which screen to open.
+// Setup is reached from the gear on Dad's Home (and the OS app-icon shortcut),
+// and the Debug screen is reached from a dev-only icon on Home (debug builds),
+// so the splash no longer carries any hidden gesture.
 
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { LolaMark } from '@/components/LolaMark';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services';
-import { CONFIG } from '@/config';
+import * as Settings from '@/services/Settings';
+import { color, fontFamily } from '@/theme/tokens';
 
-const SPLASH_DURATION_MS = 800;
+const SPLASH_DURATION_MS = 3000;
 
 type Props = {
   onDone: () => void;
-  onSetup?: () => void;
-  onDebug?: () => void;
 };
 
-type GestureStage = 'none' | 'setup' | 'debug';
-
-export function LaunchSplash({ onDone, onSetup, onDebug }: Props) {
-  const [pressed, setPressed] = useState(false);
-
+export function LaunchSplash({ onDone }: Props) {
+  const float = useRef(new Animated.Value(0)).current;
   const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const setupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debugTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stage = useRef<GestureStage>('none');
   const greeted = useRef(false);
 
-  // Greet once on mount.
+  // A ref to the callback lets the timer fire the latest closure without
+  // re-running the mount effect.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
     if (!greeted.current) {
       greeted.current = true;
-      void speak(COPY.greeting);
+      // Personalize with the caregiver-set name ("Hola, Carlos, …") if present.
+      void Settings.getString(Settings.KEYS.userName, '').then(name => speak(COPY.greetingFor(name)));
     }
+    // Gentle float loop on the mark (translateY 0 → -7 → 0, 3600ms).
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: -7, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    autoDismiss.current = setTimeout(() => onDoneRef.current(), SPLASH_DURATION_MS);
     return () => {
-      [autoDismiss, setupTimer, debugTimer].forEach(t => {
-        if (t.current) clearTimeout(t.current);
-        t.current = null;
-      });
-    };
-  }, []);
-
-  useEffect(() => {
-    if (pressed) {
-      // Hold detected — cancel any pending auto-dismiss so the splash stays.
+      loop.stop();
       if (autoDismiss.current) { clearTimeout(autoDismiss.current); autoDismiss.current = null; }
-      stage.current = 'none';
-      setupTimer.current = setTimeout(() => {
-        if (stage.current === 'none') stage.current = 'setup';
-      }, CONFIG.SETUP_GESTURE_HOLD_MS);
-      debugTimer.current = setTimeout(() => {
-        stage.current = 'debug';
-      }, CONFIG.DEBUG_GESTURE_HOLD_MS);
-    } else {
-      // Released — clean up timers and fire the appropriate callback.
-      if (setupTimer.current) { clearTimeout(setupTimer.current); setupTimer.current = null; }
-      if (debugTimer.current) { clearTimeout(debugTimer.current); debugTimer.current = null; }
-      const reached = stage.current;
-      stage.current = 'none';
-
-      if (reached === 'debug') {
-        onDebug?.();
-      } else if (reached === 'setup') {
-        onSetup?.();
-      } else if (!autoDismiss.current) {
-        autoDismiss.current = setTimeout(onDone, SPLASH_DURATION_MS);
-      }
-    }
-  }, [pressed, onSetup, onDebug, onDone]);
+    };
+  }, [float]);
 
   return (
-    <Pressable
-      style={styles.root}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-    >
-      <Text style={styles.brand}>Lola</Text>
-    </Pressable>
+    <View style={styles.root}>
+      <View style={styles.center}>
+        <Animated.View style={{ transform: [{ translateY: float }] }}>
+          <LolaMark size={92} />
+        </Animated.View>
+        <Text style={styles.wordmark}>Lola</Text>
+        <Text style={styles.greeting}>{COPY.splash.hello}</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: color.neutral.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: {
+  center: { alignItems: 'center' },
+  wordmark: {
     color: '#fff',
-    fontSize: 80,
-    fontWeight: '700',
-    letterSpacing: 2,
+    fontSize: 46,
+    fontFamily: fontFamily.extrabold,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginTop: 30,
+  },
+  greeting: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 19,
+    fontFamily: fontFamily.regular,
+    marginTop: 12,
   },
 });

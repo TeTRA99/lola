@@ -13,7 +13,11 @@ export type LolaResponse = { narration: string; objects: LolaObject[] };
 export type ChatInput = {
   systemPrompt: string;
   userText: string;
-  imageBase64: string;
+  imageBase64?: string;
+  // Multi-image variant — pass an ordered list of base64 frames. Used by
+  // AskService follow-ups to send the prior cached scene alongside the
+  // current one so the model can resolve "las papas" / "el termo" references.
+  imagesBase64?: string[];
   model?: string;
 };
 
@@ -29,24 +33,23 @@ function apiKey(): string | undefined {
 // Reduced to a single retry with a tighter per-attempt timeout — worst case
 // is now ~10.5s, still over NFR-1 in failure but felt-quickly instead of
 // felt-eternally. If a consumer needs more patience, expose maxLatencyMs later.
-const RETRY_DELAYS_MS = [500];
-const PER_ATTEMPT_TIMEOUT_MS = 5000;
+const RETRY_DELAYS_MS = [500, 1500];
+const PER_ATTEMPT_TIMEOUT_MS = 8000;
 
 function buildBody(input: ChatInput): unknown {
+  const userContent: Array<Record<string, unknown>> = [{ type: 'text', text: input.userText }];
+  const images = input.imagesBase64 ?? (input.imageBase64 ? [input.imageBase64] : []);
+  for (const b64 of images) {
+    userContent.push({
+      type: 'image_url',
+      image_url: { url: `data:image/jpeg;base64,${b64}` },
+    });
+  }
   return {
     model: input.model ?? CONFIG.MODEL_ID,
     messages: [
       { role: 'system', content: input.systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: input.userText },
-          {
-            type: 'image_url',
-            image_url: { url: `data:image/jpeg;base64,${input.imageBase64}` },
-          },
-        ],
-      },
+      { role: 'user', content: userContent },
     ],
     response_format: { type: 'json_object' },
     max_tokens: 400,
@@ -69,8 +72,123 @@ async function postOnce(input: ChatInput, signal: AbortSignal): Promise<Response
   });
 }
 
+/**
+ * Generic JSON chat — returns the parsed JSON object without shape validation.
+ * Callers decide what shape they expect. Used by IntentRouter (text-only) and
+ * anything else that doesn't return LolaResponse.
+ */
+export async function chatJson<T = unknown>(input: ChatInput): Promise<Result<T, ChatError>> {
+  const key = apiKey();
+  console.log('[openrouter] chatJson called, image?', !!input.imageBase64, 'apiKey?', !!key);
+  if (!key) return err('auth');
+
+  for (let attempt = 0; ; attempt++) {
+    const ctl = new AbortController();
+    const timeoutId = setTimeout(() => ctl.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    let resp: Response;
+    try {
+      resp = await postOnce(input, ctl.signal);
+    } catch {
+      clearTimeout(timeoutId);
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+      return err('network');
+    }
+    clearTimeout(timeoutId);
+
+    if (resp.status === 401 || resp.status === 403) return err('auth');
+    if (resp.status === 429) return err('rate_limit');
+    if (resp.status >= 500 && resp.status < 600) {
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+      return err('network');
+    }
+    if (!resp.ok) return err('unknown');
+
+    let body: { choices?: Array<{ message?: { content?: string } }> };
+    try {
+      body = (await resp.json()) as typeof body;
+    } catch {
+      return err('parse_fail');
+    }
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) return err('parse_fail');
+    try {
+      return ok(JSON.parse(content) as T);
+    } catch {
+      return err('parse_fail');
+    }
+  }
+}
+
+/**
+ * Multimodal image embedding via OpenRouter's /embeddings endpoint.
+ * Used by RoomCatalog to fingerprint scenes for cosine-similarity room lookup.
+ *
+ * Model: google/gemini-embedding-2-preview returns 1408-d float vectors.
+ * Cost ~$0.0001/image. Latency ~200–400ms warm.
+ */
+export type EmbedError = 'network' | 'auth' | 'rate_limit' | 'parse_fail' | 'unknown';
+
+const EMBED_MODEL_ID = 'google/gemini-embedding-2-preview';
+const EMBED_TIMEOUT_MS = 5000;
+
+export async function embedImage(imageBase64: string): Promise<Result<number[], EmbedError>> {
+  const key = apiKey();
+  if (!key) return err('auth');
+  const ctl = new AbortController();
+  const timeoutId = setTimeout(() => ctl.abort(), EMBED_TIMEOUT_MS);
+  let resp: Response;
+  try {
+    resp = await fetch(`${CONFIG.GATEWAY_BASE_URL}/embeddings`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'HTTP-Referer': 'https://lola.local',
+        'X-Title': 'Lola v0.9',
+      },
+      body: JSON.stringify({
+        model: EMBED_MODEL_ID,
+        input: [
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+          },
+        ],
+      }),
+      signal: ctl.signal,
+    });
+  } catch {
+    clearTimeout(timeoutId);
+    return err('network');
+  }
+  clearTimeout(timeoutId);
+  if (resp.status === 401 || resp.status === 403) return err('auth');
+  if (resp.status === 429) return err('rate_limit');
+  if (!resp.ok) return err('unknown');
+  let body: { data?: Array<{ embedding?: number[] }> };
+  try {
+    body = (await resp.json()) as typeof body;
+  } catch {
+    return err('parse_fail');
+  }
+  const vec = body.data?.[0]?.embedding;
+  if (!Array.isArray(vec) || vec.length === 0 || vec.some(v => typeof v !== 'number')) {
+    return err('parse_fail');
+  }
+  return ok(vec);
+}
+
 export async function chat(input: ChatInput): Promise<Result<LolaResponse, ChatError>> {
-  if (!apiKey()) return err('auth');
+  const key = apiKey();
+  console.log('[openrouter] chat called, apiKey present?', !!key, 'len:', key?.length ?? 0);
+  if (!key) return err('auth');
 
   for (let attempt = 0; ; attempt++) {
     const ctl = new AbortController();

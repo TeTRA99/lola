@@ -73,6 +73,18 @@ export function getLatest(): SnapshotEntry | null {
   return latest;
 }
 
+/**
+ * Reads the cached snapshot's bytes back as base64. Used by AskService to
+ * pass the prior scene as a second image to the model in follow-up queries.
+ */
+export function readBase64(uri: string): string | null {
+  try {
+    return new File(uri).base64Sync();
+  } catch {
+    return null;
+  }
+}
+
 export function attachNarration(uri: string, narration: string): void {
   const e = entries.get(uri);
   if (e) e.narration = narration;

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lola — Design Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --primary:#1A73E8;--primary700:#1557B0;--primary50:#EAF2FE;--canvas:#F6F7F9;--white:#fff;--border:#E0E4EA;--ink:#0C0D0F;
+    --high:#1B1E24;--medium:#5C6470;--low:#8A929E;--success:#1E9E5A;--successBg:#E6F6EC;--warn:#B9740A;--error:#D92D20;
+    --brand:"Plus Jakarta Sans",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+    --sh-sm:0 1px 3px rgba(12,13,15,.06);--sh-md:0 4px 14px rgba(12,13,15,.09);--sh-lg:0 14px 40px rgba(12,13,15,.16);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--brand);background:var(--canvas);color:var(--high);-webkit-font-smoothing:antialiased;line-height:1.55;}
+  a{color:var(--primary);}
+  .topbar{position:sticky;top:0;z-index:30;background:rgba(246,247,249,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);}
+  .topbar-inner{max-width:1080px;margin:0 auto;padding:16px 40px;display:flex;align-items:center;gap:14px;}
+  .topbar h1{font-size:18px;font-weight:800;}.crumb{font-size:14px;color:var(--medium);font-weight:500;}
+  .topbar nav{margin-left:auto;display:flex;gap:6px;}
+  .topbar nav a{font-size:13px;font-weight:600;color:var(--medium);text-decoration:none;padding:8px 12px;border-radius:8px;}
+  .topbar nav a:hover{background:#fff;color:var(--high);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px 130px;}
+
+  /* hero */
+  .hero{padding:84px 0 64px;}
+  .eyebrow{font-size:13px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--primary);margin-bottom:20px;}
+  h2.big{font-size:58px;line-height:1.0;letter-spacing:-1.8px;font-weight:300;max-width:17ch;}
+  h2.big b{font-weight:800;}
+  .lead{margin-top:24px;font-size:18px;color:var(--medium);max-width:62ch;line-height:1.65;}
+
+  /* deliverable cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:8px;}
+  .dcard{display:block;text-decoration:none;background:#fff;border:1px solid var(--border);border-radius:18px;padding:26px;box-shadow:var(--sh-md);transition:transform .16s, box-shadow .16s;color:inherit;}
+  .dcard:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);}
+  .dcard .ic{width:52px;height:52px;border-radius:14px;background:var(--primary50);display:flex;align-items:center;justify-content:center;margin-bottom:18px;}
+  .dcard .t{font-size:19px;font-weight:800;letter-spacing:-.3px;}
+  .dcard .d{font-size:14px;color:var(--medium);margin-top:8px;line-height:1.5;}
+  .dcard .go{margin-top:16px;font-size:13px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}
+
+  section{margin-top:84px;scroll-margin-top:80px;}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:30px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+  .sec-head .num{font-family:var(--mono);font-size:13px;color:var(--low);}
+  .sec-head h3{font-size:13px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;}
+  .sec-head .desc{margin-left:auto;font-size:14px;color:var(--medium);max-width:44ch;text-align:right;}
+
+  .prose p{font-size:16.5px;color:#33373E;margin-bottom:16px;max-width:74ch;}
+  .prose strong{color:var(--high);font-weight:700;}
+
+  .principles{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px;}
+  .pcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--sh-sm);}
+  .pcard .pt{font-size:16px;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:9px;}
+  .pcard .pt .dot{width:9px;height:9px;border-radius:50%;background:var(--primary);}
+  .pcard p{font-size:14.5px;color:var(--medium);line-height:1.55;}
+
+  /* review Q */
+  .q{background:#fff;border:1px solid var(--border);border-radius:18px;padding:30px 32px;margin-bottom:18px;box-shadow:var(--sh-sm);}
+  .q .qnum{font-family:var(--mono);font-size:12.5px;color:var(--primary);font-weight:500;}
+  .q .qt{font-size:22px;font-weight:800;letter-spacing:-.3px;margin:6px 0 16px;}
+  .q p{font-size:15.5px;color:#33373E;margin-bottom:14px;max-width:78ch;}
+  .verdict{display:inline-flex;align-items:center;gap:9px;background:var(--successBg);color:#0e6b3c;border-radius:10px;padding:10px 15px;font-weight:700;font-size:14.5px;margin-top:4px;}
+  .verdict.warn{background:#FCF1DD;color:#8a5708;}
+  .verdict .chk{width:20px;height:20px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;flex:none;}
+  .verdict.warn .chk{background:var(--warn);}
+  ul.rec{margin:8px 0 4px 0;padding:0;list-style:none;}
+  ul.rec li{font-size:15px;color:#33373E;padding:7px 0 7px 26px;position:relative;max-width:78ch;}
+  ul.rec li:before{content:"";position:absolute;left:4px;top:15px;width:8px;height:8px;border-radius:2px;background:var(--primary);}
+
+  /* copy tables */
+  .copytables{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .ctable{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--sh-sm);}
+  .ctable .head{padding:16px 20px;font-weight:800;font-size:15px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
+  .ctable .head .flag{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--primary50);color:var(--primary700);}
+  .crow{display:flex;gap:14px;padding:11px 20px;border-bottom:1px solid #EEF1F5;}
+  .crow:last-child{border-bottom:none;}
+  .crow .k{font-family:var(--mono);font-size:11.5px;color:var(--low);flex:none;width:96px;padding-top:2px;}
+  .crow .v{font-size:14.5px;color:var(--high);}
+  .crow .v .sm{display:block;font-size:12.5px;color:var(--medium);margin-top:2px;}
+
+  /* impl order */
+  .steps{counter-reset:s;display:flex;flex-direction:column;gap:12px;}
+  .step{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 22px 18px 64px;position:relative;box-shadow:var(--sh-sm);}
+  .step:before{counter-increment:s;content:counter(s);position:absolute;left:18px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;background:var(--ink);color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .step .st{font-weight:800;font-size:16px;}
+  .step .sd{font-size:14px;color:var(--medium);margin-top:3px;}
+  .step .dep{font-family:var(--mono);font-size:11.5px;color:var(--low);margin-top:6px;}
+
+  .edge{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .ec{background:#fff;border:1px solid var(--border);border-radius:13px;padding:16px 18px;box-shadow:var(--sh-sm);}
+  .ec .et{font-weight:700;font-size:14.5px;margin-bottom:5px;}
+  .ec .ed{font-size:13px;color:var(--medium);line-height:1.5;}
+
+  .files{background:var(--ink);border-radius:16px;padding:8px 0;}
+  .frow{display:flex;gap:14px;padding:13px 24px;border-bottom:1px solid rgba(255,255,255,.08);align-items:center;}
+  .frow:last-child{border-bottom:none;}
+  .frow .fn{font-family:var(--mono);font-size:13px;color:#fff;flex:none;width:220px;}
+  .frow .fd{font-size:13.5px;color:rgba(255,255,255,.6);}
+  .frow a{color:#7BB0F5;text-decoration:none;font-weight:600;}
+  @media(max-width:880px){.cards,.principles,.copytables,.edge{grid-template-columns:1fr;}.wrap{padding:0 22px 90px;}h2.big{font-size:38px;}.frow .fn{width:auto;}}
+</style>
+</head>
+<body>
+  <div class="topbar"><div class="topbar-inner">
+    <svg width="34" height="34" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg>
+    <h1>Lola</h1><span class="crumb">/ Design Hub</span>
+    <nav><a href="#review">UX review</a><a href="#copy">Copy</a><a href="#order">Build order</a><a href="prototype/Prototype.html">Prototype →</a></nav>
+  </div></div>
+
+  <div class="wrap">
+    <div class="hero">
+      <div class="eyebrow">Lola · Assistive-vision assistant · Design package</div>
+      <h2 class="big">Built for <b>Dad's thumb</b> first, your setup time second.</h2>
+      <p class="lead">A full redesign of Lola across both surfaces — the giant, high-contrast voice screen Dad lives in, and the calm setup tool you use to teach Lola the house. Below: the working prototype, the code-ready system, the logo, and a straight-talking review of the current structure.</p>
+    </div>
+
+    <div class="cards">
+      <a class="dcard" href="prototype/Prototype.html">
+        <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" stroke-width="1.7"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 18h4"/></svg></div>
+        <div class="t">Interactive prototype</div>
+        <div class="d">Every screen and state, clickable. Splash, home (5 states), setup tabs, forms, capture, edge cases. Flip layout & logo variants with Tweaks.</div>
+        <div class="go">Open prototype <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+      <a class="dcard" href="Design System.html">
+        <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" stroke-width="1.7"><circle cx="9" cy="9" r="5"/><path d="M14 14l5 5M14 7h6M17 4v6"/></svg></div>
+        <div class="t">Design system</div>
+        <div class="d">Color, type, spacing, components, motion — with the code-ready <span style="font-family:var(--mono);font-size:12px">tokens.json</span> for <span style="font-family:var(--mono);font-size:12px">app/src/theme/</span>.</div>
+        <div class="go">Open system <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+      <a class="dcard" href="Logo &amp; App Icon.html">
+        <div class="ic"><svg width="26" height="26" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#1A73E8"/><circle cx="20" cy="20" r="11" fill="#fff"/><circle cx="20" cy="20" r="5.6" fill="#1A73E8"/><circle cx="22.6" cy="17.4" r="1.9" fill="#fff"/></svg></div>
+        <div class="t">Logo &amp; app icon</div>
+        <div class="d">Three lens directions, wordmark lockup, small-size tests, and exact Android-adaptive + iOS launcher assets for Expo.</div>
+        <div class="go">Open logo sheet <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+    </div>
+
+    <!-- REASONING -->
+    <section id="reasoning">
+      <div class="sec-head"><span class="num">01</span><h3>The thinking</h3><span class="desc">What I assumed, and the few decisions everything else hangs off.</span></div>
+      <div class="prose">
+        <p>The brief gave me almost everything; here's where I committed. <strong>Two contrast budgets, one system.</strong> Dad's surface uses only pure black-on-white and white-on-black — every pairing is 20:1, well past AAA — with 88pt minimum targets and 44pt+ type. Your setup surface relaxes to the reference's warm greys and normal density. They share one blue, one type family, one spacing scale, so it still feels like a single app.</p>
+        <p>I kept the system blue you picked (<strong>#1A73E8</strong>) for continuity with the live build, but warmed the neutrals and adopted the reference's signatures: the <strong>light-over-bold heading</strong>, rounded soft inputs, and the <strong>full-width CTA with a trailing arrow</strong>. The friendly-illustration warmth is carried by soft-tinted photo thumbnails and the calm, glowing voice states rather than literal mascots.</p>
+      </div>
+      <div class="principles" style="margin-top:24px;">
+        <div class="pcard"><div class="pt"><span class="dot"></span>Voice is the interface</div><p>Every visual state maps to something Dad can hear happening: a pulse for listening, a slow spin for thinking, a waveform for speaking. The screen confirms; it never demands reading.</p></div>
+        <div class="pcard"><div class="pt"><span class="dot"></span>Calm, and self-stopping</div><p>Listening, thinking and speaking are quiet, centred states with no buttons to find — Lola simply stops on her own when she's done. Even errors stay calm: a soft amber heads-up, never an alarming red "you did something wrong" screen.</p></div>
+        <div class="pcard"><div class="pt"><span class="dot"></span>Setup is a tool, not a wizard</div><p>Fast list scanning, one-tap add, forgiving partial saves, encouraging photo progress. You can tag twenty objects without ever leaving a rhythm.</p></div>
+        <div class="pcard"><div class="pt"><span class="dot"></span>Dad can never fall into setup</div><p>There is no settings affordance anywhere inside the app. Setup lives entirely on the OS app icon (long-press → Configuración), so a low-vision user feeling around the screen can never land there.</p></div>
+      </div>
+    </section>
+
+    <!-- UX REVIEW -->
+    <section id="review">
+      <div class="sec-head"><span class="num">02</span><h3>UX review — your four questions</h3><span class="desc">Concrete recommendations, not just options. Each is reflected in the prototype.</span></div>
+
+      <div class="q">
+        <div class="qnum">Question 01</div>
+        <div class="qt">The two-button home split — right call for a voice-first, low-vision user?</div>
+        <p>Keep two persistent buttons, but <strong>stop splitting them 50/50</strong>. For a low-vision user, predictable thumb geography is the whole game — "bright field on top = describe, dark field on bottom = ask" becomes muscle memory in a day. A single button with voice intent-routing sounds elegant but adds a speech-recognition failure point in front of the most common action (UC-1, "what's in front of me?"), and removes the reliable "just tap the top" path. That's the wrong trade for this user.</p>
+        <p>So: <strong>Describe dominates (~58%) and sits on top</strong>, because it's the most frequent action and needs zero speech to trigger. Ask is the smaller dark field below. Both are unmistakable color blocks, both AAA. I built all three (dominant / equal / single) into the prototype's Tweaks so you can feel the difference — but my recommendation is <strong>dominant</strong>.</p>
+        <div class="verdict"><span class="chk"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span>Two buttons, rebalanced — Describe dominant, on top. Not a single voice button.</div>
+      </div>
+
+      <div class="q">
+        <div class="qnum">Question 02</div>
+        <div class="qt">Setup access via a 5-second logo hold — better pattern?</div>
+        <p>We landed on the cleanest answer: <strong>move setup out of the app entirely and onto the OS app icon.</strong> The caregiver long-presses the Lola icon on the phone's home screen and taps <strong>"Configuración"</strong> from the native menu (Android App Shortcut / iOS Quick Action). It opens Setup directly — <strong>even while the app is already running</strong> — so there's no timing race against the splash and, critically, <strong>no in-app surface for Dad to ever feel his way into.</strong></p>
+        <ul class="rec">
+          <li><strong>No in-app door from the home screen</strong> — by design. A low-vision user feeling around the screen can never land in setup.</li>
+          <li>The splash carries a quiet legend — <em>"Configuración: mantené presionado el ícono de Lola"</em> — so the caregiver knows where to go without anyone having to explain it.</li>
+          <li>One config block in <span style="font-family:var(--mono);font-size:12.5px">app.json</span> (<span style="font-family:var(--mono);font-size:12.5px">shortcuts</span> on Android, <span style="font-family:var(--mono);font-size:12.5px">UIApplicationShortcutItems</span> on iOS). The prototype's "App icon → Setup" scene mocks the exact menu.</li>
+        </ul>
+        <div class="verdict"><span class="chk"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span>Setup lives on the OS app icon (long-press → Configuración). Splash legend points to it; zero in-app entry, zero risk for Dad.</div>
+      </div>
+
+      <div class="q">
+        <div class="qnum">Question 03</div>
+        <div class="qt">Objects vs Rooms — siblings, or should rooms contain objects?</div>
+        <p>Keep them <strong>flat siblings</strong>. Hierarchy feels tidy but fights all three use cases. Objects <em>move</em> — the thermos lives in the kitchen today and the bedroom tomorrow — so "where is X?" (UC-2) is answered from recent snapshots, not a static room→object tree. Forcing every object into a home room also adds a decision to every add, which kills the "tag twenty things fast" goal (UC-5).</p>
+        <p>You get the <em>benefit</em> of association without the rigidity: each object row shows a derived, non-editable <strong>"last seen in the Kitchen"</strong> hint, pulled from snapshots. Association as information, not as structure.</p>
+        <div class="verdict"><span class="chk"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span>Flat tabs. Add a derived "last seen in {room}" hint on object rows.</div>
+      </div>
+
+      <div class="q">
+        <div class="qnum">Question 04</div>
+        <div class="qt">Anything else in IA, naming, or flow?</div>
+        <ul class="rec">
+          <li><strong>Drop the “internal name” (canonical slug) from the UI.</strong> The app still generates it under the hood as a stable key, but showing <span style="font-family:var(--mono);font-size:12.5px">termo_de_papa</span> to the caregiver only adds noise — it's not something they set or need to see.</li>
+          <li><strong>No gear on Dad's home.</strong> The current build's gear is an accidental door into setup; with setup on the app icon, the home screen stays a pure two-button board.</li>
+          <li><strong>Make the error states speak Dad's language</strong> — "No veo nada" spoken aloud, then back to the menu (no button); permission-denied is the only one that keeps a recovery action.</li>
+          <li><strong>First-run should teach, not blank.</strong> Empty states name a concrete first action ("Add your first room") and explain <em>why</em> ("so Lola can tell him where he is").</li>
+          <li><strong>The 5-photo cap is a feature, not a limit.</strong> Progress copy encourages at 1–2 ("add a couple more angles"), reassures at 3–4 ("looking good"), and closes cleanly at 5 ("that's plenty") — the add tile simply disappears, no error.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- COPY -->
+    <section id="copy">
+      <div class="sec-head"><span class="num">03</span><h3>Final copy</h3><span class="desc">Ship-ready strings for the existing COPY constants. Spanish for Dad, English for you.</span></div>
+      <div class="copytables">
+        <div class="ctable">
+          <div class="head"><span class="flag">ES · DAD</span> Voice surface</div>
+          <div class="crow"><span class="k">greeting</span><span class="v">Hola, soy Lola</span></div>
+          <div class="crow"><span class="k">describe</span><span class="v">Describir</span></div>
+          <div class="crow"><span class="k">ask</span><span class="v">Preguntar</span></div>
+          <div class="crow"><span class="k">listening</span><span class="v">Te escucho…</span></div>
+          <div class="crow"><span class="k">thinking</span><span class="v">Un momento…</span></div>
+          <div class="crow"><span class="k">speaking</span><span class="v">Toca para detener</span></div>
+          <div class="crow"><span class="k">stopped</span><span class="v">Listo</span></div>
+          <div class="crow"><span class="k">err.camera</span><span class="v">No veo nada<span class="sm">Revisá que la cámara esté libre. · [Reintentar]</span></span></div>
+          <div class="crow"><span class="k">err.perm</span><span class="v">Necesito la cámara<span class="sm">Tocá para darme permiso. · [Abrir ajustes]</span></span></div>
+        </div>
+        <div class="ctable">
+          <div class="head"><span class="flag">EN · YOU</span> Setup surface</div>
+          <div class="crow"><span class="k">empty.obj</span><span class="v">No objects yet<span class="sm">Tag the things Dad asks about — his thermos, his pills, the remote.</span></span></div>
+          <div class="crow"><span class="k">empty.room</span><span class="v">No rooms yet<span class="sm">Map the rooms Dad moves through, so Lola can tell him where he is.</span></span></div>
+          <div class="crow"><span class="k">photos.low</span><span class="v">2 of 5 — add a couple more angles.</span></div>
+          <div class="crow"><span class="k">photos.ok</span><span class="v">3 of 5 — looking good.</span></div>
+          <div class="crow"><span class="k">photos.full</span><span class="v">All 5 captured — that's plenty.</span></div>
+          <div class="crow"><span class="k">saved</span><span class="v">"Termo de Papá" saved</span></div>
+          <div class="crow"><span class="k">err.save</span><span class="v">Couldn't save<span class="sm">Check your connection and try again.</span></span></div>
+          <div class="crow"><span class="k">lastSeen</span><span class="v">Last seen in the Kitchen</span></div>
+        </div>
+      </div>
+      <p style="font-size:13.5px;color:var(--low);margin-top:14px;font-family:var(--mono)">Full string set lives in <a href="prototype/data.jsx">prototype/data.jsx → COPY</a></p>
+    </section>
+
+    <!-- IMPLEMENTATION ORDER -->
+    <section id="order">
+      <div class="sec-head"><span class="num">04</span><h3>Recommended build order</h3><span class="desc">Ship the foundation, then the surface Dad touches daily, then setup depth.</span></div>
+      <div class="steps">
+        <div class="step"><div class="st">Tokens + theme</div><div class="sd">Drop in tokens.json, wire the type scale and per-platform shadows. Everything else references it.</div><div class="dep">blocks: all · ~½ day</div></div>
+        <div class="step"><div class="st">Logo + app icons + splash + the OS setup shortcut</div><div class="sd">Ship the mark, launcher icons, splash, and the app.json App Shortcut / Quick Action that opens Setup. This is your only door into setup, so it unblocks testing everything else.</div><div class="dep">depends: tokens</div></div>
+        <div class="step"><div class="st">Dad home — idle + the four active states</div><div class="sd">The screen Dad uses every day. Get the two-panel layout right, with the listening → thinking → speaking cycle playing inside the tapped panel.</div><div class="dep">depends: tokens · highest user impact</div></div>
+        <div class="step"><div class="st">Setup shell — tabs + Objects list/add/edit</div><div class="sd">Tabs (persisted), list rows, the object form, and the capture modal (shared with rooms).</div><div class="dep">depends: tokens, capture modal</div></div>
+        <div class="step"><div class="st">Rooms — multi-photo capture</div><div class="sd">Reuses the object form pattern + capture modal; adds the 5-photo strip, progress, and cover logic.</div><div class="dep">depends: capture modal, Objects form</div></div>
+        <div class="step"><div class="st">Error & empty states, toasts, polish</div><div class="sd">Camera/permission errors, save-failed, first-run empty states, success toasts, motion tuning.</div><div class="dep">depends: all screens stubbed</div></div>
+      </div>
+    </section>
+
+    <!-- EDGE CASES -->
+    <section id="edge">
+      <div class="sec-head"><span class="num">05</span><h3>Edge cases — mocked in the prototype</h3><span class="desc">Each is a scene in the prototype's left rail.</span></div>
+      <div class="edge">
+        <div class="ec"><div class="et">Long display names</div><div class="ed">Single-line truncation with ellipsis on list rows; full text wraps in the form. See "Object · edit (long name)".</div></div>
+        <div class="ec"><div class="et">Rooms 0 / 1 / 3 / 5 photos</div><div class="ed">Empty prompt → encouraging progress → clean stop at 5 (add tile disappears, no error).</div></div>
+        <div class="ec"><div class="et">Objects 0 / 1 / 20</div><div class="ed">Teaching empty state, single row, and a dense 20-item scroll that stays scannable.</div></div>
+        <div class="ec"><div class="et">Speaking at 2s vs 20s</div><div class="ed">Calm ambient glow + waveform holds indefinitely; nothing flickers or times out on long reads.</div></div>
+        <div class="ec"><div class="et">Camera / permission denied</div><div class="ed">Recoverable error in Dad's words with one large action — never a dead end.</div></div>
+        <div class="ec"><div class="et">Tap-to-cancel mid-speech</div><div class="ed">Full-screen stop target, green flash + "Listo", returns to idle. Try it on "Home · speaking".</div></div>
+      </div>
+    </section>
+
+    <!-- FILES -->
+    <section id="files">
+      <div class="sec-head"><span class="num">06</span><h3>Handoff index</h3><span class="desc">Editable HTML/JSX source — inspect specs directly as you implement.</span></div>
+      <div class="files">
+        <div class="frow"><span class="fn">theme/tokens.json</span><span class="fd">Colors, spacing, type, radii, per-platform shadows, motion — drop into <span style="font-family:var(--mono)">app/src/theme/</span></span></div>
+        <div class="frow"><span class="fn"><a href="Design System.html">Design System.html</a></span><span class="fd">Visual token sheet + component specs</span></div>
+        <div class="frow"><span class="fn"><a href="prototype/Prototype.html">prototype/Prototype.html</a></span><span class="fd">Interactive prototype — all screens, states, edge cases, Tweaks</span></div>
+        <div class="frow"><span class="fn"><a href="prototype/data.jsx">prototype/data.jsx</a></span><span class="fd">Final ES + EN copy in the COPY shape + canonical-name helper</span></div>
+        <div class="frow"><span class="fn"><a href="Logo &amp; App Icon.html">Logo &amp; App Icon.html</a></span><span class="fd">Logo directions + exact launcher/splash asset specs</span></div>
+      </div>
+      <p style="font-size:13.5px;color:var(--medium);margin-top:18px;max-width:74ch;">One open item I'd flag before you build: the <strong>icon set is Ionicons</strong> (ships with <span style="font-family:var(--mono);font-size:12.5px">@expo/vector-icons</span>) — names are listed in <span style="font-family:var(--mono);font-size:12.5px">tokens.json → icon.names</span>, so you reference them by name rather than bundling SVGs. The motion specs are Reanimated-ready tuples; only the splash bloom and capture "got it" would benefit from Lottie if you want them richer.</p>
+    </section>
+  </div>
+
+  <script>
+    document.querySelectorAll('.topbar nav a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();document.querySelector(a.getAttribute('href')).scrollIntoView({behavior:'smooth'});}));
+  </script>
+</body>
+</html>

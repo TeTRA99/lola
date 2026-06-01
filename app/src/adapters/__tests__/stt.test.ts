@@ -69,11 +69,17 @@ function localeAvailable(langs: string[]) {
 }
 
 describe('STT adapter', () => {
-  test('returns no_locale when es-AR + fallbacks all absent', async () => {
+  test('falls back to CONFIG.STT_LOCALE when engine reports no matching locales', async () => {
+    // On-device, Android often returns an empty/non-matching supported-locales
+    // list yet still accepts the locale at start(). So we no longer hard-fail
+    // with no_locale — we try CONFIG.STT_LOCALE (es-AR) anyway.
     localeAvailable(['en-US', 'pt-BR']);
-    const r = await listen();
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toBe('no_locale');
+    grantPermissions();
+    const p = listen();
+    await new Promise<void>(r => setImmediate(() => r()));
+    expect(mockedStart).toHaveBeenCalledWith(expect.objectContaining({ lang: 'es-AR' }));
+    mod.__fire('end', {});
+    await p;
   });
 
   test('returns permission_denied when permissions denied', async () => {

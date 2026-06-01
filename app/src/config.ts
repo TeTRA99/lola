@@ -33,7 +33,22 @@ export const CONFIG = {
 
   // Hidden setup gestures (FR-3, AD-6)
   SETUP_GESTURE_HOLD_MS: 5000,
-  DEBUG_GESTURE_HOLD_MS: 10000,
+
+  // "Guide me to it" proximity haptics (feat/guide-me-to-it spike).
+  // Pulse RATE (not amplitude) encodes closeness — Android amplitude control is
+  // weak; faster ticks read clearly even on Charly's Galaxy.
+  GUIDE_PULSE_MIN_MS: 170,     // fastest tick — centered (raised 110→170: centered buzz felt "violent")
+  GUIDE_PULSE_MAX_MS: 500,     // slowest tick — target far from center
+  GUIDE_SEARCH_TICK_MS: 1400,  // soft, sparse tick when no target is in frame
+  GUIDE_LOCK_PROXIMITY: 0.82,  // ≥ this = fastest "you're on it" buzz (was 0.92, unreachable)
+  GUIDE_FOUND_PROXIMITY: 0.7,  // ≥ this → say "¡ahí está!" once (reachable; centering to 100% is unreliable)
+  GUIDE_REARM_PROXIMITY: 0.4,  // proximity must drop below this before "found" can fire again
+  GUIDE_FOUND_COOLDOWN_MS: 6000, // min gap between "¡ahí está!" announcements (stops wobble-spam; still re-says if lost & re-found after this)
+  GUIDE_NOT_FOUND_MS: 12000,   // if the target is never seen within this, say "no la encuentro"
+  GUIDE_SMOOTH_ALPHA: 0.35,    // EMA on the felt proximity (lower = smoother/laggier ramp)
+  GUIDE_LOST_GRACE_MS: 500,    // keep homing this long after a dropped frame before "searching"
+  GUIDE_AUTO_CLOSE_MS: 15000,  // after "found", auto-return home this long later (tap exits anytime)
+  GUIDE_PREPARING_MS: 6000,    // if the model isn't ready by now, tell the user it's preparing
 };
 
 export type Config = typeof CONFIG;

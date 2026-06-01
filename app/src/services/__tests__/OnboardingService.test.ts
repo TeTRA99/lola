@@ -17,10 +17,14 @@ const mGetDb = getDb as jest.MockedFunction<typeof getDb>;
 function stubDb() {
   const runAsync = jest.fn();
   const getAllAsync = jest.fn();
+  // addObject now looks up an existing canonical first (auto-promote of an
+  // 'observed' row to 'catalog'). Default: no existing row.
+  const getFirstAsync = jest.fn(async () => null);
   return {
     runAsync,
     getAllAsync,
-    _stub: { runAsync, getAllAsync },
+    getFirstAsync,
+    _stub: { runAsync, getAllAsync, getFirstAsync },
   };
 }
 
@@ -65,16 +69,30 @@ describe('OnboardingService.addObject', () => {
     );
   });
 
-  test('returns duplicate_canonical when UNIQUE constraint fires', async () => {
+  test('returns duplicate_canonical when an existing catalog row has the same canonical', async () => {
     const db = stubDb();
-    db._stub.runAsync.mockRejectedValue(
-      new Error('UNIQUE constraint failed: objects.canonical_name'),
-    );
+    // A row already exists in the catalog → real duplicate.
+    db._stub.getFirstAsync.mockResolvedValue({ id: 7, source: 'catalog' } as never);
     mGetDb.mockResolvedValue(db as unknown as Awaited<ReturnType<typeof getDb>>);
 
     const r = await OnboardingService.addObject({ display: 'mate' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('duplicate_canonical');
+  });
+
+  test('promotes an existing observed row to catalog instead of erroring', async () => {
+    const db = stubDb();
+    db._stub.getFirstAsync.mockResolvedValue({ id: 9, source: 'observed' } as never);
+    db._stub.runAsync.mockResolvedValue({ changes: 1 });
+    mGetDb.mockResolvedValue(db as unknown as Awaited<ReturnType<typeof getDb>>);
+
+    const r = await OnboardingService.addObject({ display: 'mate' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.id).toBe(9);
+    expect(db._stub.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE objects'),
+      expect.arrayContaining(['mate']),
+    );
   });
 
   test('returns storage_error on other failures', async () => {

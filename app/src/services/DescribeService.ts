@@ -13,6 +13,7 @@ import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '@/service
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
 import * as MemoryService from '@/services/MemoryService';
+import * as RoomCatalog from '@/services/RoomCatalog';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
 
@@ -79,26 +80,41 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
   fire('looking');
 
   // 1. Snapshot
+  console.log('[describe] step 1: snapshot');
   const snap = await captureSnapshot();
   if (!snap.ok) {
+    console.log('[describe] snapshot FAILED with:', snap.error);
     fire('error');
     const kind: ErrorKind = snap.error === 'permission_denied' ? 'permission_denied_camera' : 'no_camera';
     await speak(errorCopyFor(kind));
     await logEvent('describe', false, now() - t0, snap.error);
     return err(snap.error === 'permission_denied' ? 'permission_denied' : 'no_camera');
   }
+  console.log('[describe] snapshot OK, base64 len:', snap.value.base64.length);
 
-  // 2. Model call
+  // 2. Room identification (best-effort, runs in parallel with prompt build).
+  // If the snapshot matches a tagged room, we inject "estás en X" into the
+  // narration prompt so the model leads with location.
+  const roomPromise = RoomCatalog.identifyRoom(snap.value.uri);
+
+  // 3. Model call
   fire('thinking_start');
   const catalog = await loadCatalogSafe();
+  const roomRes = await roomPromise;
+  const roomName = roomRes.ok && roomRes.value ? roomRes.value.displayName : null;
+  if (roomName) console.log('[describe] room identified:', roomName);
+  const userText = roomName
+    ? `Estás en ${roomName}. Describi esta escena, empezando por mencionar el cuarto.`
+    : 'Describe esta escena.';
   const resp = await chat({
     systemPrompt: buildSystemPrompt(catalog),
-    userText: 'Describe esta escena.',
+    userText,
     imageBase64: snap.value.base64,
   });
   fire('thinking_stop');
 
   if (!resp.ok) {
+    console.log('[describe] chat FAILED with:', resp.error);
     fire('error');
     const kind: ErrorKind = resp.error === 'network' ? 'network' : resp.error === 'parse_fail' ? 'parse_fail' : 'unknown';
     await speak(errorCopyFor(kind));
@@ -107,6 +123,7 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
     if (resp.error === 'parse_fail') return err('parse_fail');
     return err('unknown');
   }
+  console.log('[describe] chat OK');
 
   // 3. Low-confidence detection
   const { narration, objects } = resp.value;
@@ -126,6 +143,9 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
   }
 
   // 6. Write sightings (E5.1) — passive memory log byproduct.
+  // Store the full describe narration as the excerpt so memory recall can
+  // surface the scene context later ("the mug was on the white table…")
+  // without needing a fresh camera frame.
   for (const o of objects) {
     void MemoryService.recordSighting({
       canonical: o.canonical,
@@ -134,7 +154,7 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
       snapshot_uri: persistedUri,
       room_hint: o.room_hint,
       source_action: 'describe',
-      excerpt: o.display,
+      excerpt: narration,
     });
   }
 

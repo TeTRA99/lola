@@ -22,6 +22,16 @@ export type HapticPattern =
 let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 let answerReadyTimer: ReturnType<typeof setTimeout> | null = null;
 
+// UI observers — the Home screen drives its in-panel state machine off the
+// same lifecycle the haptics fire on, so the visible state and the felt pulse
+// stay in lockstep without the services needing to know about the UI.
+const listeners = new Set<(pattern: HapticPattern) => void>();
+
+export function subscribeHaptics(fn: (pattern: HapticPattern) => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 function clearThinking(): void {
   if (thinkingTimer) {
     clearInterval(thinkingTimer);
@@ -43,6 +53,10 @@ export function _resetForTests(): void {
 }
 
 export function fire(pattern: HapticPattern): void {
+  // Notify UI observers first so the visible transition isn't gated behind the
+  // (async) native haptic call.
+  listeners.forEach(fn => { try { fn(pattern); } catch { /* observer errors never break haptics */ } });
+
   // Any non-thinking_start pattern cancels the rhythmic pulse.
   if (pattern !== 'thinking_start') clearThinking();
 
@@ -81,17 +95,14 @@ export function fire(pattern: HapticPattern): void {
       return;
 
     case 'thinking_start':
-      // Initial tick immediate; then schedule repeating impacts every
-      // (HEARTBEAT_THINKING_ON_MS + HEARTBEAT_THINKING_OFF_MS).
-      // Note: setInterval approximates the rhythm — if AC1.6.5 perception
-      // test fails on Charly's iOS, escalate to CHHapticEngine AHAP via
-      // react-native-haptic-feedback custom patterns.
-      // B1 fix (2026-05-27 review): explicit clearThinking to guard against
-      // double-fire — the top-of-function guard skips for thinking_start.
+      // Initial tick immediate; then schedule repeating impacts. Medium impact
+      // is meaningfully more perceptible on Android than Light — Charly couldn't
+      // feel Light during testing on his Galaxy. B1 fix: explicit clearThinking
+      // to guard against double-fire.
       clearThinking();
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       thinkingTimer = setInterval(() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }, CONFIG.HEARTBEAT_THINKING_ON_MS + CONFIG.HEARTBEAT_THINKING_OFF_MS);
       return;
 
@@ -104,4 +115,20 @@ export function fire(pattern: HapticPattern): void {
 export function stop(): void {
   clearThinking();
   clearAnswerReadyDoubleTap();
+}
+
+let heartbeatLub: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Soft "lub-dub" — two light taps ~150ms apart. The idle-heartbeat on Home
+ * calls this on a long interval so a low-vision user can feel the app is alive
+ * and waiting, without it being annoying.
+ */
+export function heartbeat(): void {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  if (heartbeatLub) clearTimeout(heartbeatLub);
+  heartbeatLub = setTimeout(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    heartbeatLub = null;
+  }, 150);
 }

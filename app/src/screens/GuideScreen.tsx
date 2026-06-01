@@ -1,0 +1,599 @@
+// feat/guide-me-to-it — SPIKE screen.
+//
+// Validates the feature's halves: (1) VisionCamera v5 runs in the dev client,
+// (2) the proximity haptic loop feels right, (3) on-device YOLO26n detection
+// drives proximity for a CHOSEN object.
+//
+// Two proximity sources via the on-screen toggle:
+//   • MOCK (default): drag the dot — closeness to center drives the haptics.
+//   • LIVE: pick a target label (chips); the haptics home in on that one object.
+//     The real feature passes the target from the Describe step; the spike lets
+//     you choose it. Boxes/preview are dev-only — the end user never sees them.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View, Text, StyleSheet, Pressable, PanResponder, ScrollView, AppState, Animated, Easing,
+  useWindowDimensions,
+} from 'react-native';
+import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
+import { speak } from '@/adapters/tts';
+import { COPY } from '@/services/CopyModule';
+import * as Settings from '@/services/Settings';
+import { color, fontFamily } from '@/theme/tokens';
+import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
+import { useGuideDetection } from '@/adapters/useGuideDetection';
+import {
+  bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
+  type RawDetection,
+} from '@/adapters/objectDetection';
+import { CONFIG } from '@/config';
+
+// Curated, stable chip list so the picker doesn't flicker with detections.
+const TARGET_OPTIONS = [
+  'cup', 'bowl', 'bottle', 'chair', 'book', 'laptop',
+  'remote', 'keyboard', 'spoon', 'knife', 'tv', 'sports ball',
+];
+
+export function GuideScreen({
+  targetLabel = 'the object',
+  targetCocoLabel = null,
+  onClose,
+}: {
+  targetLabel?: string;
+  targetCocoLabel?: string | null;
+  onClose: () => void;
+}) {
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
+  const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
+  // null = target not detected in frame; number = how centered (0..1).
+  // Starts null (nothing seen yet) so "creo que lo veo" only fires on a real
+  // detection, not on open.
+  const [proximity, setProximity] = useState<number | null>(null);
+  const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
+  const lastHudAt = useRef(0);
+  const spottedRef = useRef(false); // said the tentative "creo que lo veo"
+  const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
+  const lastFoundAt = useRef(0);    // timestamp of the last "¡ahí está!" (cooldown)
+  const notFoundRef = useRef(false); // said "no la encuentro"
+  const preparingRef = useRef(false); // said the "me estoy preparando" first-load cue
+  const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // On-device model readiness (downloads on first use — can take minutes).
+  const [model, setModel] = useState({ isReady: false, downloadProgress: 0 });
+  // Becomes true when the "Buscando… movéme despacio" line is announced (after
+  // the intro hint). The no-find countdown starts from here — NOT from model
+  // readiness — so the intro narration doesn't eat the real searching window.
+  const [searchArmed, setSearchArmed] = useState(false);
+
+  // Real flow (target known) = blind UX: no preview/boxes, branded screen,
+  // tap-to-exit. Dev (no target) keeps the debug preview + chips.
+  const blind = !!targetCocoLabel;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const handleExit = useCallback(() => onCloseRef.current(), []);
+
+  // Keep the camera active only while the app is foregrounded — otherwise the
+  // OS disables the camera and VisionCamera throws "Camera is disabled / fatal
+  // Camera error" on background→foreground.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => setAppActive(s === 'active'));
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!hasPermission) void requestPermission();
+  }, [hasPermission, requestPermission]);
+
+  useEffect(() => {
+    startGuide();
+    return () => stopGuide();
+  }, []);
+
+  // Diagnostics: surface model load state to Metro (blind flow hides the banner).
+  useEffect(() => {
+    console.log('[guide] model isReady:', model.isReady, 'downloadProgress:', model.downloadProgress);
+  }, [model.isReady, model.downloadProgress]);
+
+  // Blind-user audio: announce the search once on open (real flow only). The
+  // first time the homing flow is ever used, explain the vibration first.
+  useEffect(() => {
+    if (!targetCocoLabel) return;
+    void (async () => {
+      if (!(await Settings.getBool(Settings.KEYS.guideHintSeen, false))) {
+        await Settings.setBool(Settings.KEYS.guideHintSeen, true);
+        await speak(COPY.onboarding.guideHint);
+      }
+      // Arm the no-find window now — the user can start searching as this plays.
+      setSearchArmed(true);
+      void speak(COPY.guide.searching(targetLabel));
+    })();
+  }, []);
+
+  // While the on-device model is still loading (first-use download can take
+  // minutes), tell the user it's preparing so it doesn't seem broken.
+  useEffect(() => {
+    if (!targetCocoLabel || model.isReady) return;
+    const t = setTimeout(() => {
+      if (!model.isReady && !preparingRef.current) {
+        preparingRef.current = true;
+        void speak(COPY.guide.preparing);
+      }
+    }, CONFIG.GUIDE_PREPARING_MS);
+    return () => clearTimeout(t);
+  }, [model.isReady, targetCocoLabel]);
+
+  // "No la encuentro" — starts only once the model is ready AND we've announced
+  // the search (searchArmed), so neither the model download nor the intro
+  // narration eats into the real searching window.
+  useEffect(() => {
+    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    const t = setTimeout(() => {
+      if (!spottedRef.current && !notFoundRef.current) {
+        notFoundRef.current = true;
+        void speak(COPY.guide.notFound(targetLabel));
+      }
+    }, CONFIG.GUIDE_NOT_FOUND_MS);
+    return () => clearTimeout(t);
+  }, [model.isReady, targetCocoLabel, searchArmed]);
+
+  // Tiered audio (real flow only):
+  //  • detected in frame (any proximity) → tentative "creo que lo veo" once
+  //  • centered enough (reachable threshold) → affirmative "¡ahí está!" once
+  // Re-arm "found" when moving away; re-arm "spotted" only after the object has
+  // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
+  const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
+  useEffect(() => {
+    if (!targetCocoLabel) return;
+    if (proximity === null) {
+      if (!lostTimer.current) {
+        lostTimer.current = setTimeout(() => {
+          // Re-arm only "found" on a brief loss; keep "creo que lo veo" said once
+          // per session so detector flicker doesn't repeat it (it fired 3× on the
+          // Redmi as detection stabilized).
+          foundRef.current = false;
+          lostTimer.current = null;
+        }, 1500);
+      }
+      return;
+    }
+    if (lostTimer.current) { clearTimeout(lostTimer.current); lostTimer.current = null; }
+    if (!spottedRef.current) {
+      spottedRef.current = true;
+      void speak(COPY.guide.spotted);
+    }
+    // "¡ahí está!" fires when reachable, but only once per re-arm AND no sooner
+    // than the cooldown — otherwise small wobbles across the threshold make Lola
+    // repeat it back-to-back. After the cooldown, a genuine lose-and-refind says
+    // it again (which is what we want).
+    if (
+      proximity >= CONFIG.GUIDE_FOUND_PROXIMITY &&
+      !foundRef.current &&
+      Date.now() - lastFoundAt.current >= CONFIG.GUIDE_FOUND_COOLDOWN_MS
+    ) {
+      foundRef.current = true;
+      lastFoundAt.current = Date.now();
+      void speak(COPY.guide.found);
+      // Safety auto-close: task done → wrap up after a grab window (tap exits sooner).
+      if (!autoCloseTimer.current) {
+        autoCloseTimer.current = setTimeout(handleExit, CONFIG.GUIDE_AUTO_CLOSE_MS);
+      }
+    } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
+      foundRef.current = false;
+    }
+  }, [proximity, targetCocoLabel, handleExit]);
+
+  useEffect(() => () => {
+    if (lostTimer.current) clearTimeout(lostTimer.current);
+    if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+  }, []);
+
+  // Haptics update every frame via module state (no render); HUD number throttled.
+  const applyProximity = useCallback((p: number | null) => {
+    updateGuide(p);
+    const now = Date.now();
+    if (now - lastHudAt.current > 160) {
+      lastHudAt.current = now;
+      setProximity(p);
+    }
+  }, []);
+
+  const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
+  const status: GuideStatus = !model.isReady
+    ? 'preparing'
+    : proximity === null
+      ? 'searching'
+      : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted';
+
+  return (
+    <View style={styles.root}>
+      {live ? (
+        <LiveLayer
+          device={device}
+          hasPermission={hasPermission}
+          active={appActive}
+          blind={blind}
+          target={liveTarget}
+          setTarget={setLiveTarget}
+          onProximity={applyProximity}
+          onModelState={setModel}
+        />
+      ) : (
+        <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
+      )}
+
+      {blind ? (
+        // Real (blind) flow: branded screen over the hidden camera, tap to exit.
+        <BlindOverlay targetLabel={targetLabel} status={status} onExit={handleExit} />
+      ) : (
+        <>
+          {/* Dev HUD + controls */}
+          <View style={styles.hud} pointerEvents="none">
+            <Text style={styles.hudText}>
+              Guiding to: {hudTarget} · proximity {((proximity ?? 0) * 100).toFixed(0)}%{locked ? ' · THERE!' : ''}
+            </Text>
+            <Text style={styles.hudHint}>
+              {live
+                ? 'LIVE on-device detection. Pick a target chip below.'
+                : 'MOCK: drag the dot to the center to feel the pattern.'}
+            </Text>
+          </View>
+          <Pressable style={styles.toggle} onPress={() => setLive(v => !v)} hitSlop={12}>
+            <Text style={styles.toggleText}>{live ? 'Use mock' : 'Use live detection'}</Text>
+          </Pressable>
+          <Pressable style={styles.close} onPress={handleExit} hitSlop={16}>
+            <Text style={styles.closeText}>Close</Text>
+          </Pressable>
+        </>
+      )}
+    </View>
+  );
+}
+
+type GuideStatus = 'preparing' | 'searching' | 'spotted' | 'found';
+
+/** Branded, preview-less screen for the real (blind/low-vision) flow. The whole
+ *  screen is the exit target. Camera + boxes are hidden (camera runs underneath
+ *  in LiveLayer for detection). A gentle pulse + status text give low-vision
+ *  users something to see instead of a black "broken" screen. */
+function BlindOverlay({
+  targetLabel,
+  status,
+  onExit,
+}: {
+  targetLabel: string;
+  status: GuideStatus;
+  onExit: () => void;
+}) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const accent = status === 'found' ? '#22d3ee' : status === 'spotted' ? '#4ade80' : 'rgba(255,255,255,0.5)';
+  const title = status === 'preparing'
+    ? COPY.guide.preparingLegend
+    : status === 'found' ? COPY.guide.here
+      : status === 'spotted' ? COPY.guide.seeingIt
+        : COPY.guide.looking(targetLabel);
+  const homing = status === 'found' || status === 'spotted';
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, homing ? 1.3 : 1.12] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+
+  return (
+    <Pressable style={styles.blindRoot} onPress={onExit} accessibilityRole="button" accessibilityLabel={COPY.guide.tapHint}>
+      <Animated.View style={[styles.blindPulse, { borderColor: accent, transform: [{ scale }], opacity }]} />
+      <Text style={styles.blindTitle}>{title}</Text>
+      <Text style={styles.blindHint}>{COPY.guide.tapHint}</Text>
+    </Pressable>
+  );
+}
+
+/** MOCK proximity: a draggable dot; closeness to center drives the haptics. */
+function MockLayer({
+  device,
+  hasPermission,
+  active,
+  onProximity,
+}: {
+  device?: CameraDevice;
+  hasPermission: boolean;
+  active: boolean;
+  onProximity: (p: number | null) => void;
+}) {
+  const { width, height } = useWindowDimensions();
+  const cx = width / 2;
+  const cy = height / 2;
+  const [dot, setDot] = useState({ x: width * 0.8, y: height * 0.35 });
+
+  const ctx = useRef({ cx, cy, onProximity });
+  ctx.current = { cx, cy, onProximity };
+
+  const report = (x: number, y: number) => {
+    const c = ctx.current;
+    const dx = (x - c.cx) / c.cx;
+    const dy = (y - c.cy) / c.cy;
+    c.onProximity(1 - Math.min(1, Math.hypot(dx, dy) / Math.SQRT2));
+  };
+
+  useEffect(() => {
+    report(dot.x, dot.y);
+  }, []);
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        const { pageX, pageY } = e.nativeEvent;
+        setDot({ x: pageX, y: pageY });
+        report(pageX, pageY);
+      },
+      onPanResponderMove: (_e, g) => {
+        setDot({ x: g.moveX, y: g.moveY });
+        report(g.moveX, g.moveY);
+      },
+    }),
+  ).current;
+
+  return (
+    <>
+      {hasPermission && device ? (
+        <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} onError={onCameraError} />
+      ) : (
+        <CamFallback hasPermission={hasPermission} />
+      )}
+      <View style={StyleSheet.absoluteFill} {...pan.panHandlers}>
+        <View style={[styles.reticle, { left: cx - 30, top: cy - 30 }]} />
+        <View style={[styles.dot, { left: dot.x - 14, top: dot.y - 14 }]} />
+      </View>
+    </>
+  );
+}
+
+/** LIVE proximity: on-device YOLO26n homing in on the chosen target label. */
+function LiveLayer({
+  device,
+  hasPermission,
+  active,
+  blind,
+  target,
+  setTarget,
+  onProximity,
+  onModelState,
+}: {
+  device?: CameraDevice;
+  hasPermission: boolean;
+  active: boolean;
+  blind: boolean;
+  target: string | null;
+  setTarget: (t: string | null) => void;
+  onProximity: (p: number | null) => void;
+  onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
+}) {
+  const { width, height } = useWindowDimensions();
+  const [det, setDet] = useState<{ boxes: RawDetection[]; w: number; h: number; best: RawDetection | null }>({
+    boxes: [], w: 0, h: 0, best: null,
+  });
+  const [workletErr, setWorkletErr] = useState<string | null>(null);
+  const lastAt = useRef(0);
+  const lastLogAt = useRef(0);
+
+  // Diagnostics: the blind flow hides the on-screen banner, so log what the
+  // detector is actually doing (frames arriving? labels? errors?) to Metro.
+  useEffect(() => {
+    console.log('[guide] LiveLayer mounted — hasPermission:', hasPermission, 'device:', device?.id ?? 'NONE', 'active:', active);
+  }, [hasPermission, device, active]);
+  useEffect(() => {
+    if (workletErr) console.log('[guide] FRAME-PROCESSOR ERROR:', workletErr);
+  }, [workletErr]);
+
+  const onResult = useCallback(
+    (boxes: RawDetection[], w: number, h: number) => {
+      const best = bestDetectionFor(boxes, target);
+      // Proximity = how centered the object is in the camera's (portrait) view.
+      // executorch returns screen-space coords, so normalize by the portrait
+      // screen-space dims (min,max), not the native landscape frame dims.
+      const ss = screenSpaceDims(w, h);
+      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, ss.w, ss.h)) : null);
+      const now = Date.now();
+      // Throttled detection log (~1.5s) so we can see if frames flow and what
+      // the model sees vs. the target we're homing on.
+      if (now - lastLogAt.current > 1500) {
+        lastLogAt.current = now;
+        console.log(
+          `[guide] frame ${w}x${h} · ${boxes.length} det · target=${target ?? 'any'} · best=${best ? 'YES' : 'no'} · ` +
+          boxes.slice(0, 6).map(b => `${String(b.label)}:${b.score.toFixed(2)}`).join(', '),
+        );
+      }
+      if (now - lastAt.current > 120) {
+        lastAt.current = now;
+        setDet({ boxes, w, h, best });
+      }
+    },
+    [target, onProximity, width, height],
+  );
+
+  const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(onResult, setWorkletErr);
+  const outputs = useMemo(() => [frameOutput], [frameOutput]);
+
+  // Report model readiness up so the screen can show "preparando…" + gate audio.
+  useEffect(() => {
+    onModelState({ isReady, downloadProgress: downloadProgress ?? 0 });
+  }, [isReady, downloadProgress, onModelState]);
+
+  useEffect(() => {
+    if (error) console.error('[guide] detector error:', error);
+  }, [error]);
+  const errMsg = error ? (error as { message?: string }).message ?? String(error) : null;
+
+  // DEBUG: raw normalized frame-centroid of the tracked object (0..1). When the
+  // phone physically points straight at the object, this should read ~0.50,0.50.
+  const bnSS = screenSpaceDims(det.w, det.h);
+  const bn = det.best ? normalizePixelBox(det.best.bbox, bnSS.w, bnSS.h) : null;
+  const aimReadout = bn ? ` · aim(${(bn.x + bn.width / 2).toFixed(2)},${(bn.y + bn.height / 2).toFixed(2)})` : '';
+
+  if (!hasPermission || !device) return <CamFallback hasPermission={hasPermission} />;
+
+  return (
+    <>
+      <Camera style={StyleSheet.absoluteFill} device={device} isActive={active} outputs={outputs} onError={onCameraError} />
+
+      {/* Blind/real flow hides all of this — the camera runs only for detection;
+          GuideScreen draws the branded BlindOverlay on top. */}
+      {!blind && (
+      <>
+      {/* Debug overlay (frame is landscape; back camera rotated 90° CW). The
+          actively-tracked target is highlighted. Positions are best-effort. */}
+      {det.w > 0 &&
+        det.boxes.map((d, i) => {
+          const r = frameBoxToScreen(d.bbox, det.w, det.h, width, height);
+          const isBest = det.best != null && d === det.best;
+          return (
+            <View
+              key={i}
+              style={[isBest ? styles.detBoxActive : styles.detBox, {
+                left: r.left, top: r.top, width: r.width, height: r.height,
+              }]}
+            >
+              <Text style={[styles.detLabel, isBest && styles.detLabelActive]}>
+                {String(d.label)} {Math.round(d.score * 100)}%
+              </Text>
+            </View>
+          );
+        })}
+
+      <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
+
+      <View style={styles.banner}>
+        <Text style={styles.bannerText}>
+          {errMsg
+            ? `model err: ${errMsg}`
+            : workletErr
+              ? `frame err: ${workletErr}`
+              : !isReady
+                ? `Loading model… ${Math.round((downloadProgress ?? 0) * 100)}%`
+                : `tracking: ${target ?? 'best'} · ${det.boxes.length} obj${aimReadout}`}
+        </Text>
+      </View>
+
+      {/* Target picker — pick one object to home in on. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chips}
+        contentContainerStyle={styles.chipsContent}
+      >
+        <Chip label="Any" active={target === null} onPress={() => setTarget(null)} />
+        {TARGET_OPTIONS.map(t => (
+          <Chip key={t} label={t} active={target === t} onPress={() => setTarget(t)} />
+        ))}
+      </ScrollView>
+      </>
+      )}
+    </>
+  );
+}
+
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// VisionCamera emits native camera errors here. The common ones —
+// "device/camera-is-disabled" and the generic fatal "Encountered a fatal Camera
+// error" — fire when the OS reclaims the camera (app backgrounded, screen lock,
+// or a device-policy/MDM restriction) and recover on their own once the app
+// foregrounds and `isActive` flips back on. Without an onError prop VisionCamera
+// logs them via console.error (the red ERROR spam in Metro); swallow them with a
+// quiet log instead so they don't look like a crash.
+function onCameraError(e: Error) {
+  const code = (e as { code?: string }).code;
+  console.log('[guide] camera error (transient, recovers on foreground):', code ?? '', e.message);
+}
+
+function CamFallback({ hasPermission }: { hasPermission: boolean }) {
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.noCam]}>
+      <Text style={styles.noCamText}>
+        {hasPermission ? 'No back camera found' : 'Waiting for camera permission…'}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000' },
+  // Branded preview-less overlay (real/blind flow)
+  blindRoot: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: color.neutral.ink,
+    alignItems: 'center', justifyContent: 'center', gap: 28,
+  },
+  blindPulse: {
+    width: 150, height: 150, borderRadius: 75, borderWidth: 3,
+  },
+  blindTitle: {
+    color: '#fff', fontSize: 30, fontFamily: fontFamily.extrabold, fontWeight: '800',
+    textAlign: 'center', paddingHorizontal: 32, letterSpacing: -0.5,
+  },
+  blindHint: {
+    position: 'absolute', bottom: 56, left: 24, right: 24,
+    color: 'rgba(255,255,255,0.5)', fontSize: 15, fontFamily: fontFamily.medium, textAlign: 'center',
+  },
+  noCam: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  noCamText: { color: '#888', fontSize: 16 },
+  reticle: {
+    position: 'absolute', width: 60, height: 60, borderRadius: 30,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)',
+  },
+  dot: {
+    position: 'absolute', width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#1A73E8', borderWidth: 2, borderColor: '#fff',
+  },
+  hud: { position: 'absolute', bottom: 36, left: 16, right: 16, alignItems: 'center' },
+  hudText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  hudHint: { color: '#bbb', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  banner: {
+    position: 'absolute', top: 110, alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+  },
+  bannerText: { color: '#fff', fontSize: 14 },
+  detBox: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(74,222,128,0.7)' },
+  detBoxActive: { position: 'absolute', borderWidth: 3, borderColor: '#22d3ee' },
+  detLabel: {
+    color: '#000', backgroundColor: 'rgba(74,222,128,0.7)', fontSize: 11, fontWeight: '700',
+    alignSelf: 'flex-start', paddingHorizontal: 3,
+  },
+  detLabelActive: { backgroundColor: '#22d3ee' },
+  chips: { position: 'absolute', bottom: 88, left: 0, right: 0, maxHeight: 40 },
+  chipsContent: { paddingHorizontal: 12, gap: 8, alignItems: 'center' },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  chipActive: { backgroundColor: '#22d3ee', borderColor: '#22d3ee' },
+  chipText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#000' },
+  toggle: {
+    position: 'absolute', top: 48, left: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+  },
+  toggleText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  close: {
+    position: 'absolute', top: 48, right: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
+  },
+  closeText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+});

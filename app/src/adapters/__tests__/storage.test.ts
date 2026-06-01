@@ -17,9 +17,10 @@ jest.mock('expo-sqlite', () => ({
 import { MIGRATIONS, TARGET_VERSION, migrate } from '../storage';
 
 describe('storage migrations', () => {
-  test('v1 migration exists; TARGET_VERSION === 1', () => {
+  test('v1 migration exists; TARGET_VERSION advances with each added migration', () => {
     expect(MIGRATIONS[1]).toBeDefined();
-    expect(TARGET_VERSION).toBe(1);
+    // v2 added rooms/room_photos, v3 added settings (v1.1 RoomCatalog feature).
+    expect(TARGET_VERSION).toBe(3);
   });
 
   describe('v1 SQL shape', () => {
@@ -103,7 +104,7 @@ describe('storage migrations', () => {
     });
 
     test('no-ops when already at TARGET_VERSION', async () => {
-      const db = stubDb(1);
+      const db = stubDb(TARGET_VERSION);
       await migrate(db as unknown as Parameters<typeof migrate>[0]);
       // Only the foreign_keys pragma should fire; no CREATE TABLE.
       expect(db.calls.some(c => /CREATE TABLE/.test(c))).toBe(false);
