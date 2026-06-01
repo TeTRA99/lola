@@ -14,8 +14,11 @@ export function MugIcon({ size = 24, color = '#000', strokeWidth = 1.5 }: Props)
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
+  // The artwork only occupies ~x5–19 / y3.5–20 of a 24-box, so it looked small
+  // next to Ionicons (which fill their box). Tighten the viewBox to frame the
+  // mug so it visually matches at the same `size`.
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Svg width={size} height={size} viewBox="3 2.75 18 18">
       <Path d="M5 8h11v8a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z" {...s} />
       <Path d="M16 10h2.5a2.5 2.5 0 0 1 0 5H16" {...s} />
       <Path d="M8 3.5v1.8M11.5 3.5v1.8" {...s} />
