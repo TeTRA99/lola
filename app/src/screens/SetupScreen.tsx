@@ -660,12 +660,9 @@ function RoomForm({
   const full = photos.length >= MAX;
 
   useEffect(() => {
-    if (existing) {
-      void (async () => {
-        const list = await RoomCatalog.listPhotosForRoom(existing.id);
-        setPhotos(list.map(p => p.uri));
-      })();
-    }
+    // Re-derive photo URIs from the LIVE container (the room_photos table's stored
+    // absolute paths go stale across reinstalls — same fix as the objects editor).
+    if (existing) setPhotos(RoomCatalog.listForRoom(existing.id));
   }, [existing]);
 
   useEffect(() => onDownloadProgress(p => setDownloadPct(p > 0 && p < 1 ? p : null)), []);

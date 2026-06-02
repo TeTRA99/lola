@@ -62,6 +62,15 @@ export function primaryUriFor(roomId: number): string | null {
   return listFilesIn(roomDir(roomId))[0]?.uri ?? null;
 }
 
+/**
+ * Live absolute URIs of a room's photos, re-derived from the document directory
+ * (mirrors CatalogPhotos.listForObject). Use this for DISPLAY — the room_photos
+ * table's stored `uri` is an absolute path that goes stale across reinstalls.
+ */
+export function listForRoom(roomId: number): string[] {
+  return listFilesIn(roomDir(roomId)).map(f => f.uri);
+}
+
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
   let dot = 0, na = 0, nb = 0;
