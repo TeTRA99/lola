@@ -500,9 +500,17 @@ function CloudGuideLayer({
 
   if (perm !== 'granted') return <CamFallback hasPermission={perm !== 'denied'} />;
 
-  // Dev preview: the box is normalized to the captured (upright) frame; the preview
-  // is 'cover'-fit, so this is approximate but enough to see what's being found.
+  // Dev preview box. The full-screen CameraView 'cover'-fits the captured frame
+  // (crops whichever axis overflows), so map the NormBox through that same transform
+  // — naive b.x*screenW would be off by the cropped margin. Falls back to naive
+  // until we know the frame aspect.
   const b = cg.lastBox;
+  const fa = cg.lastFrameW > 0 && cg.lastFrameH > 0 ? cg.lastFrameW / cg.lastFrameH : 0;
+  const sa = width / height;
+  const rW = fa <= 0 ? width : fa > sa ? height * fa : width;
+  const rH = fa <= 0 ? height : fa > sa ? height : width / fa;
+  const offX = (width - rW) / 2;
+  const offY = (height - rH) / 2;
   return (
     <>
       <CameraView
@@ -518,7 +526,7 @@ function CloudGuideLayer({
           {b && (
             <View
               style={[styles.detBoxActive, {
-                left: b.x * width, top: b.y * height, width: b.width * width, height: b.height * height,
+                left: offX + b.x * rW, top: offY + b.y * rH, width: b.width * rW, height: b.height * rH,
               }]}
             >
               <Text style={[styles.detLabel, styles.detLabelActive]}>

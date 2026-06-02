@@ -31,6 +31,10 @@ export type CloudGuideState = {
   lastRaw: string | null;
   // Short landmark phrase the model reported ("al lado del termo"), or null.
   lastNear: string | null;
+  // Pixel dims of the last analyzed frame — lets the dev overlay map the box
+  // through the preview's 'cover' transform (aspect-correct), not naively.
+  lastFrameW: number;
+  lastFrameH: number;
 };
 
 /** Per-result hint for the spoken cue: the box (for frame direction) + landmark. */
@@ -56,7 +60,7 @@ export function useCloudGuideDetection(opts: {
   );
   const [state, setState] = useState<CloudGuideState>({
     model, polls: 0, lastLatencyMs: null, lastError: null, lastFound: false,
-    lastBox: null, lastConfidence: 0, lastRaw: null, lastNear: null,
+    lastBox: null, lastConfidence: 0, lastRaw: null, lastNear: null, lastFrameW: 0, lastFrameH: 0,
   });
 
   // Keep the latest callbacks/inputs in refs so the polling effect can stay
@@ -105,7 +109,7 @@ export function useCloudGuideDetection(opts: {
                 at: t0, query: queryRef.current, model, found: !!box,
                 box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw, near,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null, lastNear: near }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null, lastNear: near, lastFrameW: frame.width, lastFrameH: frame.height }));
             } else if (res.ok) {
               // Genuine "not in this frame" — a faint tick is honest feedback.
               onProxRef.current(null);
