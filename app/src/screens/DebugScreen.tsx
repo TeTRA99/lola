@@ -8,6 +8,7 @@ import { getDb } from '@/adapters/storage';
 import * as Settings from '@/services/Settings';
 import * as VlmAdapter from '@/adapters/visionLLM';
 import * as TextAdapter from '@/adapters/textLLM';
+import * as OnboardingService from '@/services/OnboardingService';
 import { getAskTraces, type AskTrace } from '@/services/AskTrace';
 import { getVlmTraces, type VlmTrace } from '@/adapters/vlmTrace';
 import { getGuideTraces, type GuideTrace } from '@/adapters/guideTrace';
@@ -107,6 +108,18 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     setGuideModel(m);
     void Settings.setString(Settings.KEYS.guideCloudModel, m);
   };
+  // Launch the spike. In cloud mode, attach the saved object's photo when targeting
+  // is 'reference' (matched by the test query) so we can test the saved-photo path.
+  const openSpike = async () => {
+    if (guideBackend !== 'cloud') { onOpenGuide?.(); return; }
+    const q = testQuery.trim() || 'una taza';
+    const refImageUri = guideTargeting === 'reference' ? await OnboardingService.referencePhotoFor(q) : null;
+    if (guideTargeting === 'reference' && !refImageUri) {
+      setExportNote(`No saved object photo matched "${q}" — guiding by name only`);
+      setTimeout(() => setExportNote(null), 3500);
+    }
+    onOpenGuide?.({ cocoLabel: null, spoken: q, cloudQuery: q, refImageUri });
+  };
   const onPreload = async () => {
     setExportNote('Preloading on-device models… (first time downloads weights)');
     await Promise.all([VlmAdapter.preload(), TextAdapter.preload()]);
@@ -164,16 +177,12 @@ export function DebugScreen({ onClose, onOpenGuide }: {
           the cloud guide with the test query below + a visible camera/box preview;
           otherwise it opens the on-device mock/live spike. */}
       {onOpenGuide ? (
-        <Pressable
-          style={styles.guideBtn}
-          onPress={() => onOpenGuide(
-            guideBackend === 'cloud'
-              ? { cocoLabel: null, spoken: testQuery.trim() || 'una taza', cloudQuery: testQuery.trim() || 'una taza' }
-              : undefined,
-          )}
-        >
+        <Pressable style={styles.guideBtn} onPress={() => void openSpike()}>
           <Text style={styles.guideBtnText}>
-            🎯 Open "Guide me to it" spike{guideBackend === 'cloud' ? ` (cloud · "${testQuery.trim() || 'una taza'}")` : ''}
+            🎯 Open "Guide me to it" spike
+            {guideBackend === 'cloud'
+              ? ` (cloud · "${testQuery.trim() || 'una taza'}"${guideTargeting === 'reference' ? ' +photo' : ''})`
+              : ''}
           </Text>
         </Pressable>
       ) : null}

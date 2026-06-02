@@ -189,7 +189,7 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
   // Cloud: best-effort reference photo when targeting === 'reference'.
   let refImageUri: string | null = null;
   if (cloud && (await Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')) === 'reference') {
-    refImageUri = await findReferencePhoto(noun);
+    refImageUri = await OnboardingService.referencePhotoFor(noun);
   }
   return ok({
     narration: '', objects: [], route: 'guide',
@@ -200,22 +200,6 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
       refImageUri: cloud ? refImageUri : undefined,
     },
   });
-}
-
-// Find a saved catalog object's reference photo for the spoken noun (cloud spike,
-// reference targeting). Match the canonicalized noun against canonical_name, then
-// fall back to a display-name substring. Returns null if none has a photo.
-async function findReferencePhoto(noun: string): Promise<string | null> {
-  const catalog = await loadCatalogSafe();
-  if (!catalog) return null;
-  const canon = OnboardingService.canonicalize(noun);
-  const byCanon = catalog.find(o => o.canonical_name === canon && o.reference_image_uri);
-  if (byCanon?.reference_image_uri) return byCanon.reference_image_uri;
-  const lower = noun.trim().toLowerCase();
-  const bySubstr = catalog.find(
-    o => o.reference_image_uri && (o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase())),
-  );
-  return bySubstr?.reference_image_uri ?? null;
 }
 
 // Compact human-readable route label for the Debug Ask-trace readout.

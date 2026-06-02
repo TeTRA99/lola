@@ -132,6 +132,26 @@ export async function removeObject(
   }
 }
 
+/**
+ * Best-effort: find a saved catalog object's reference photo for a spoken noun
+ * (cloud guide, reference targeting). Matches the canonicalized noun against
+ * canonical_name first, then a display-name substring. Returns null if none has a
+ * photo. Shared by the Ask voice flow and the Debug spike launch.
+ */
+export async function referencePhotoFor(noun: string): Promise<string | null> {
+  const catalog = await getCatalog();
+  const canon = canonicalize(noun);
+  const byCanon = catalog.find(o => o.canonical_name === canon && o.reference_image_uri);
+  if (byCanon?.reference_image_uri) return byCanon.reference_image_uri;
+  const lower = noun.trim().toLowerCase();
+  if (!lower) return null;
+  const bySubstr = catalog.find(
+    o => o.reference_image_uri &&
+      (o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase())),
+  );
+  return bySubstr?.reference_image_uri ?? null;
+}
+
 export async function getCatalog(): Promise<ObjectCatalog> {
   try {
     const db = await getDb();

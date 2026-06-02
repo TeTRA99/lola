@@ -89,10 +89,12 @@ export const CONFIG = {
   GUIDE_CLOUD_POLL_MS: 2500,         // re-localize cadence (one image request per poll)
   GUIDE_CLOUD_FRESH_MS: 1800,        // hold full proximity this long after a fresh box
   GUIDE_CLOUD_DECAY_MS: 2400,        // then glide proximity → 0 over this (no hard snap)
-  GUIDE_CLOUD_MAX_DIM: 768,          // downscale captured frames to this before upload
+  GUIDE_CLOUD_MAX_DIM: 512,          // downscale captured frames before upload (smaller = lower latency)
   GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
   GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)
-  GUIDE_CLOUD_MODEL_DEFAULT: 'google/gemini-3.5-flash',
+  // Default model: Gemini 2.5 Flash — on-device tests showed it the most accurate
+  // of the candidates at a usable latency (3.5-flash was ~2-3× slower).
+  GUIDE_CLOUD_MODEL_DEFAULT: 'google/gemini-2.5-flash',
   // Candidate grounding models (Debug picker). All do open-vocab boxes on OpenRouter;
   // box conventions differ — see groundingIsPixelBox()/parseGroundingBox in
   // adapters/objectDetection.ts (Gemini = normalized 0–1000 [ymin,xmin,ymax,xmax];
