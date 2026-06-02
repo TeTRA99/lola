@@ -5,7 +5,7 @@
 > you to everyday objects with haptic "warmer / colder" feedback. Spanish
 > (Argentine *voseo*) throughout.
 
-**Status:** active development · v0.10.0 · Android (priority) + iOS. Solo project.
+**Status:** active development · v0.11.0 · Android (priority) + iOS. Solo project.
 
 The app lives in [`app/`](app/); design notes in [`docs/`](docs/); day-to-day
 conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
@@ -13,6 +13,7 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
 ## Table of contents
 
 - [What it does](#what-it-does)
+- [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
 - [Project layout](#project-layout)
 - [Getting started](#getting-started)
@@ -33,6 +34,15 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
 
 Designed for a blind / low-vision user: voice-first, large touch targets, audible
 cues for every state, and nothing that fails silently.
+
+## Screenshots
+
+| | | |
+|:---:|:---:|:---:|
+| <img src="screenshots/01-splash.png" width="240" alt="Launch — Hola, soy Lola" /> | <img src="screenshots/02-home.png" width="240" alt="Home — Describir / Preguntar" /> | <img src="screenshots/03-listening.png" width="240" alt="Listening — Te escucho…" /> |
+| **Launch** — *"Hola, soy Lola"* | **Home** — two big actions: Describir / Preguntar | **Preguntar** — listening for your question |
+| <img src="screenshots/04-ask-result.png" width="240" alt="Ask result identifying the user's yerba" /> | <img src="screenshots/05-setup-things.png" width="240" alt="Setup — My things" /> | <img src="screenshots/06-setup-rooms.png" width="240" alt="Setup — Rooms" /> |
+| **Answer** — recognizes *your* saved object among look-alikes | **Setup — My things** — tag the objects you ask about | **Setup — Rooms** — map where you are |
 
 ## Tech stack
 
