@@ -108,15 +108,28 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Resu
       // A caregiver-selected voice (Setup picker) overrides the resolved
       // locale; rate/pitch come from the Setup sliders (with sane defaults).
       const voiceId = Settings.getStringSync(Settings.KEYS.voice, '');
-      Speech.speak(text, {
-        language,
-        rate: opts.rate ?? tunedRate(),
-        pitch: tunedPitch(),
-        ...(voiceId ? { voice: voiceId } : {}),
-        onDone: () => settle(ok(undefined)),
-        onStopped: () => settle(ok(undefined)),
-        onError: () => settle(err('unknown')),
-      });
+      // expo-speech's Speech.speak can REJECT (not just fire onError) on Android —
+      // e.g. `getVoices(...) must not be null` when the TTS engine isn't ready.
+      // Its TS type says void, but at runtime it may return a promise; catch it so
+      // a flaky engine never becomes an uncaught rejection / crash. Our callbacks
+      // still drive the normal settle.
+      let speakResult: unknown;
+      try {
+        speakResult = Speech.speak(text, {
+          language,
+          rate: opts.rate ?? tunedRate(),
+          pitch: tunedPitch(),
+          ...(voiceId ? { voice: voiceId } : {}),
+          onDone: () => settle(ok(undefined)),
+          onStopped: () => settle(ok(undefined)),
+          onError: () => settle(err('engine_unavailable')),
+        });
+      } catch {
+        settle(err('engine_unavailable'));
+      }
+      if (speakResult && typeof (speakResult as Promise<unknown>).then === 'function') {
+        (speakResult as Promise<unknown>).catch(() => settle(err('engine_unavailable')));
+      }
     });
   } catch {
     return err('unknown');

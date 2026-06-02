@@ -5,6 +5,7 @@
 //
 // Permission is requested lazily on first capture, not eagerly at boot.
 
+import { Platform } from 'react-native';
 import {
   type CameraView,
   Camera as CameraModule,
@@ -12,6 +13,21 @@ import {
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { ok, err, type Result } from '@/utils/result';
 import * as Settings from '@/services/Settings';
+
+// A few MIUI-based Android brands (Xiaomi / Redmi / Poco) stream the hidden
+// camera late or hang when it's mounted fresh — the reason the host used to be
+// mounted for the whole session. On those we keep that always-mounted fallback;
+// everywhere else the host mounts only while a capture flow is active, which
+// saves battery, drops the always-on "camera in use" indicator, and stops the
+// preview surface from leaking on screen while Home sits idle.
+const ALWAYS_ON_CAMERA_BRANDS = ['xiaomi', 'redmi', 'poco'];
+
+export function cameraNeedsAlwaysOn(): boolean {
+  if (Platform.OS !== 'android') return false;
+  const c = Platform.constants as { Manufacturer?: string; Brand?: string };
+  const brand = `${c?.Manufacturer ?? ''} ${c?.Brand ?? ''}`.toLowerCase();
+  return ALWAYS_ON_CAMERA_BRANDS.some(b => brand.includes(b));
+}
 
 export type CameraError = 'permission_denied' | 'no_camera' | 'capture_failed' | 'unknown';
 

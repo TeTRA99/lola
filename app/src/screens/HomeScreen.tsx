@@ -33,6 +33,7 @@ import { COPY } from '@/services';
 import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
+import { cameraNeedsAlwaysOn } from '@/adapters/camera';
 import { subscribeHaptics, heartbeat, type HapticPattern } from '@/adapters/haptics';
 import { subscribeSpeech, speak, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
@@ -43,6 +44,11 @@ import { LolaMark } from '@/components/LolaMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Toast, type ToastMessage } from '@/components/Toast';
 import { WelcomeOverlay } from '@/components/WelcomeOverlay';
+import { ModelPrepBanner } from '@/components/ModelPrepBanner';
+import { DetectionPrepBanner } from '@/components/DetectionPrepBanner';
+import { presetForLevel, currentDetectionLevel, isModelDownloaded } from '@/adapters/detectionPresets';
+import { inferenceMode } from '@/services/ModelRouter';
+import * as VlmAdapter from '@/adapters/visionLLM';
 import { color, fontFamily } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 
@@ -53,15 +59,17 @@ type ErrKind = 'camera' | 'perm';
 const ACCENT_DARK = color.dad.askAccent; // #5AA2F5
 const ACCENT_LIGHT = color.primary[500]; // #1A73E8
 
+// On most devices the hidden camera is mounted only while a flow runs (see
+// cameraNeedsAlwaysOn); on the MIUI brands that stream late it stays mounted.
+const ALWAYS_ON_CAMERA = cameraNeedsAlwaysOn();
+
 export function HomeScreen({
   onOpenSettings,
   onDevDebug,
-  onDevGuide,
   onOpenGuide,
 }: {
   onOpenSettings?: () => void;
   onDevDebug?: () => void;
-  onDevGuide?: () => void;
   onOpenGuide?: (target: { cocoLabel: string; spoken: string }) => void;
 }) {
   const [mode, setMode] = useState<Mode>('describe');
@@ -78,6 +86,17 @@ export function HomeScreen({
   // True while a first-use hint is being spoken before a flow starts — blocks
   // re-entry so a second tap doesn't kick off a parallel run.
   const preparingRef = useRef(false);
+
+  // The hidden camera is mounted on demand: it comes up the instant a card is
+  // tapped (so its ~1s warmup overlaps the hint / "Un momento…" and is never
+  // felt) and comes down once we're back at rest. On the MIUI brands that hang
+  // on a fresh mount we keep it up the whole time instead (ALWAYS_ON_CAMERA).
+  const [cameraMounted, setCameraMounted] = useState(ALWAYS_ON_CAMERA);
+
+  // Show the Guide-detector prep banner if the chosen Detection-quality level
+  // needs a model that isn't on the device yet. Evaluated at mount (Home remounts
+  // on return from Setup, so a freshly-changed level re-triggers the download).
+  const [detPending, setDetPending] = useState(() => !isModelDownloaded(presetForLevel(currentDetectionLevel()).modelName));
 
   // First-run welcome (item #6): a one-time voice-first interstitial. Shown once
   // ever, then suppressed via the welcomeSeen flag.
@@ -149,6 +168,15 @@ export function HomeScreen({
     return () => clearInterval(id);
   }, [heartbeatOn, state, showWelcome]);
 
+  // Tear the on-demand camera back down once we return to rest (idle/error),
+  // unless a fresh flow is still being prepared. No-op when it's kept always-on.
+  useEffect(() => {
+    if (ALWAYS_ON_CAMERA) return;
+    if ((state === 'idle' || state === 'error') && !preparingRef.current) {
+      setCameraMounted(false);
+    }
+  }, [state]);
+
   // Camera error is calm and self-clearing — Lola says her line and the screen
   // returns to the menu on its own (handoff §3). Tapping returns sooner. The
   // permission error keeps its recovery button until acted on.
@@ -163,6 +191,9 @@ export function HomeScreen({
     if (runningRef.current) { stopActive(); return; } // tap during a run = stop
     if (preparingRef.current) return; // a first-use hint is still playing
     cancelledRef.current = false;
+    // Bring the camera up the moment the card is tapped so it's warm by the
+    // time we capture (no-op when it's already always-on).
+    setCameraMounted(true);
     setMode(m);
     setSpoken('');
     // First-use hint (once per feature), spoken before the flow so it doesn't
@@ -172,6 +203,11 @@ export function HomeScreen({
     if (!(await Settings.getBool(hintKey, false))) {
       await Settings.setBool(hintKey, true);
       await speak(m === 'ask' ? COPY.onboarding.askHint : COPY.onboarding.describeHint);
+    }
+    // On-device first run: if the model is still downloading, say so rather than
+    // leave a silent wait. The describe/ask call awaits the download and then runs.
+    if (inferenceMode() === 'local' && !VlmAdapter.isReady()) {
+      await speak(COPY.models.preparing);
     }
     preparingRef.current = false;
     if (cancelledRef.current) return;
@@ -250,7 +286,19 @@ export function HomeScreen({
     <View style={styles.root}>
       {/* Light (sunken) surface → dark status-bar icons. */}
       <StatusBar style="dark" />
-      <CameraHost />
+      {/* Camera is mounted on demand (or always, on the MIUI fallback brands)
+          so it isn't streaming — and leaking its preview onto the status bar —
+          while Home sits idle. */}
+      {cameraMounted && <CameraHost />}
+
+      {/* First-run on-device model download progress (local mode only; hides
+          itself when ready / on cached launches / on cloud). */}
+      <ModelPrepBanner />
+
+      {/* Guide detector download — shown when the chosen Detection-quality level
+          needs a model that isn't on the device yet. Starts the download here on
+          Home (Home remounts on return from Setup, so a fresh level is picked up). */}
+      {detPending && <DetectionPrepBanner onReady={() => setDetPending(false)} />}
 
       {/* Top bar: prompt (left) + settings gear (right). Long-press the gear to
           open Setup; a plain tap shows a hint (gated so the end user can't trip
@@ -268,15 +316,6 @@ export function HomeScreen({
               accessibilityLabel="Dev: open Debug"
             >
               <Text style={styles.devBtnText}>🐞</Text>
-            </Pressable>
-          )}
-          {onDevGuide && (
-            <Pressable
-              onPress={onDevGuide}
-              style={styles.devBtn}
-              accessibilityLabel="Dev: open Guide spike"
-            >
-              <Text style={styles.devBtnText}>🎯</Text>
             </Pressable>
           )}
           {onOpenSettings && (

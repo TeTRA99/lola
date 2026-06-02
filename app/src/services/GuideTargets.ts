@@ -6,7 +6,7 @@
 // hints) and let it pick the best match, or null. We only *validate* the label
 // it returns against our set (a guard on model output, not user-speech matching).
 
-import { chatJson } from '@/gateways/openrouter';
+import { chatJson } from '@/services/ModelRouter';
 import { GUIDABLE_COCO_LABELS } from '@/adapters/objectDetection';
 
 // Spanish hints per label — reference DATA to ground the LLM + document the set.

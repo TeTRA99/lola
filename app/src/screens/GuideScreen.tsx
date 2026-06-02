@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, PanResponder, ScrollView, AppState, Animated, Easing,
-  useWindowDimensions,
+  useWindowDimensions, Platform,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
 import { speak } from '@/adapters/tts';
@@ -21,6 +21,7 @@ import { COPY } from '@/services/CopyModule';
 import * as Settings from '@/services/Settings';
 import { color, fontFamily } from '@/theme/tokens';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
+import { activateKeepAwake, releaseKeepAwake } from '@/adapters/keepAwake';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import {
   bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
@@ -58,7 +59,7 @@ export function GuideScreen({
   const notFoundRef = useRef(false); // said "no la encuentro"
   const preparingRef = useRef(false); // said the "me estoy preparando" first-load cue
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSeenRef = useRef(Date.now()); // last time the target was in view (idle check-in clock)
   // On-device model readiness (downloads on first use — can take minutes).
   const [model, setModel] = useState({ isReady: false, downloadProgress: 0 });
   // Becomes true when the "Buscando… movéme despacio" line is announced (after
@@ -89,6 +90,18 @@ export function GuideScreen({
   useEffect(() => {
     startGuide();
     return () => stopGuide();
+  }, []);
+
+  // iOS-only: hold the screen on for the hands-free guide session (the user holds
+  // the phone up and follows haptics, never touching it, so iOS's idle timer dims
+  // and locks mid-search). Scoped to iOS deliberately — on Android the active
+  // VisionCamera preview already keeps the screen on, so this was never an issue
+  // there, and we don't want to change the tested Android behavior. Released on
+  // unmount so the rest of the app keeps normal auto-lock.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    void activateKeepAwake('guide');
+    return () => { void releaseKeepAwake('guide'); };
   }, []);
 
   // Diagnostics: surface model load state to Metro (blind flow hides the banner).
@@ -175,18 +188,35 @@ export function GuideScreen({
       foundRef.current = true;
       lastFoundAt.current = Date.now();
       void speak(COPY.guide.found);
-      // Safety auto-close: task done → wrap up after a grab window (tap exits sooner).
-      if (!autoCloseTimer.current) {
-        autoCloseTimer.current = setTimeout(handleExit, CONFIG.GUIDE_AUTO_CLOSE_MS);
-      }
+      // No auto-close — the "found" line already tells the user to tap when done,
+      // and a blind user must never be dropped silently. The idle check-in below
+      // is the only follow-up; tap is the only exit.
     } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
       foundRef.current = false;
     }
   }, [proximity, targetCocoLabel, handleExit]);
 
+  // Idle check-in — the search never closes itself; instead, after a long stretch
+  // with the target not in view, Lola reassures + reminds how to leave, and keeps
+  // doing so on the same interval. Any time the target is in frame, the clock
+  // resets (so we never talk over active homing). Tap is the only exit.
+  useEffect(() => {
+    if (proximity !== null) lastSeenRef.current = Date.now();
+  }, [proximity]);
+
+  useEffect(() => {
+    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    const id = setInterval(() => {
+      if (Date.now() - lastSeenRef.current >= CONFIG.GUIDE_CHECKIN_IDLE_MS) {
+        lastSeenRef.current = Date.now(); // re-arm so it repeats on the interval
+        void speak(foundRef.current ? COPY.guide.checkinFound : COPY.guide.checkin);
+      }
+    }, CONFIG.GUIDE_CHECKIN_TICK_MS);
+    return () => clearInterval(id);
+  }, [targetCocoLabel, model.isReady, searchArmed]);
+
   useEffect(() => () => {
     if (lostTimer.current) clearTimeout(lostTimer.current);
-    if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
   }, []);
 
   // Haptics update every frame via module state (no render); HUD number throttled.
@@ -422,7 +452,7 @@ function LiveLayer({
     [target, onProximity, width, height],
   );
 
-  const { frameOutput, isReady, downloadProgress, error } = useGuideDetection(onResult, setWorkletErr);
+  const { frameOutput, isReady, downloadProgress, error, detectorLabel } = useGuideDetection(onResult, setWorkletErr);
   const outputs = useMemo(() => [frameOutput], [frameOutput]);
 
   // Report model readiness up so the screen can show "preparando…" + gate audio.
@@ -480,8 +510,8 @@ function LiveLayer({
             : workletErr
               ? `frame err: ${workletErr}`
               : !isReady
-                ? `Loading model… ${Math.round((downloadProgress ?? 0) * 100)}%`
-                : `tracking: ${target ?? 'best'} · ${det.boxes.length} obj${aimReadout}`}
+                ? `Loading ${detectorLabel}… ${Math.round((downloadProgress ?? 0) * 100)}%`
+                : `${detectorLabel} · tracking: ${target ?? 'best'} · ${det.boxes.length} obj${aimReadout}`}
         </Text>
       </View>
 

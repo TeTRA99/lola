@@ -20,8 +20,9 @@ jest.mock('@/adapters/camera', () => ({
   captureSnapshot: jest.fn(),
 }));
 
-jest.mock('@/gateways/openrouter', () => ({
+jest.mock('@/services/ModelRouter', () => ({
   chat: jest.fn(),
+  inferenceMode: jest.fn(() => 'cloud'),
 }));
 
 jest.mock('@/adapters/storage', () => ({
@@ -55,7 +56,7 @@ import { run, getLastDescribe, _resetForTests } from '../DescribeService';
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
-import { chat } from '@/gateways/openrouter';
+import { chat } from '@/services/ModelRouter';
 import { getDb } from '@/adapters/storage';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';

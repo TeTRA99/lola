@@ -2,7 +2,7 @@
 // router with a text-only LLM call: classifies the utterance into one of
 // four routes and extracts the canonical noun for memory queries.
 
-import { chatJson } from '@/gateways/openrouter';
+import { chatJson } from '@/services/ModelRouter';
 import * as SnapshotCache from './SnapshotCache';
 import type { RouteDecision } from './UtteranceRouter';
 

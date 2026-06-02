@@ -91,4 +91,19 @@ export const KEYS = {
   guideHintSeen: 'onboarding_guide_hint_seen',
   heartbeatHintSeen: 'onboarding_heartbeat_hint_seen',
   caregiverIntroSeen: 'onboarding_caregiver_intro_seen',
+  // On-device inference (feat/on-device-models). inferenceMode picks cloud vs
+  // local; vlmModel picks the VLM size; allowCloudFallback lets local errors
+  // retry against the cloud when a key is present (off by default = zero credits).
+  inferenceMode: 'inference_mode',
+  vlmModel: 'vlm_model',
+  textModel: 'text_model',
+  allowCloudFallback: 'allow_cloud_fallback',
+  // Guide on-device detector quality (1=Minimum … 5=Maximum). Maps to a
+  // (model, input-size) preset — see adapters/detectionPresets. Default is
+  // per-platform (iOS Maximum, Android Minimum) resolved at read time.
+  detectionLevel: 'detection_level',
+  // Comma-separated set of detection model names whose .pte is already downloaded
+  // (e.g. "yolo26n,yolo26m"). Lets Home show a one-time prep banner only when the
+  // chosen level needs a model that isn't on the device yet.
+  detectionModelsReady: 'detection_models_ready',
 } as const;

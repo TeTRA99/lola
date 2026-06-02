@@ -6,10 +6,12 @@ export const COPY = {
   // Spoken on launch (TTS). The on-screen wordmark greeting is `splash.hello`.
   greeting: 'Hola, ¿en qué puedo ayudarte?',
   // Personalized launch greeting — uses the caregiver-set name when present
-  // ("Hola, Carlos, ¿en qué puedo ayudarte?"), else falls back to `greeting`.
+  // ("Hola Carlos, ¿en qué puedo ayudarte?"), else falls back to `greeting`.
+  // No vocative comma after "Hola": TTS reads it as an unnatural pause
+  // ("Hola… Carlos"), so it's "Hola <name>" to flow as one breath.
   greetingFor: (name?: string): string =>
     name && name.trim()
-      ? `Hola, ${name.trim()}, ¿en qué puedo ayudarte?`
+      ? `Hola ${name.trim()}, ¿en qué puedo ayudarte?`
       : 'Hola, ¿en qué puedo ayudarte?',
   repeatTrigger: 'Lola, ¿otra vez?',
   extendTrigger: 'Lola, contame más',
@@ -79,6 +81,11 @@ export const COPY = {
     approxWarning: 'Ese tipo de objeto todavía no lo reconozco del todo, pero voy a hacer lo posible para guiarte.',
     found: '¡Ahí está! Lo tenés enfrente. Tocá la pantalla cuando termines.',
     notFound: (obj: string): string => `No encuentro ${obj} por acá. Tocá la pantalla para volver.`,
+    // Spoken on a long idle so the search never closes silently on a blind user.
+    // After "found": a gentle reminder how to leave; while still searching: a
+    // reassurance + the same exit hint. Tap is the only way out.
+    checkin: 'Seguí buscando si querés. Tocá la pantalla para salir.',
+    checkinFound: 'Cuando lo tengas, tocá la pantalla para salir.',
     // Spoken once if the on-device model is still downloading on first use.
     preparing: 'Esperá un momento, me estoy preparando. La primera vez puede tardar un poco.',
     // On-screen legend (low-vision may see it; matches the app's other screens).
@@ -89,6 +96,28 @@ export const COPY = {
     tapHint: 'Tocá la pantalla para volver',
     // Shown if the guide screen fails to load (e.g. its native module).
     loadError: 'No pude abrir esto. Tocá para volver.',
+  },
+  // On-device model download/preparation (feat/on-device-models). The banner is
+  // caregiver-facing on Home; the spoken line plays if a feature is triggered
+  // before the model finished downloading.
+  models: {
+    // Home progress card while the on-device model downloads (first run).
+    bannerTitle: 'Preparando a Lola',
+    bannerSubtitle: 'Descargando lo necesario para que Lola funcione sin internet. Esto pasa una sola vez.',
+    bannerProgress: (pct: number): string => `Descargando… ${pct}%`,
+    // Download done, loading the model into memory (warm-up).
+    bannerPreparing: 'Casi lista, preparando el modelo…',
+    // VLM ready, the small voice-command model is still loading.
+    bannerVoice: 'Preparando el asistente de voz…',
+    bannerReady: '¡Lola ya está lista!',
+    bannerError: 'No pude preparar el modelo. Probá reiniciar la app.',
+    // Detection-model prep card on Home (shown after the caregiver changes the
+    // "Detección de objetos" level to one whose model isn't on the device yet).
+    detectorTitle: 'Preparando la guía',
+    detectorSubtitle: 'Descargando el detector de objetos para el nivel elegido. Pasa una sola vez por nivel.',
+    detectorReady: 'Guía lista.',
+    // Spoken once if Describir/Preguntar is tapped before the model is ready.
+    preparing: 'Esperá un momentito, todavía me estoy preparando. La primera vez puede tardar un poco.',
   },
   splash: {
     // On-screen greeting under the wordmark (distinct from the spoken `greeting`).

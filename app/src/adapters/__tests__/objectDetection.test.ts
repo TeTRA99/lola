@@ -8,23 +8,35 @@ import {
   type RawDetection,
 } from '@/adapters/objectDetection';
 
-describe('proximityFromBox', () => {
-  it('is 1 for a dead-centered box', () => {
-    expect(proximityFromBox({ x: 0.4, y: 0.4, width: 0.2, height: 0.2 })).toBeCloseTo(1, 5);
+describe('proximityFromBox (blend of centering + size)', () => {
+  // A centered box that fills the frame is fully "reached" (centering=1, size
+  // clamps to 1) regardless of the GUIDE_REACH_SIZE tuning.
+  it('is 1 for a centered, frame-filling box', () => {
+    expect(proximityFromBox({ x: 0, y: 0, width: 1, height: 1 })).toBeCloseTo(1, 5);
   });
 
-  it('is 1 for a full-frame box (centroid at center)', () => {
-    expect(proximityFromBox({ x: 0, y: 0, width: 1, height: 1 })).toBeCloseTo(1, 5);
+  // Size matters now: a bigger centered box reads closer than a smaller one.
+  it('grows with object size (same center)', () => {
+    const small = proximityFromBox({ x: 0.45, y: 0.45, width: 0.1, height: 0.1 });
+    const big = proximityFromBox({ x: 0.3, y: 0.3, width: 0.4, height: 0.4 });
+    expect(big).toBeGreaterThan(small);
+  });
+
+  // Centering still matters: centered reads closer than off-center, same size.
+  it('grows with centering (same size)', () => {
+    const centered = proximityFromBox({ x: 0.45, y: 0.45, width: 0.1, height: 0.1 });
+    const offCenter = proximityFromBox({ x: 0.85, y: 0.85, width: 0.1, height: 0.1 });
+    expect(centered).toBeGreaterThan(offCenter);
   });
 
   it('drops toward 0 as the box moves to a corner', () => {
     const center = proximityFromBox({ x: 0.45, y: 0.45, width: 0.1, height: 0.1 });
-    const corner = proximityFromBox({ x: 0.8, y: 0.8, width: 0.2, height: 0.2 });
+    const corner = proximityFromBox({ x: 0.85, y: 0.85, width: 0.1, height: 0.1 });
     expect(corner).toBeLessThan(center);
     expect(corner).toBeGreaterThanOrEqual(0);
   });
 
-  it('is symmetric across the center', () => {
+  it('is symmetric across the center for an equal-size box', () => {
     const left = proximityFromBox({ x: 0.1, y: 0.45, width: 0.1, height: 0.1 });
     const right = proximityFromBox({ x: 0.8, y: 0.45, width: 0.1, height: 0.1 });
     expect(left).toBeCloseTo(right, 5);
@@ -48,9 +60,9 @@ describe('normalizePixelBox', () => {
     });
   });
 
-  it('round-trips with proximityFromBox for a centered pixel box', () => {
-    const n = normalizePixelBox({ x1: 540, y1: 380, x2: 740, y2: 580 }, 1280, 960);
-    expect(proximityFromBox(n)).toBeCloseTo(1, 1);
+  it('round-trips with proximityFromBox for a centered full-frame pixel box', () => {
+    const n = normalizePixelBox({ x1: 0, y1: 0, x2: 1280, y2: 960 }, 1280, 960);
+    expect(proximityFromBox(n)).toBeCloseTo(1, 5);
   });
 });
 

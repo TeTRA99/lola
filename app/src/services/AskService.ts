@@ -6,12 +6,13 @@ import { speak } from '@/adapters/tts';
 import { listen } from '@/adapters/stt';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
-import { chat } from '@/gateways/openrouter';
+import { chat, inferenceMode } from '@/services/ModelRouter';
 import { buildSystemPrompt } from '@/prompts/lola';
 import { getDb } from '@/adapters/storage';
 import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '@/services/errorCopy';
 import { type RouteDecision } from '@/services/UtteranceRouter';
 import { classifyIntent } from '@/services/IntentRouter';
+import { recordAskTrace } from '@/services/AskTrace';
 import { resolveGuideTarget } from '@/services/GuideTargets';
 import { COPY } from '@/services/CopyModule';
 import { applyCatalogNarration } from '@/services/CatalogResolver';
@@ -80,6 +81,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   fire('listening_stop');
   if (!sttResult.ok) {
     console.log('[ask] STT FAILED with:', sttResult.error);
+    recordAskTrace({ at: now(), utterance: null, route: `STT_FAIL:${sttResult.error}` });
     fire('error');
     const kind: ErrorKind =
       sttResult.error === 'permission_denied' ? 'permission_denied_mic' :
@@ -97,11 +99,14 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   const utterance = sttResult.value;
   const decision = await classifyIntent(utterance);
   console.log('[ask] routed to:', decision.type);
+  recordAskTrace({ at: now(), utterance, route: describeRoute(decision) });
 
   // 2. Snapshot only for routes that always use the image (extend, model).
   // For memory we lazy-snapshot inside handleMemory only if recall misses.
   // repeat replays a cached narration — no camera needed at all.
-  async function ensureSnapshot(): Promise<Result<string, AskError>> {
+  // Returns both the base64 (cloud path) and the file URI (on-device VLM path,
+  // which reads a file rather than base64 over the bridge).
+  async function ensureSnapshot(): Promise<Result<{ uri: string; base64: string }, AskError>> {
     console.log('[ask] step 2: snapshot');
     const snap = await captureSnapshot();
     if (!snap.ok) {
@@ -113,7 +118,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       return err(snap.error === 'permission_denied' ? 'permission_denied' : 'no_camera');
     }
     console.log('[ask] snapshot OK');
-    return ok(snap.value.base64);
+    return ok({ uri: snap.value.uri, base64: snap.value.base64 });
   }
 
   // 3. Dispatch
@@ -123,14 +128,14 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
     case 'where_am_i': {
       const s = await ensureSnapshot();
       if (!s.ok) return s;
-      return handleWhereAmI(s.value, t0);
+      return handleWhereAmI(s.value.base64, t0);
     }
     case 'repeat':
       return handleRepeat(t0);
     case 'extend': {
       const s = await ensureSnapshot();
       if (!s.ok) return s;
-      return handleExtend(s.value, t0);
+      return handleExtend(s.value.base64, t0, s.value.uri);
     }
     case 'memory':
       return handleMemory(decision.object, utterance, t0, ensureSnapshot);
@@ -144,11 +149,11 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       const cachedB64 = latest?.uri ? SnapshotCache.readBase64(latest.uri) : null;
       if (decision.needsCurrent === false && cachedB64) {
         console.log('[ask] needsCurrent=false → skipping fresh snapshot, using cached only');
-        return handleModel(cachedB64, utterance, t0, { skipFreshCapture: true });
+        return handleModel(cachedB64, utterance, t0, { skipFreshCapture: true, imageUri: latest?.uri });
       }
       const s = await ensureSnapshot();
       if (!s.ok) return s;
-      return handleModel(s.value, utterance, t0);
+      return handleModel(s.value.base64, utterance, t0, { imageUri: s.value.uri });
     }
   }
 }
@@ -176,6 +181,17 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
     narration: '', objects: [], route: 'guide',
     guide: { cocoLabel: target.cocoLabel, spoken: target.spoken },
   });
+}
+
+// Compact human-readable route label for the Debug Ask-trace readout.
+function describeRoute(d: RouteDecision): string {
+  switch (d.type) {
+    case 'chitchat': return `chitchat:${d.kind}`;
+    case 'guide': return `guide:${d.object}`;
+    case 'memory': return `memory:${d.object}`;
+    case 'model': return `model${d.needsCurrent === false ? '(cached)' : ''}`;
+    default: return d.type;
+  }
 }
 
 const CHITCHAT_REPLIES: Record<import('./UtteranceRouter').ChitchatKind, string> = {
@@ -234,13 +250,14 @@ async function handleRepeat(t0: number): Promise<Result<AskOutcome, AskError>> {
   return ok({ narration: latest.narration, objects: [], route: 'repeat' });
 }
 
-async function handleExtend(imageBase64: string, t0: number): Promise<Result<AskOutcome, AskError>> {
+async function handleExtend(imageBase64: string, t0: number, imageUri?: string): Promise<Result<AskOutcome, AskError>> {
   fire('thinking_start');
   const catalog = await loadCatalogSafe();
   const resp = await chat({
     systemPrompt: buildSystemPrompt(catalog),
     userText: EXTEND_USER_TEXT,
     imageBase64,
+    imageUri, // on-device VLM path (cloud ignores it)
   });
   fire('thinking_stop');
 
@@ -291,7 +308,7 @@ async function handleMemory(
   noun: string,
   utterance: string,
   t0: number,
-  ensureSnapshot: () => Promise<Result<string, AskError>>,
+  ensureSnapshot: () => Promise<Result<{ uri: string; base64: string }, AskError>>,
 ): Promise<Result<AskOutcome, AskError>> {
   const outcome = await MemoryService.recall(noun);
 
@@ -306,7 +323,7 @@ async function handleMemory(
   // Miss — only now do we need a camera frame for the model fall-through.
   const s = await ensureSnapshot();
   if (!s.ok) return s;
-  const r = await handleModel(s.value, utterance, t0);
+  const r = await handleModel(s.value.base64, utterance, t0, { imageUri: s.value.uri });
   if (r.ok) {
     await logEvent(true, now() - t0, 'memory_miss');
     return ok({ ...r.value, route: 'memory_miss' });
@@ -330,7 +347,7 @@ async function handleModel(
   imageBase64: string,
   userText: string,
   t0: number,
-  opts: { skipFreshCapture?: boolean } = {},
+  opts: { skipFreshCapture?: boolean; imageUri?: string } = {},
 ): Promise<Result<AskOutcome, AskError>> {
   fire('thinking_start');
   const catalog = await loadCatalogSafe();
@@ -350,6 +367,9 @@ async function handleModel(
     systemPrompt: buildSystemPrompt(catalog),
     userText: userText + buildContextLine(prevNarration),
     imagesBase64: images,
+    // On-device VLM uses a single current frame (it can't do the cloud's
+    // prior+current two-image trick); the text context line carries continuity.
+    imageUri: opts.imageUri,
   });
   fire('thinking_stop');
   if (resp.ok) console.log('[ask] model narration:', resp.value.narration);
@@ -366,7 +386,8 @@ async function handleModel(
                resp.error === 'parse_fail' ? 'parse_fail' : 'unknown');
   }
 
-  const isLow = isLowConfidenceResponse(resp.value);
+  // Local VLM is narration-only (objects:[]) → don't let the heuristic misfire.
+  const isLow = inferenceMode() === 'local' ? false : isLowConfidenceResponse(resp.value);
   const narration = catalog
     ? applyCatalogNarration(resp.value.narration, resp.value.objects, catalog)
     : resp.value.narration;

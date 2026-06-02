@@ -1,6 +1,6 @@
-jest.mock('@/gateways/openrouter', () => ({ chatJson: jest.fn() }));
+jest.mock('@/services/ModelRouter', () => ({ chatJson: jest.fn() }));
 
-import { chatJson } from '@/gateways/openrouter';
+import { chatJson } from '@/services/ModelRouter';
 import { resolveGuideTarget } from '@/services/GuideTargets';
 
 const mockChatJson = chatJson as unknown as jest.Mock;

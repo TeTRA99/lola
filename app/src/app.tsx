@@ -19,6 +19,9 @@ import { loadStoredLang } from '@/i18n';
 import { COPY } from '@/services';
 import { speak } from '@/adapters/tts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import * as Settings from '@/services/Settings';
+import { CONFIG } from '@/config';
+import { preloadResident } from '@/adapters/llmResidency';
 
 // Register the Expo resource fetcher with ExecuTorch once at boot. Required
 // before any module (ImageEmbeddings, LLM, etc.) can download / load weights.
@@ -50,6 +53,19 @@ export default function App() {
   // first run, so this is idempotent.
   // Apply any saved language override (device language is the default).
   useEffect(() => { void loadStoredLang(); }, []);
+
+  // On-device mode: start downloading/loading the VLM at launch so the splash +
+  // welcome-voice window hides most of the first-run latency. Only one LLM can be
+  // resident (executorch single runner), so we preload the headline VLM here; the
+  // small voice-command model loads on first Ask (swapping the VLM out). No-op on
+  // cached launches and in cloud mode.
+  useEffect(() => {
+    void (async () => {
+      const mode = await Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT);
+      if (mode !== 'local') return;
+      void preloadResident('vlm');
+    })();
+  }, []);
 
   // Reveal the app only once fonts are ready — hides the native splash directly
   // onto our JS splash (both ink), no grey gap.
@@ -106,8 +122,7 @@ export default function App() {
       {screen === 'home' && (
         <HomeScreen
           onOpenSettings={openSettings}
-          onDevDebug={__DEV__ ? () => setScreen('debug') : undefined}
-          onDevGuide={__DEV__ ? () => { setGuideTarget(null); setScreen('guide'); } : undefined}
+          onDevDebug={(__DEV__ || CONFIG.SHOW_DEV_TOOLS) ? () => setScreen('debug') : undefined}
           onOpenGuide={(t) => { setGuideTarget(t); setScreen('guide'); }}
         />
       )}

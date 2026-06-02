@@ -18,6 +18,11 @@ export type ChatInput = {
   // AskService follow-ups to send the prior cached scene alongside the
   // current one so the model can resolve "las papas" / "el termo" references.
   imagesBase64?: string[];
+  // Local-file image paths for the on-device VLM path (it reads a file, not
+  // base64). The cloud gateway ignores these; the on-device adapter ignores the
+  // base64 fields. Callers that may run either backend should set both.
+  imageUri?: string;
+  imageUris?: string[];
   model?: string;
 };
 

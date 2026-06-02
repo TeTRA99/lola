@@ -24,9 +24,11 @@ jest.mock('@/adapters/camera', () => ({
 }));
 
 // Routing now goes through the LLM classifier (chatJson); model answers via chat.
-jest.mock('@/gateways/openrouter', () => ({
+// Both go through the ModelRouter seam (cloud vs on-device) the services import.
+jest.mock('@/services/ModelRouter', () => ({
   chat: jest.fn(),
   chatJson: jest.fn(),
+  inferenceMode: jest.fn(() => 'cloud'),
 }));
 
 jest.mock('@/adapters/storage', () => ({
@@ -58,7 +60,7 @@ import { run } from '../AskService';
 import { speak } from '@/adapters/tts';
 import { listen } from '@/adapters/stt';
 import { captureSnapshot } from '@/adapters/camera';
-import { chat, chatJson } from '@/gateways/openrouter';
+import { chat, chatJson } from '@/services/ModelRouter';
 import { getDb } from '@/adapters/storage';
 import * as SnapshotCache from '@/services/SnapshotCache';
 import * as RoomCatalog from '@/services/RoomCatalog';

@@ -1,4 +1,11 @@
 export const CONFIG = {
+  // Dev tools (Debug 🐞 screen + Guide spike) are normally gated on __DEV__,
+  // which is FALSE in the standalone Release builds Charly side-loads onto a
+  // device for testing — so they'd be unreachable there. Flip this on to expose
+  // them in a personal test build.
+  // ⚠️ MUST be false for dad's production build (it's a Charly-only tool surface).
+  SHOW_DEV_TOOLS: true,
+
   // Model + gateway (NFR-11, AD-4)
   MODEL_ID: 'google/gemini-2.5-flash',
   MODEL_ID_CHEAP: 'google/gemini-2.5-flash-lite',
@@ -43,12 +50,52 @@ export const CONFIG = {
   GUIDE_LOCK_PROXIMITY: 0.82,  // ≥ this = fastest "you're on it" buzz (was 0.92, unreachable)
   GUIDE_FOUND_PROXIMITY: 0.7,  // ≥ this → say "¡ahí está!" once (reachable; centering to 100% is unreliable)
   GUIDE_REARM_PROXIMITY: 0.4,  // proximity must drop below this before "found" can fire again
-  GUIDE_FOUND_COOLDOWN_MS: 6000, // min gap between "¡ahí está!" announcements (stops wobble-spam; still re-says if lost & re-found after this)
+  GUIDE_FOUND_COOLDOWN_MS: 11000, // min gap between "¡ahí está!" announcements (stops wobble-spam; still re-says if lost & re-found after this)
   GUIDE_NOT_FOUND_MS: 12000,   // if the target is never seen within this, say "no la encuentro"
-  GUIDE_SMOOTH_ALPHA: 0.35,    // EMA on the felt proximity (lower = smoother/laggier ramp)
-  GUIDE_LOST_GRACE_MS: 500,    // keep homing this long after a dropped frame before "searching"
-  GUIDE_AUTO_CLOSE_MS: 15000,  // after "found", auto-return home this long later (tap exits anytime)
   GUIDE_PREPARING_MS: 6000,    // if the model isn't ready by now, tell the user it's preparing
+  // Pulse smoothing (rev: smooth Geiger ramp). The felt proximity is eased on a
+  // STEADY clock (GUIDE_STEP_MS), decoupled from the beat AND from the ~7fps
+  // detector, so the cadence glides instead of stepping. TAU is the time-constant
+  // (ms) of the ease: lower = snappier/twitchier, higher = smoother/laggier.
+  GUIDE_SMOOTH_TAU_MS: 220,       // proximity easing time-constant
+  GUIDE_STEP_MS: 30,              // steady smoothing clock (must stay < GUIDE_PULSE_MIN_MS)
+  // Lost-frame handling: instead of a hard "snap to searching", proximity stays
+  // full for GUIDE_FRESH_MS (absorbs 1–2 dropped frames) then GLIDES to 0 over
+  // GUIDE_DECAY_MS — no more fast→slow→fast lurch on detector dropouts.
+  GUIDE_FRESH_MS: 250,            // detections newer than this hold full proximity
+  GUIDE_DECAY_MS: 900,            // ease proximity → 0 over this once stale
+  GUIDE_MAX_INTERVAL_DELTA_MS: 60, // cap how fast the beat may SLOW DOWN per beat (speed-ups free)
+  // One Euro filter on the raw proximity (de-jitter when near-still, stay
+  // responsive when sweeping fast). Tune on-device for a 0..1 signal at ~7fps.
+  GUIDE_OE_MIN_CUTOFF: 1.0,       // Hz — smoothing when slow (lower = smoother/laggier)
+  GUIDE_OE_BETA: 0.7,             // speed coefficient (higher = less lag when fast)
+  GUIDE_OE_DCUTOFF: 1.0,          // Hz — derivative low-pass
+  // Proximity = blend of how CENTERED the target is and how BIG it is (a distance
+  // proxy) — so the pulse quickens as you approach, not only as you aim.
+  GUIDE_CENTER_WEIGHT: 0.55,      // weight on centering vs object size (1 = centering only)
+  GUIDE_REACH_SIZE: 0.6,          // box's larger side (frame fraction) that reads as "reached"
+  // The Guide NEVER closes itself — a blind user must not be dropped silently
+  // (FR/UX). Instead, after this long with the target not in view, Lola gives an
+  // audible "still there? tap to exit" check-in and repeats it on this interval.
+  // Tap is the only way out. GUIDE_CHECKIN_TICK_MS is just the poll granularity.
+  GUIDE_CHECKIN_IDLE_MS: 60000, // idle (target unseen) this long → spoken check-in
+  GUIDE_CHECKIN_TICK_MS: 5000,  // how often we poll the idle clock
+
+  // On-device inference (feat/on-device-models). Default mode flips to 'local'
+  // in the final migration step; 450m is the realistic Galaxy A12 VLM size.
+  LOCAL_INFERENCE_DEFAULT: 'cloud' as 'local' | 'cloud',
+  LOCAL_VLM_DEFAULT_SIZE: '450m' as '450m' | '1.6b',
+  // Text model for intent + guide-target. Llama 3.2 1B (non-thinking) — qwen3-0.6b
+  // is a hybrid thinking model that errors in executorch's runner. Swappable via
+  // Settings.textModel; ids: llama-3.2-1b | qwen2.5-0.5b | qwen2.5-1.5b | smollm2.1-360m.
+  LOCAL_TEXT_MODEL: 'llama-3.2-1b',
+  VLM_MAX_NEW_TOKENS: 256,
+  TEXT_LLM_MAX_NEW_TOKENS: 128,
+  // Safety cap on a single on-device inference so a slow/hung run fails to a
+  // calm error instead of sitting on "Un momento…" forever. Generous because the
+  // first VLM call on a CPU-only A12 is slow (graph warmup + image encode).
+  VLM_INFERENCE_TIMEOUT_MS: 120000,
+  TEXT_LLM_INFERENCE_TIMEOUT_MS: 30000,
 };
 
 export type Config = typeof CONFIG;

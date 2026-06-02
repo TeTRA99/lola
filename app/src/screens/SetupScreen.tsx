@@ -19,6 +19,7 @@ import * as Application from 'expo-application';
 import type * as Speech from 'expo-speech';
 import { listSpanishVoices, speakPreview, RATE_DEFAULT, PITCH_DEFAULT } from '@/adapters/tts';
 import { Slider } from '@/components/Slider';
+import { defaultDetectionLevel, clampDetectionLevel } from '@/adapters/detectionPresets';
 import { COPY } from '@/services';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as CatalogPhotos from '@/services/CatalogPhotos';
@@ -245,6 +246,7 @@ function SettingsTab() {
   const [selectedVoice, setSelectedVoice] = useState('');
   const [rate, setRate] = useState(RATE_DEFAULT);
   const [pitch, setPitch] = useState(PITCH_DEFAULT);
+  const [detectionLevel, setDetectionLevel] = useState<number>(defaultDetectionLevel());
 
   useEffect(() => {
     void (async () => {
@@ -256,6 +258,8 @@ function SettingsTab() {
       const p = parseFloat(await Settings.getString(Settings.KEYS.ttsPitch, ''));
       if (Number.isFinite(r) && r > 0) setRate(r);
       if (Number.isFinite(p) && p > 0) setPitch(p);
+      const lvl = await Settings.getString(Settings.KEYS.detectionLevel, String(defaultDetectionLevel()));
+      setDetectionLevel(clampDetectionLevel(parseInt(lvl, 10)));
       setVoices(await listSpanishVoices());
     })();
   }, []);
@@ -273,6 +277,13 @@ function SettingsTab() {
   const changePitch = (v: number) => { pitchRef.current = v; setPitch(v); void Settings.setString(Settings.KEYS.ttsPitch, String(v)); };
   const previewTuning = () => speakPreview(COPY.greeting, { voice: voiceRef.current, rate: rateRef.current, pitch: pitchRef.current });
   const changeName = (v: string) => { setUserName(v); void Settings.setString(Settings.KEYS.userName, v.trim()); };
+  // Persist the level immediately (cheap), but the new model only downloads when
+  // Guide is next opened — moving the slider never triggers a download.
+  const changeDetectionLevel = (v: number) => {
+    const lvl = clampDetectionLevel(v);
+    setDetectionLevel(lvl);
+    void Settings.setString(Settings.KEYS.detectionLevel, String(lvl));
+  };
 
   const toggle = async () => {
     const next = !quietCapture;
@@ -378,6 +389,22 @@ function SettingsTab() {
             onChange={changePitch}
             onComplete={previewTuning}
             format={v => `${v.toFixed(2)}×`}
+          />
+        </View>
+
+        {/* Object detection quality — maps to a (model, input-size) preset.
+            Persisting is instant; the new model downloads on the next Guide. */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.detectionQuality}</Text>
+          <Text style={styles.settingHint}>{t.detectionQualityHint}</Text>
+          <Slider
+            label={t.detectionLevels[clampDetectionLevel(detectionLevel) - 1]}
+            value={detectionLevel}
+            min={1}
+            max={5}
+            step={1}
+            onChange={changeDetectionLevel}
+            format={v => `${clampDetectionLevel(v)}/5`}
           />
         </View>
 

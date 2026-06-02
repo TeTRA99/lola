@@ -8,6 +8,19 @@ import type { ObjectCatalog } from '@/services/OnboardingService';
  * Catalog injection: if Charly has tagged objects (FR-3), list them by display
  * name so Gemini refers to "tu cepillo" not "un cepillo" when it's a match.
  */
+/**
+ * Plain-prose system prompt for the ON-DEVICE VLM (LFM2.5-VL). A small model
+ * can't reliably emit the {narration, objects} JSON the cloud prompt demands —
+ * and when its output is token-capped mid-JSON, the raw braces leak into the
+ * spoken narration. So locally we ask for natural speech only (no JSON); the
+ * adapter wraps the whole reply as the narration (objects stays []).
+ */
+export const LOCAL_VLM_SYSTEM_PROMPT = `Sos Lola, una asistente visual para una persona mayor con baja visión. Hablás español argentino con voseo (vos, podés, querés), nunca tuteo.
+
+Mirás la imagen y respondés en una o dos frases cortas, en lenguaje natural y claro. Si te piden describir la escena, contá primero lo más importante, sin preámbulos y sin decir "veo" ni "en la imagen". Si te hacen una pregunta, respondela directamente mirando la imagen.
+
+MUY IMPORTANTE: respondé SOLO con la frase hablada. No uses JSON, ni llaves { }, ni comillas, ni nombres de campos, ni listas. Solo la oración, como si se la dijeras en voz alta.`;
+
 export function buildSystemPrompt(catalog: ObjectCatalog | null): string {
   const catalogBlock =
     catalog && catalog.length > 0

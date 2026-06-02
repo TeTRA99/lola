@@ -70,6 +70,9 @@ type SetupCopy = {
   voiceTuningHint: string;
   speed: string;
   pitch: string;
+  detectionQuality: string;
+  detectionQualityHint: string;
+  detectionLevels: readonly [string, string, string, string, string];
   // photo placeholders shown in the Spanish name fields
   phObjName: string;
   phObjDesc: string;
@@ -159,6 +162,9 @@ const en: SetupCopy = {
   voiceTuningHint: 'Adjust speed and pitch. Release a slider to hear it.',
   speed: 'Speed',
   pitch: 'Pitch',
+  detectionQuality: 'Object detection',
+  detectionQualityHint: 'How hard Lola looks when guiding to an object. Higher finds more (like small items), but uses more battery and can react slower. Changing it downloads a new detector when you go back to Home (just once per level).',
+  detectionLevels: ['Minimum', 'Low', 'Medium', 'High', 'Maximum'] as const,
   phObjName: 'e.g. Dad’s thermos',
   phObjDesc: 'e.g. the blue one with a red lid',
   phRoomName: 'e.g. Kitchen',
@@ -245,6 +251,9 @@ const es: SetupCopy = {
   voiceTuningHint: 'Ajustá la velocidad y el tono. Soltá el control para escuchar.',
   speed: 'Velocidad',
   pitch: 'Tono',
+  detectionQuality: 'Detección de objetos',
+  detectionQualityHint: 'Cuánto se esfuerza Lola al guiarte hacia un objeto. Más alto encuentra más cosas (incluso chicas), pero usa más batería y puede reaccionar más lento. Al cambiarlo, se descarga un detector nuevo al volver al inicio (una sola vez por nivel).',
+  detectionLevels: ['Mínimo', 'Bajo', 'Medio', 'Alto', 'Máximo'] as const,
   phObjName: 'ej. Termo de Papá',
   phObjDesc: 'ej. el azul de tapa roja',
   phRoomName: 'ej. Cocina',

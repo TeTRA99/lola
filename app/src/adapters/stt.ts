@@ -1,9 +1,32 @@
 // STT adapter — imperative addListener (NOT the useSpeechRecognitionEvent hook,
 // which only works in a React render context). Per E1.4 validation report rev 2.
 
-import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
+import { Platform } from 'react-native';
+import {
+  ExpoSpeechRecognitionModule,
+  AVAudioSessionCategory,
+  AVAudioSessionMode,
+} from 'expo-speech-recognition';
 import { CONFIG } from '@/config';
 import { ok, err, type Result } from '@/utils/result';
+import { micOpenEarcon, micCloseEarcon } from '@/adapters/earcon';
+
+// iOS leaves the audio session in `playAndRecord` + `measurement` mode after
+// recognition, which routes playback to the quiet earpiece and shifts the sample
+// rate — so every later TTS line comes out faint and sped-up (Describe, Ask,
+// Guide all poisoned for the rest of the session). Reset to a plain playback
+// session the moment recognition ends so Lola's voice is full-volume and natural.
+// (No-op off iOS; the library only manages an AVAudioSession there.)
+function restoreIOSPlaybackSession(): void {
+  if (Platform.OS !== 'ios') return;
+  try {
+    ExpoSpeechRecognitionModule.setCategoryIOS({
+      category: AVAudioSessionCategory.playback,
+      categoryOptions: [],
+      mode: AVAudioSessionMode.default,
+    });
+  } catch { /* best effort — never break the listen() result on a reset hiccup */ }
+}
 
 export type STTError =
   | 'permission_denied' | 'no_locale' | 'no_speech'
@@ -20,6 +43,10 @@ export type ListenOptions = {
 // If the engine emits neither `audiostart` nor `start` (rare), surface "ready"
 // anyway after this long so the listening cue never gets stuck.
 const READY_FALLBACK_MS = 1500;
+
+// iOS-only: how long the "mic open" chime plays before the recognizer seizes the
+// audio session. ≈ the chime length (mic-open.wav is ~210 ms) so it isn't cut.
+const MIC_OPEN_EARCON_LEAD_MS = 220;
 
 let resolvedLocale: string | null = null;
 let activeAbort: (() => void) | null = null;
@@ -95,6 +122,10 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
       if (hardTimeout) clearTimeout(hardTimeout);
       if (readyTimer) clearTimeout(readyTimer);
       try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+      restoreIOSPlaybackSession();
+      // iOS: "mic closed" chime — plays AFTER the session is restored to playback
+      // so it comes out full-volume on the speaker, not faint in record mode.
+      micCloseEarcon();
       subResult?.remove();
       subEnd?.remove();
       subError?.remove();
@@ -124,25 +155,40 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
 
     activeAbort = () => settle(err('timeout'));
 
-    try {
-      console.log('[stt] starting with lang:', lang);
-      ExpoSpeechRecognitionModule.start({
-        lang,
-        interimResults: false,
-        continuous: false,
-        requiresOnDeviceRecognition: false,
-      });
-    } catch (e) {
-      console.log('[stt] start threw:', e);
-      settle(err('engine_unavailable'));
-      return;
-    }
+    const startRecognizer = () => {
+      if (settled) return; // aborted during the chime lead
+      try {
+        console.log('[stt] starting with lang:', lang);
+        ExpoSpeechRecognitionModule.start({
+          lang,
+          interimResults: false,
+          continuous: false,
+          requiresOnDeviceRecognition: false,
+        });
+      } catch (e) {
+        console.log('[stt] start threw:', e);
+        settle(err('engine_unavailable'));
+        return;
+      }
+      readyTimer = setTimeout(fireReady, READY_FALLBACK_MS);
+      hardTimeout = setTimeout(
+        () => settle(err('timeout')),
+        opts.hardCapMs ?? CONFIG.STT_HARD_CAP_MS,
+      );
+    };
 
-    readyTimer = setTimeout(fireReady, READY_FALLBACK_MS);
-    hardTimeout = setTimeout(
-      () => settle(err('timeout')),
-      opts.hardCapMs ?? CONFIG.STT_HARD_CAP_MS,
-    );
+    // iOS: play the "mic open" chime NOW, while the audio session is still
+    // playback (loud), then start the recognizer after a short lead — once the
+    // recognizer seizes the session in record/measurement mode the chime would be
+    // suppressed (which is why the close chime works but the open one didn't).
+    // The lead ≈ the chime length so it isn't cut by the session switch. Android
+    // gets its open beep from the system recognizer, so start immediately there.
+    if (Platform.OS === 'ios') {
+      micOpenEarcon();
+      readyTimer = setTimeout(startRecognizer, MIC_OPEN_EARCON_LEAD_MS);
+    } else {
+      startRecognizer();
+    }
   });
 }
 
@@ -151,5 +197,6 @@ export function abort(): void {
     activeAbort();
   } else {
     try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+    restoreIOSPlaybackSession();
   }
 }

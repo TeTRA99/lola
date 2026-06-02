@@ -76,7 +76,8 @@ describe('STT adapter', () => {
     localeAvailable(['en-US', 'pt-BR']);
     grantPermissions();
     const p = listen();
-    await new Promise<void>(r => setImmediate(() => r()));
+    // iOS path defers start() behind the ~220ms mic-open chime lead — wait it out.
+    await new Promise<void>(r => setTimeout(() => r(), 260));
     expect(mockedStart).toHaveBeenCalledWith(expect.objectContaining({ lang: 'es-AR' }));
     mod.__fire('end', {});
     await p;
@@ -129,7 +130,8 @@ describe('STT adapter', () => {
     localeAvailable(['es-419', 'en-US']);
     grantPermissions();
     const p = listen();
-    await new Promise<void>(r => setImmediate(() => r()));
+    // iOS path defers start() behind the ~220ms mic-open chime lead — wait it out.
+    await new Promise<void>(r => setTimeout(() => r(), 260));
     expect(mockedStart).toHaveBeenCalledWith(expect.objectContaining({ lang: 'es-419' }));
     mod.__fire('end', {});
     await p;

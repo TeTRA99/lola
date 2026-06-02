@@ -9,6 +9,8 @@
 // For now this file exposes only the geometry the haptic loop consumes; the
 // live detector (frame processor → executorch → boxes) is the open spike.
 
+import { CONFIG } from '@/config';
+
 /** Normalized box, origin top-left, all fields 0..1 of frame width/height. */
 export type NormBox = { x: number; y: number; width: number; height: number };
 
@@ -25,18 +27,21 @@ export type PixelBBox = { x1: number; y1: number; x2: number; y2: number };
 export type RawDetection = { bbox: PixelBBox; label: string; score: number };
 
 /**
- * Proximity 0..1 of a box centroid to frame-center (1 = dead-center).
- * This is the single scalar the proximity haptic loop consumes — swap the mock
- * source in GuideScreen for `proximityFromBox(detection.box)` once the detector
- * lands.
+ * Proximity 0..1 the haptic loop consumes — a blend of how CENTERED the box is
+ * AND how BIG it is (a coarse distance proxy), so the pulse quickens both as you
+ * aim at the target and as you physically approach it. Weighting is
+ * CONFIG.GUIDE_CENTER_WEIGHT (centering) vs the remainder (size); a box whose
+ * larger side reaches CONFIG.GUIDE_REACH_SIZE of the frame counts as "reached".
  */
 export function proximityFromBox(box: NormBox): number {
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   const dx = (cx - 0.5) * 2; // -1..1 across the frame
   const dy = (cy - 0.5) * 2;
-  const dist = Math.min(1, Math.hypot(dx, dy) / Math.SQRT2);
-  return 1 - dist;
+  const centering = 1 - Math.min(1, Math.hypot(dx, dy) / Math.SQRT2);
+  const size = Math.min(1, Math.max(box.width, box.height) / CONFIG.GUIDE_REACH_SIZE);
+  const w = CONFIG.GUIDE_CENTER_WEIGHT;
+  return w * centering + (1 - w) * size;
 }
 
 /** Convert a pixel bbox + frame size into a normalized box (origin top-left). */

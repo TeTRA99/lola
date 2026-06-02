@@ -6,7 +6,7 @@
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
-import { chat } from '@/gateways/openrouter';
+import { chat, inferenceMode } from '@/services/ModelRouter';
 import { buildSystemPrompt } from '@/prompts/lola';
 import { getDb } from '@/adapters/storage';
 import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '@/services/errorCopy';
@@ -110,6 +110,7 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
     systemPrompt: buildSystemPrompt(catalog),
     userText,
     imageBase64: snap.value.base64,
+    imageUri: snap.value.uri, // used by the on-device VLM path (cloud ignores it)
   });
   fire('thinking_stop');
 
@@ -127,7 +128,9 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
 
   // 3. Low-confidence detection
   const { narration, objects } = resp.value;
-  const isLowConfidence = isLowConfidenceResponse(resp.value);
+  // The on-device VLM returns objects:[] (narration-only), which would falsely
+  // trip the heuristic; trust the local narration instead.
+  const isLowConfidence = inferenceMode() === 'local' ? false : isLowConfidenceResponse(resp.value);
 
   // 4. Speak (even the gentle-question gets voiced)
   fire('answer_ready');
