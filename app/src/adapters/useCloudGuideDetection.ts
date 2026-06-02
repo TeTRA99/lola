@@ -27,6 +27,8 @@ export type CloudGuideState = {
   // Latest normalized box (for the dev preview overlay) + its confidence.
   lastBox: NormBox | null;
   lastConfidence: number;
+  // Truncated raw model text from the last poll (shown when no box was parsed).
+  lastRaw: string | null;
 };
 
 export function useCloudGuideDetection(opts: {
@@ -47,7 +49,7 @@ export function useCloudGuideDetection(opts: {
   );
   const [state, setState] = useState<CloudGuideState>({
     model, polls: 0, lastLatencyMs: null, lastError: null, lastFound: false,
-    lastBox: null, lastConfidence: 0,
+    lastBox: null, lastConfidence: 0, lastRaw: null,
   });
 
   // Keep the latest callbacks/inputs in refs so the polling effect can stay
@@ -86,22 +88,23 @@ export function useCloudGuideDetection(opts: {
             const latencyMs = Date.now() - t0;
             if (cancelled) return;
             if (res.ok && res.value.found) {
-              const box = parseGroundingBox(model, res.value.box, frame.width, frame.height);
+              const box = parseGroundingBox(model, res.value.box);
               onProxRef.current(box ? proximityFromBox(box) : null);
               recordGuideTrace({
                 at: t0, query: queryRef.current, model, found: !!box,
-                box: res.value.box, confidence: res.value.confidence, latencyMs, error: null,
+                box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null }));
             } else {
               onProxRef.current(null);
               const error = res.ok ? null : res.error;
+              const raw = res.ok ? res.value.raw ?? null : null;
               recordGuideTrace({
                 at: t0, query: queryRef.current, model, found: false,
                 box: res.ok ? res.value.box : null, confidence: res.ok ? res.value.confidence : 0,
-                latencyMs, error,
+                latencyMs, error, raw: raw ?? undefined,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null, lastRaw: raw }));
             }
           } else if (!cancelled) {
             onProxRef.current(null);

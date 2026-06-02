@@ -82,13 +82,12 @@ async function postOnce(input: ChatInput, signal: AbortSignal): Promise<Response
 }
 
 /**
- * Generic JSON chat — returns the parsed JSON object without shape validation.
- * Callers decide what shape they expect. Used by IntentRouter (text-only) and
- * anything else that doesn't return LolaResponse.
+ * Shared request loop — returns the raw assistant message content string (with
+ * retry/timeout). Callers parse it however they like. Factored out of chatJson so
+ * groundObject can parse leniently (models often wrap JSON in ```fences``` / prose).
  */
-export async function chatJson<T = unknown>(input: ChatInput): Promise<Result<T, ChatError>> {
+async function requestContent(input: ChatInput): Promise<Result<string, ChatError>> {
   const key = apiKey();
-  console.log('[openrouter] chatJson called, image?', !!input.imageBase64, 'apiKey?', !!key);
   if (!key) return err('auth');
 
   for (let attempt = 0; ; attempt++) {
@@ -126,11 +125,52 @@ export async function chatJson<T = unknown>(input: ChatInput): Promise<Result<T,
     }
     const content = body.choices?.[0]?.message?.content;
     if (!content) return err('parse_fail');
-    try {
-      return ok(JSON.parse(content) as T);
-    } catch {
-      return err('parse_fail');
-    }
+    return ok(content);
+  }
+}
+
+/**
+ * Parse a JSON object out of model text that may be wrapped in ```json fences```
+ * or padded with prose: strip fences, else extract the first balanced {…} block.
+ */
+function parseLooseJsonObject<T>(text: string): T | null {
+  const fenced = text.replace(/```(?:json)?/gi, '').trim();
+  for (const candidate of [fenced, extractFirstBracedBlock(fenced)]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate) as T; } catch { /* try next */ }
+  }
+  return null;
+}
+
+function extractFirstBracedBlock(s: string): string | null {
+  const start = s.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return s.slice(start, i + 1);
+  }
+  return null;
+}
+
+/**
+ * Generic JSON chat — returns the parsed JSON object without shape validation.
+ * Callers decide what shape they expect. Used by IntentRouter (text-only) and
+ * anything else that doesn't return LolaResponse.
+ */
+export async function chatJson<T = unknown>(input: ChatInput): Promise<Result<T, ChatError>> {
+  const r = await requestContent(input);
+  if (!r.ok) return err(r.error);
+  try {
+    return ok(JSON.parse(r.value) as T);
+  } catch {
+    return err('parse_fail');
   }
 }
 
@@ -146,25 +186,27 @@ export type GroundOutput = {
   /** Raw 4-number box in the model's native convention (parsed downstream). */
   box: number[] | null;
   confidence: number;
+  /** Truncated raw model text — for the dev preview/trace when a box isn't parsed. */
+  raw?: string;
 };
 
-// Mirror of objectDetection.groundingIsPixelBox — kept local so this gateway
-// doesn't import an adapter (layering). Qwen emits absolute-pixel boxes.
-function groundUsesPixelBox(model: string): boolean {
+// Mirror of objectDetection.groundingIsXYXY — kept local so this gateway doesn't
+// import an adapter (layering). Qwen uses [x1,y1,x2,y2]; Gemini [ymin,xmin,ymax,xmax].
+// Both are normalized 0–1000.
+function groundUsesXYXY(model: string): boolean {
   return /qwen/i.test(model);
 }
 
 function buildGroundPrompt(model: string, hasRef: boolean): string {
-  const pixel = groundUsesPixelBox(model);
-  const coords = pixel
-    ? 'absolute pixel coordinates of the scene image, as [x1, y1, x2, y2] (top-left, bottom-right)'
-    : 'normalized coordinates from 0 to 1000, as [ymin, xmin, ymax, xmax]';
+  const xyxy = groundUsesXYXY(model);
+  const order = xyxy ? 'x1, y1, x2, y2' : 'ymin, xmin, ymax, xmax';
+  const orderDesc = xyxy ? '(left, top, right, bottom)' : '(top, left, bottom, right)';
   const refLine = hasRef
     ? 'You are given a REFERENCE photo of the target object first, then the SCENE image to search. Find the SAME object in the scene.\n'
     : '';
   return `You locate a single object in an image for a blind-assistance app. ${refLine}Return STRICT JSON only, no prose:
-{ "found": true|false, "box": [${pixel ? 'x1, y1, x2, y2' : 'ymin, xmin, ymax, xmax'}], "confidence": 0.0-1.0 }
-- "box" is the tightest bounding box around the target, in ${coords}.
+{ "found": true|false, "box": [${order}], "confidence": 0.0-1.0 }
+- "box" is the tightest bounding box around the target, as normalized coordinates from 0 to 1000 in the order [${order}] ${orderDesc}.
 - If the target is NOT visible, return { "found": false, "box": null, "confidence": 0 }.
 - Pick the single best instance if several are visible. Do not invent a box when unsure.`;
 }
@@ -185,14 +227,19 @@ export async function groundObject(args: {
     ? `Reference photo (image 1) shows: "${args.query}". Find that same object in the scene (image 2).`
     : `Find this object in the image: "${args.query}".`;
   const images = hasRef ? [args.refBase64 as string, args.frameBase64] : [args.frameBase64];
-  const resp = await chatJson<{ found?: unknown; box?: unknown; confidence?: unknown }>({
+  const resp = await requestContent({
     systemPrompt: buildGroundPrompt(args.model, hasRef),
     userText,
     imagesBase64: images,
     model: args.model,
   });
   if (!resp.ok) return err(resp.error);
-  const v = resp.value;
+  const raw = resp.value.slice(0, 300);
+  // Models often wrap JSON in ```fences``` or add a sentence — parse leniently.
+  // If still unparseable, surface the raw text (don't hard-fail) so the dev
+  // preview shows what the model actually said.
+  const v = parseLooseJsonObject<{ found?: unknown; box?: unknown; confidence?: unknown }>(resp.value);
+  if (!v) return ok({ found: false, box: null, confidence: 0, raw });
   const box = Array.isArray(v.box) && v.box.length === 4 && v.box.every(n => typeof n === 'number')
     ? (v.box as number[])
     : null;
@@ -200,6 +247,7 @@ export async function groundObject(args: {
     found: v.found === true && box !== null,
     box,
     confidence: typeof v.confidence === 'number' ? v.confidence : 0,
+    raw,
   });
 }
 

@@ -285,6 +285,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
               <Text style={styles.traceRoute}>
                 {tr.model.replace(/^.*\//, '')} · {tr.latencyMs}ms · conf {tr.confidence.toFixed(2)} · box {tr.box ? `[${tr.box.map(n => Math.round(n)).join(',')}]` : 'null'}
               </Text>
+              {!tr.found && tr.raw ? <Text style={styles.traceRaw} numberOfLines={4}>raw: {tr.raw}</Text> : null}
             </View>
           ))
         )}
@@ -466,6 +467,7 @@ const styles = StyleSheet.create({
   traceRow: { paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#333' },
   traceUtterance: { color: '#fff', fontSize: 13 },
   traceRoute: { color: '#8c8', fontSize: 12, fontFamily: 'monospace' },
+  traceRaw: { color: '#fbbf24', fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
   sectionTitle: { color: '#aaa', fontSize: 13, marginTop: 16, marginBottom: 6, textTransform: 'uppercase' },
   emptyText: { color: '#666', fontSize: 13, fontStyle: 'italic' },
   table: { backgroundColor: '#222', borderRadius: 6, overflow: 'hidden' },

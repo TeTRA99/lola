@@ -488,6 +488,9 @@ function CloudGuideLayer({
               {cg.lastLatencyMs != null ? ` · ${cg.lastLatencyMs}ms` : ''}
               {cg.lastError ? ` · ERR ${cg.lastError}` : cg.lastFound ? ' · FOUND' : ' · …'}
             </Text>
+            {!cg.lastFound && cg.lastRaw ? (
+              <Text style={styles.bannerRaw} numberOfLines={3}>raw: {cg.lastRaw}</Text>
+            ) : null}
           </View>
         </>
       )}
@@ -768,6 +771,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
   bannerText: { color: '#fff', fontSize: 14 },
+  bannerRaw: { color: '#fbbf24', fontSize: 11, marginTop: 4, maxWidth: 320 },
   detBox: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(74,222,128,0.7)' },
   detBoxActive: { position: 'absolute', borderWidth: 3, borderColor: '#22d3ee' },
   detLabel: {

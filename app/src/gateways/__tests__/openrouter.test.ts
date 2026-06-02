@@ -210,8 +210,9 @@ describe('openrouter.groundObject (cloud guide spike)', () => {
     const imageParts = body.messages[1].content.filter((c: { type: string }) => c.type === 'image_url');
     expect(imageParts).toHaveLength(1);
     expect(imageParts[0].image_url.url).toBe('data:image/jpeg;base64,FRAME64');
-    // Qwen gets a pixel-coordinate instruction.
-    expect(body.messages[0].content).toContain('absolute pixel');
+    // Qwen gets a normalized 0–1000 instruction in [x1,y1,x2,y2] order.
+    expect(body.messages[0].content).toContain('normalized coordinates from 0 to 1000');
+    expect(body.messages[0].content).toContain('x1, y1, x2, y2');
   });
 
   test('reference targeting sends ref first, then the scene frame', async () => {

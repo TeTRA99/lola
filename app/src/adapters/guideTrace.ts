@@ -13,6 +13,8 @@ export type GuideTrace = {
   confidence: number;
   latencyMs: number;
   error: string | null;
+  /** Truncated raw model text — shown when a box wasn't parsed (diagnose misses). */
+  raw?: string;
 };
 
 const MAX = 16;
