@@ -39,6 +39,8 @@ export const COPY = {
   home: {
     // Top-bar prompt above the two action cards (handoff_home).
     homePrompt: '¿Qué querés hacer?',
+    // Small grey label next to the gear icon, so the affordance is legible.
+    settingsLabel: 'Ajustes',
     // Shown when the settings gear is tapped instead of long-pressed — the gear
     // is long-press-gated so the end user can't trip into the caregiver Setup.
     settingsHint: 'Mantené presionado para ajustes',

@@ -398,7 +398,7 @@ function BlindOverlay({
   // donut = a huge circle whose transparent middle is the peephole and whose thick
   // semi-transparent border is the scrim covering the rest of the screen.
   const { width, height } = useWindowDimensions();
-  const HOLE = 150; // matches the pulse ring; iterate later
+  const HOLE = 210; // peephole diameter (pulse ring matches it)
   const RING = (width + height) * 1.5; // big enough to cover the corners
 
   return (
@@ -416,7 +416,9 @@ function BlindOverlay({
       <Animated.View
         pointerEvents="none"
         style={[styles.blindPulse, {
-          position: 'absolute', left: width / 2 - 75, top: height / 2 - 75,
+          position: 'absolute',
+          width: HOLE, height: HOLE, borderRadius: HOLE / 2,
+          left: width / 2 - HOLE / 2, top: height / 2 - HOLE / 2,
           borderColor: accent, transform: [{ scale }], opacity,
         }]}
       />
@@ -831,7 +833,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   blindPulse: {
-    width: 150, height: 150, borderRadius: 75, borderWidth: 3,
+    // size/position set inline from HOLE (the peephole diameter)
+    borderWidth: 3,
   },
   blindTitle: {
     color: '#fff', fontSize: 30, fontFamily: fontFamily.extrabold, fontWeight: '800',

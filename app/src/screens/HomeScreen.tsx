@@ -352,6 +352,7 @@ export function HomeScreen({
               accessibilityHint={COPY.home.settingsHint}
               style={styles.gearBtn}
             >
+              <Text style={styles.gearLabel}>{COPY.home.settingsLabel}</Text>
               <Icon name="settings" size={22} color={color.text.low} />
             </Pressable>
           )}
@@ -633,7 +634,8 @@ const styles = StyleSheet.create({
   },
   prompt: { color: color.text.high, fontSize: 21, fontFamily: fontFamily.extrabold, fontWeight: '800', letterSpacing: -0.2 },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  gearBtn: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  gearLabel: { color: color.text.low, fontSize: 13, fontFamily: fontFamily.medium },
   devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   devGuideLabel: { color: color.text.low, fontSize: 11, fontFamily: fontFamily.medium, marginTop: -4, marginBottom: 6 },
 
