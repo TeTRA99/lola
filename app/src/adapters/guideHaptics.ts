@@ -166,12 +166,14 @@ export function stopGuide(): void {
 
 /**
  * Discrete one-shot pulse for the CLOUD guide — fired exactly when a poll result
- * arrives (every ~2.5s), instead of the continuous beat loop. This keeps the
- * vibration HONEST: one buzz = one fresh result (the continuous loop buzzed on its
- * own clock, which felt like results that weren't there). Closeness is encoded in
- * the pulse: a strong double-tap when you're on it, a single Heavy when found,
- * a Medium when seen but off to the side, and a light tick when a check found
- * nothing — so each buzz also says "warmer/colder".
+ * arrives (every ~2.5s), instead of the continuous beat loop. One buzz = one fresh
+ * result. We do NOT encode proximity in the pulse: the magnitude tiers were
+ * imperceptible (esp. on a weak Android motor), and the spoken "where" cue carries
+ * direction anyway. So it's a hard binary contrast:
+ *   • FOUND  → a strong, unmistakable triple-Heavy BURST (count/rate reads clearly
+ *              even when amplitude doesn't).
+ *   • miss   → a single faint tick.
+ * @param proximity null = not found this poll; any number = found (magnitude unused).
  */
 export function pulseGuide(proximity: number | null): void {
   try {
@@ -179,17 +181,10 @@ export function pulseGuide(proximity: number | null): void {
       void Haptics.selectionAsync(); // checked, nothing found — a faint tick
       return;
     }
-    if (proximity >= CONFIG.GUIDE_FOUND_PROXIMITY) {
-      // On it — a strong double-tap (rate reads clearly even on a weak motor).
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      setTimeout(() => {
-        try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch { /* ignore */ }
-      }, 110);
-    } else if (proximity >= CONFIG.GUIDE_REARM_PROXIMITY) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); // found, getting close
-    } else {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); // seen, but off-center/far
-    }
+    // Found — a strong triple-Heavy burst, clearly distinct from the faint miss tick.
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(() => { try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch { /* ignore */ } }, 90);
+    setTimeout(() => { try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch { /* ignore */ } }, 180);
   } catch { /* haptics must never throw */ }
 }
 

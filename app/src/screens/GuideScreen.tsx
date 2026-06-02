@@ -135,6 +135,14 @@ export function GuideScreen({
   useEffect(() => {
     if (!guiding) return;
     void (async () => {
+      if (cloud) {
+        // Cloud is a different interaction than the continuous Geiger — point at an
+        // area, wait for the buzz (one answer per area), move on. Give matching
+        // instructions and skip the Geiger-specific first-use hint.
+        setSearchArmed(true);
+        void speak(COPY.guide.searchingCloud(targetLabel));
+        return;
+      }
       if (!(await Settings.getBool(Settings.KEYS.guideHintSeen, false))) {
         await Settings.setBool(Settings.KEYS.guideHintSeen, true);
         await speak(COPY.onboarding.guideHint);

@@ -106,24 +106,30 @@ export function useCloudGuideDetection(opts: {
                 box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw, near,
               });
               setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null, lastNear: near }));
-            } else {
+            } else if (res.ok) {
+              // Genuine "not in this frame" — a faint tick is honest feedback.
               onProxRef.current(null);
               onHintRef.current?.(null);
-              const error = res.ok ? null : res.error;
-              const raw = res.ok ? res.value.raw ?? null : null;
               recordGuideTrace({
                 at: t0, query: queryRef.current, model, found: false,
-                box: res.ok ? res.value.box : null, confidence: res.ok ? res.value.confidence : 0,
-                latencyMs, error, raw: raw ?? undefined,
+                box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null, lastRaw: raw, lastNear: null }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: false, lastBox: null, lastRaw: res.value.raw ?? null, lastNear: null }));
+            } else {
+              // ERROR (network/timeout/etc.) — do NOT buzz. It doesn't mean "nothing
+              // here", it means we don't know; a tick would be misleading.
+              recordGuideTrace({
+                at: t0, query: queryRef.current, model, found: false,
+                box: null, confidence: 0, latencyMs, error: res.error,
+              });
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: res.error, lastFound: false, lastBox: null, lastRaw: null, lastNear: null }));
             }
-          } else if (!cancelled) {
-            onProxRef.current(null);
           }
+          // No `else` buzz when the frame couldn't be captured — like an error,
+          // it doesn't mean "nothing here", so stay silent.
         } catch (e) {
           if (!cancelled) {
-            onProxRef.current(null);
+            // Exception (capture/network) — also an error, so no buzz.
             recordGuideTrace({
               at: t0, query: queryRef.current, model, found: false, box: null,
               confidence: 0, latencyMs: Date.now() - t0, error: String(e),

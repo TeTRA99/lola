@@ -71,6 +71,11 @@ export const COPY = {
   // "Guíame a X" guidance flow (FR voseo). `obj` is the noun the user said.
   guide: {
     searching: (obj: string): string => `Buscando ${obj}. Movéme despacio por el lugar.`,
+    // Cloud (online) opening instructions — a DIFFERENT interaction than the
+    // continuous Geiger: point at one area, wait for the buzz (one answer per
+    // area), then move to another area. Spoken on open in cloud mode.
+    searchingCloud: (obj: string): string =>
+      `Buscando ${obj}. Apuntá la cámara a una zona y mantené quieto un momento. Cada vibración es una respuesta de esa zona y te digo dónde lo veo. Movéme despacio a otra zona para seguir buscando.`,
     spotted: 'Creo que lo veo. Movéme despacio.',
     // Truly unsupported object: be warm and point to Describir instead. No noun
     // here — the IntentRouter gives a bare, article-less noun ("termo"), which
