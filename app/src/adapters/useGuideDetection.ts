@@ -10,6 +10,7 @@ import { useFrameOutput, type Frame } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 import { type RawDetection } from '@/adapters/objectDetection';
 import { presetForLevel, currentDetectionLevel, markModelDownloaded } from '@/adapters/detectionPresets';
+import { CONFIG } from '@/config';
 
 export function useGuideDetection(
   onResult: (dets: RawDetection[], frameW: number, frameH: number) => void,
@@ -21,6 +22,8 @@ export function useGuideDetection(
   // right (and keeps the frame-processor worklet's captured inputSize constant).
   const preset = useMemo(() => presetForLevel(currentDetectionLevel()), []);
   const inputSize = preset.inputSize;
+  // Captured as a primitive so the frame-processor worklet can close over it.
+  const detectionThreshold = CONFIG.GUIDE_DETECTION_THRESHOLD;
   const model = useObjectDetection({ model: useMemo(() => preset.model(), [preset]) });
 
   // Once the model finishes loading, remember its .pte is on the device — Home
@@ -45,7 +48,7 @@ export function useGuideDetection(
         try {
           if (runOnFrame) {
             const dets = runOnFrame(frame, false, {
-              detectionThreshold: 0.3, // permissive while debugging
+              detectionThreshold,      // confidence floor (CONFIG.GUIDE_DETECTION_THRESHOLD)
               inputSize,               // from the caregiver's Detection-quality preset
             }) as RawDetection[] | undefined;
             scheduleOnRN(handle, dets ?? [], frame.width, frame.height);
@@ -58,7 +61,7 @@ export function useGuideDetection(
           frame.dispose();
         }
       },
-      [runOnFrame, handle, noteErr, inputSize],
+      [runOnFrame, handle, noteErr, inputSize, detectionThreshold],
     ),
   });
 

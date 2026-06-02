@@ -74,6 +74,10 @@ export const CONFIG = {
   // proxy) — so the pulse quickens as you approach, not only as you aim.
   GUIDE_CENTER_WEIGHT: 0.55,      // weight on centering vs object size (1 = centering only)
   GUIDE_REACH_SIZE: 0.6,          // box's larger side (frame fraction) that reads as "reached"
+  // On-device detector confidence floor. 0.3 was "permissive while debugging" and
+  // produced many false positives (esp. while walking — lots of scene churn). 0.5
+  // is a calmer default; raise toward 0.6 if phantoms persist, lower if it misses.
+  GUIDE_DETECTION_THRESHOLD: 0.5,
   // The Guide NEVER closes itself — a blind user must not be dropped silently
   // (FR/UX). Instead, after this long with the target not in view, Lola gives an
   // audible "still there? tap to exit" check-in and repeats it on this interval.
