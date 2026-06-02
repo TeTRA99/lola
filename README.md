@@ -43,6 +43,8 @@ cues for every state, and nothing that fails silently.
 | **Launch** — *"Hola, soy Lola"* | **Home** — two big actions: Describir / Preguntar | **Preguntar** — listening for your question |
 | <img src="screenshots/04-ask-result.png" width="240" alt="Ask result identifying the user's yerba" /> | <img src="screenshots/05-setup-things.png" width="240" alt="Setup — My things" /> | <img src="screenshots/06-setup-rooms.png" width="240" alt="Setup — Rooms" /> |
 | **Answer** — recognizes *your* saved object among look-alikes | **Setup — My things** — tag the objects you ask about | **Setup — Rooms** — map where you are |
+| <img src="screenshots/07-guide-searching.png" width="240" alt="Guide — homing in through the peephole" /> | <img src="screenshots/08-guide-found.png" width="240" alt="Guide — found it" /> | <img src="screenshots/09-settings.png" width="240" alt="Setup — Settings" /> |
+| **Guíame a X** — peephole homing ("Buscando…") | **Found** — "¡Ahí está!" | **Setup — Settings** — language, AI mode, voice |
 
 ## Tech stack
 
