@@ -67,6 +67,7 @@ export function GuideScreen({
   const [proximity, setProximity] = useState<number | null>(null);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
+  const lastSaidAt = useRef(0); // throttle the cloud "¡Ahí está!" so TTS doesn't back up
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const lastFoundAt = useRef(0);    // timestamp of the last "¡ahí está!" (cooldown)
@@ -178,7 +179,9 @@ export function GuideScreen({
   // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
   const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
   useEffect(() => {
-    if (!guiding) return;
+    // Cloud handles its own per-result confirmation in applyProximity (it speaks
+    // "¡Ahí está!" on every positive); skip the on-device once-only tiered cues.
+    if (!guiding || cloud) return;
     if (proximity === null) {
       if (!lostTimer.current) {
         lostTimer.current = setTimeout(() => {
@@ -214,7 +217,7 @@ export function GuideScreen({
     } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
       foundRef.current = false;
     }
-  }, [proximity, targetCocoLabel, handleExit]);
+  }, [proximity, targetCocoLabel, handleExit, cloud]);
 
   // Idle check-in — the search never closes itself; instead, after a long stretch
   // with the target not in view, Lola reassures + reminds how to leave, and keeps
@@ -246,6 +249,16 @@ export function GuideScreen({
     if (cloud) {
       pulseGuide(p);
       setProximity(p);
+      // Cloud is slow, so a buzz fades from memory between polls — speak a short
+      // confirmation on EVERY positive result so the user knows it's still on it.
+      // Throttled so consecutive fast polls can't queue up overlapping speech.
+      if (p !== null) {
+        const now = Date.now();
+        if (now - lastSaidAt.current > 2000) {
+          lastSaidAt.current = now;
+          void speak(COPY.guide.here);
+        }
+      }
       return;
     }
     updateGuide(p);
