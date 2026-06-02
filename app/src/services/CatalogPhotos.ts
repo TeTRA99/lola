@@ -79,3 +79,14 @@ export function removeForObject(objectId: number): void {
 export function listForObject(objectId: number): string[] {
   return listFilesIn(objectDir(objectId)).map(f => f.uri);
 }
+
+/**
+ * Current absolute URI of the object's primary (first) photo, or null if none.
+ * Re-derived from the live document directory every call — the stored
+ * objects.reference_image_uri is an ABSOLUTE path whose iOS container UUID changes
+ * across reinstalls, so it goes stale; the file itself stays at catalog/<id>/1.jpg.
+ * Always resolve display/use paths through here, not the stored column.
+ */
+export function primaryUriFor(objectId: number): string | null {
+  return listFilesIn(objectDir(objectId))[0]?.uri ?? null;
+}

@@ -139,7 +139,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
               {catalog.map(item => (
                 <ListRow
                   key={item.id}
-                  thumbUri={item.reference_image_uri}
+                  // Re-derive from the current container (stored absolute path goes
+                  // stale across reinstalls); fall back to the stored value.
+                  thumbUri={CatalogPhotos.primaryUriFor(item.id) ?? item.reference_image_uri}
                   title={item.display_name}
                   subtitle={objectSubtitle(item)}
                   seenIcon

@@ -5,6 +5,7 @@ import type { SQLiteBindValue } from 'expo-sqlite';
 import { getDb } from '@/adapters/storage';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
+import * as CatalogPhotos from '@/services/CatalogPhotos';
 
 export type CatalogObject = {
   id: number;
@@ -141,15 +142,17 @@ export async function removeObject(
 export async function referencePhotoFor(noun: string): Promise<string | null> {
   const catalog = await getCatalog();
   const canon = canonicalize(noun);
-  const byCanon = catalog.find(o => o.canonical_name === canon && o.reference_image_uri);
-  if (byCanon?.reference_image_uri) return byCanon.reference_image_uri;
   const lower = noun.trim().toLowerCase();
-  if (!lower) return null;
-  const bySubstr = catalog.find(
-    o => o.reference_image_uri &&
-      (o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase())),
-  );
-  return bySubstr?.reference_image_uri ?? null;
+  // Match by NAME (not by the stored path — that goes stale across reinstalls).
+  const match =
+    catalog.find(o => o.canonical_name === canon) ??
+    (lower
+      ? catalog.find(o => o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase()))
+      : undefined);
+  if (!match) return null;
+  // Re-derive the live photo path from the current container (see CatalogPhotos.
+  // primaryUriFor); fall back to the stored column only if no file is present.
+  return CatalogPhotos.primaryUriFor(match.id) ?? match.reference_image_uri;
 }
 
 export async function getCatalog(): Promise<ObjectCatalog> {
