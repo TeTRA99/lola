@@ -294,8 +294,23 @@ function SettingsTab() {
   // when the user returns to Home in local mode (ModelPrepBanner picks it up),
   // never from this tap — same pattern as the detection-level slider.
   const changeAiMode = (mode: 'cloud' | 'local') => {
-    setAiMode(mode);
-    void Settings.setString(Settings.KEYS.inferenceMode, mode);
+    if (mode === aiMode) return; // tapping the active mode: no-op, no dialog
+    // Confirm both directions — switching to Online starts sending photos to the
+    // cloud (privacy); switching to On-the-phone trades capability + a download.
+    Alert.alert(
+      t.aiModeSwitchTitle,
+      mode === 'cloud' ? t.aiModeToCloudBody : t.aiModeToLocalBody,
+      [
+        { text: t.aiModeSwitchCancel, style: 'cancel' },
+        {
+          text: t.aiModeSwitchConfirm,
+          onPress: () => {
+            setAiMode(mode);
+            void Settings.setString(Settings.KEYS.inferenceMode, mode);
+          },
+        },
+      ],
+    );
   };
 
   const toggle = async () => {

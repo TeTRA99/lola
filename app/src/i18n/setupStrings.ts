@@ -79,6 +79,11 @@ type SetupCopy = {
   aiModeLocal: string;
   aiModeCloudHint: string;
   aiModeLocalHint: string;
+  aiModeSwitchTitle: string;
+  aiModeToCloudBody: string;
+  aiModeToLocalBody: string;
+  aiModeSwitchConfirm: string;
+  aiModeSwitchCancel: string;
   // photo placeholders shown in the Spanish name fields
   phObjName: string;
   phObjDesc: string;
@@ -113,7 +118,7 @@ const en: SetupCopy = {
   introTitle: 'Welcome to Lola',
   introBody: 'This is where you set Lola up — for you, your things, your home. Add the objects that matter most in your daily life, so Lola recognizes them and helps find them. Add the rooms in your home so Lola knows where you are.',
   introDismiss: 'Got it',
-  objects: 'Objects',
+  objects: 'My things',
   rooms: 'Rooms',
   settings: 'Settings',
   addObject: 'Add object',
@@ -177,6 +182,11 @@ const en: SetupCopy = {
   aiModeLocal: 'On the phone',
   aiModeCloudHint: 'Recommended. Photos are sent to the cloud, so Lola sees more and can name specific things (like a mate). Needs an internet connection.',
   aiModeLocalHint: 'Private and works offline — photos never leave the phone. But Lola recognizes far fewer things and won’t name specific objects (a mate becomes “a cup”). The first time, it downloads a model to the phone.',
+  aiModeSwitchTitle: 'How Lola sees',
+  aiModeToCloudBody: 'Online, Lola sends photos to the internet to see better and recognize specific things (like a mate). Turn it on?',
+  aiModeToLocalBody: 'On the phone, photos never leave the device — private and offline — but Lola recognizes fewer things, and it downloads a model the first time. Turn it on?',
+  aiModeSwitchConfirm: 'Turn on',
+  aiModeSwitchCancel: 'Cancel',
   phObjName: 'e.g. Dad’s thermos',
   phObjDesc: 'e.g. the blue one with a red lid',
   phRoomName: 'e.g. Kitchen',
@@ -208,7 +218,7 @@ const es: SetupCopy = {
   introTitle: 'Bienvenido a Lola',
   introBody: 'Acá configurás a Lola para vos, tus cosas, tu casa. Registrá los objetos que más te importan en tu día a día, así Lola los reconoce y ayuda a encontrarlos. Registrá los cuartos de tu casa para que Lola reconozca dónde estás.',
   introDismiss: 'Entendido',
-  objects: 'Objetos',
+  objects: 'Mis cosas',
   rooms: 'Cuartos',
   settings: 'Ajustes',
   addObject: 'Agregar objeto',
@@ -272,6 +282,11 @@ const es: SetupCopy = {
   aiModeLocal: 'En el teléfono',
   aiModeCloudHint: 'Recomendado. Las fotos se envían a la nube, así Lola ve más y puede nombrar cosas específicas (como un mate). Necesita conexión a internet.',
   aiModeLocalHint: 'Privado y funciona sin internet: las fotos nunca salen del teléfono. Pero Lola reconoce muchas menos cosas y no nombra objetos específicos (un mate pasa a ser “una taza”). La primera vez descarga un modelo al teléfono.',
+  aiModeSwitchTitle: 'Cómo ve Lola',
+  aiModeToCloudBody: 'En línea, Lola envía las fotos a internet para ver mejor y reconocer cosas específicas (como un mate). ¿Querés activarlo?',
+  aiModeToLocalBody: 'En el teléfono, las fotos no salen del dispositivo —privado y sin internet— pero Lola reconoce menos cosas, y la primera vez descarga un modelo. ¿Querés activarlo?',
+  aiModeSwitchConfirm: 'Activar',
+  aiModeSwitchCancel: 'Cancelar',
   phObjName: 'ej. Termo de Papá',
   phObjDesc: 'ej. el azul de tapa roja',
   phRoomName: 'ej. Cocina',
