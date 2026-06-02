@@ -81,6 +81,29 @@ export const CONFIG = {
   GUIDE_CHECKIN_IDLE_MS: 60000, // idle (target unseen) this long → spoken check-in
   GUIDE_CHECKIN_TICK_MS: 5000,  // how often we poll the idle clock
 
+  // Cloud "Guide me to it" SPIKE (open-vocab grounding via OpenRouter, Debug-only).
+  // A cloud round-trip is ~1.5–3s, so this drives INTERMITTENT re-localization, not
+  // the per-frame loop: capture a still every POLL_MS, ground it, refresh proximity.
+  // The freshness/decay windows are stretched (vs the on-device ones above) so the
+  // haptic rate rides between polls instead of collapsing to the "searching" tick.
+  GUIDE_CLOUD_POLL_MS: 2500,         // re-localize cadence (one image request per poll)
+  GUIDE_CLOUD_FRESH_MS: 1800,        // hold full proximity this long after a fresh box
+  GUIDE_CLOUD_DECAY_MS: 2400,        // then glide proximity → 0 over this (no hard snap)
+  GUIDE_CLOUD_MAX_DIM: 768,          // downscale captured frames to this before upload
+  GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
+  GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)
+  GUIDE_CLOUD_MODEL_DEFAULT: 'google/gemini-3.5-flash',
+  // Candidate grounding models (Debug picker). All do open-vocab boxes on OpenRouter;
+  // box conventions differ — see groundingIsPixelBox()/parseGroundingBox in
+  // adapters/objectDetection.ts (Gemini = normalized 0–1000 [ymin,xmin,ymax,xmax];
+  // Qwen = absolute pixel [x1,y1,x2,y2]).
+  GUIDE_CLOUD_MODELS: [
+    'google/gemini-3.5-flash',
+    'google/gemini-3.1-flash-lite',
+    'qwen/qwen3-vl-8b-instruct',
+    'google/gemini-2.5-flash',
+  ] as const,
+
   // On-device inference (feat/on-device-models). Default mode flips to 'local'
   // in the final migration step; 450m is the realistic Galaxy A12 VLM size.
   LOCAL_INFERENCE_DEFAULT: 'cloud' as 'local' | 'cloud',

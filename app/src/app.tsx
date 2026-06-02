@@ -45,7 +45,9 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(launchedToSetup ? 'setup' : 'splash');
   // Target for the guide screen when reached via the "guíame a X" voice flow
   // (null when opened from the dev shortcut → mock mode).
-  const [guideTarget, setGuideTarget] = useState<{ cocoLabel: string; spoken: string } | null>(null);
+  const [guideTarget, setGuideTarget] = useState<
+    { cocoLabel: string | null; spoken: string; cloudQuery?: string; refImageUri?: string | null } | null
+  >(null);
   const fontsLoaded = useAppFonts();
 
   // Register the Android shortcut once (iOS uses the static action declared by
@@ -140,6 +142,8 @@ export default function App() {
             <GuideScreen
               targetCocoLabel={guideTarget?.cocoLabel ?? null}
               targetLabel={guideTarget?.spoken ?? 'el objeto'}
+              cloudQuery={guideTarget?.cloudQuery ?? null}
+              refImageUri={guideTarget?.refImageUri ?? null}
               onClose={() => { setGuideTarget(null); setScreen('home'); }}
             />
           </Suspense>

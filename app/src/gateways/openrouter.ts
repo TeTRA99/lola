@@ -134,6 +134,75 @@ export async function chatJson<T = unknown>(input: ChatInput): Promise<Result<T,
   }
 }
 
+// ── Cloud object grounding (feat: cloud "guide me to it" spike) ────────────
+// Ask a vision model to LOCATE an arbitrary, open-vocabulary object in a frame
+// and return a single bounding box as strict JSON. Reuses chatJson() (POST +
+// retry + JSON parse); only the prompt and the box-shape normalization differ.
+// The box convention is model-specific and parsed downstream by
+// objectDetection.parseGroundingBox — here we just tell the model which to use.
+
+export type GroundOutput = {
+  found: boolean;
+  /** Raw 4-number box in the model's native convention (parsed downstream). */
+  box: number[] | null;
+  confidence: number;
+};
+
+// Mirror of objectDetection.groundingIsPixelBox — kept local so this gateway
+// doesn't import an adapter (layering). Qwen emits absolute-pixel boxes.
+function groundUsesPixelBox(model: string): boolean {
+  return /qwen/i.test(model);
+}
+
+function buildGroundPrompt(model: string, hasRef: boolean): string {
+  const pixel = groundUsesPixelBox(model);
+  const coords = pixel
+    ? 'absolute pixel coordinates of the scene image, as [x1, y1, x2, y2] (top-left, bottom-right)'
+    : 'normalized coordinates from 0 to 1000, as [ymin, xmin, ymax, xmax]';
+  const refLine = hasRef
+    ? 'You are given a REFERENCE photo of the target object first, then the SCENE image to search. Find the SAME object in the scene.\n'
+    : '';
+  return `You locate a single object in an image for a blind-assistance app. ${refLine}Return STRICT JSON only, no prose:
+{ "found": true|false, "box": [${pixel ? 'x1, y1, x2, y2' : 'ymin, xmin, ymax, xmax'}], "confidence": 0.0-1.0 }
+- "box" is the tightest bounding box around the target, in ${coords}.
+- If the target is NOT visible, return { "found": false, "box": null, "confidence": 0 }.
+- Pick the single best instance if several are visible. Do not invent a box when unsure.`;
+}
+
+/**
+ * Locate `query` in `frameBase64` (optionally aided by a `refBase64` photo of the
+ * object). Returns a raw box in the model's native convention — call
+ * objectDetection.parseGroundingBox(model, out.box, w, h) to normalize it.
+ */
+export async function groundObject(args: {
+  query: string;
+  frameBase64: string;
+  refBase64?: string | null;
+  model: string;
+}): Promise<Result<GroundOutput, ChatError>> {
+  const hasRef = !!args.refBase64;
+  const userText = hasRef
+    ? `Reference photo (image 1) shows: "${args.query}". Find that same object in the scene (image 2).`
+    : `Find this object in the image: "${args.query}".`;
+  const images = hasRef ? [args.refBase64 as string, args.frameBase64] : [args.frameBase64];
+  const resp = await chatJson<{ found?: unknown; box?: unknown; confidence?: unknown }>({
+    systemPrompt: buildGroundPrompt(args.model, hasRef),
+    userText,
+    imagesBase64: images,
+    model: args.model,
+  });
+  if (!resp.ok) return err(resp.error);
+  const v = resp.value;
+  const box = Array.isArray(v.box) && v.box.length === 4 && v.box.every(n => typeof n === 'number')
+    ? (v.box as number[])
+    : null;
+  return ok({
+    found: v.found === true && box !== null,
+    box,
+    confidence: typeof v.confidence === 'number' ? v.confidence : 0,
+  });
+}
+
 /**
  * Multimodal image embedding via OpenRouter's /embeddings endpoint.
  * Used by RoomCatalog to fingerprint scenes for cosine-similarity room lookup.

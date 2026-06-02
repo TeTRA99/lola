@@ -106,4 +106,12 @@ export const KEYS = {
   // (e.g. "yolo26n,yolo26m"). Lets Home show a one-time prep banner only when the
   // chosen level needs a model that isn't on the device yet.
   detectionModelsReady: 'detection_models_ready',
+  // Cloud "Guide me to it" SPIKE (Debug-only, independent of inferenceMode).
+  // guideBackend: 'device' = on-device YOLO/COCO (default); 'cloud' = open-vocab
+  // grounding via OpenRouter. guideCloudTargeting: 'text' = name-only; 'reference'
+  // = also send the saved object's photo. guideCloudModel: which OpenRouter model
+  // (one of CONFIG.GUIDE_CLOUD_MODELS).
+  guideBackend: 'guide_backend',
+  guideCloudTargeting: 'guide_cloud_targeting',
+  guideCloudModel: 'guide_cloud_model',
 } as const;

@@ -18,6 +18,7 @@ import { COPY } from '@/services/CopyModule';
 import { applyCatalogNarration } from '@/services/CatalogResolver';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
+import * as Settings from '@/services/Settings';
 import * as MemoryService from '@/services/MemoryService';
 import * as RoomCatalog from '@/services/RoomCatalog';
 import { ok, err, type Result } from '@/utils/result';
@@ -43,7 +44,9 @@ export type AskOutcome = {
   route: AskRoute;
   // Set on the "guíame a X" route when the object is guidable — the caller
   // opens the live guide screen with this target. Absent → no navigation.
-  guide?: { cocoLabel: string; spoken: string };
+  // cloudQuery/refImageUri are set only in the cloud spike (guideBackend='cloud'):
+  // the open-vocab query and (when targeting='reference') the saved photo to send.
+  guide?: { cocoLabel: string | null; spoken: string; cloudQuery?: string; refImageUri?: string | null };
 };
 
 async function loadCatalogSafe() {
@@ -164,8 +167,12 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
 async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome, AskError>> {
   fire('thinking_start');
   const target = await resolveGuideTarget(noun);
+  // Cloud spike (Debug-only): the open-vocab grounding model can find arbitrary
+  // objects, so we DON'T need a COCO match — bypass the unsupported gate and
+  // guide on the raw noun. Independent of the production inferenceMode toggle.
+  const cloud = (await Settings.getString(Settings.KEYS.guideBackend, 'device')) === 'cloud';
   fire('thinking_stop');
-  if (!target) {
+  if (!target && !cloud) {
     fire('answer_ready');
     const line = COPY.guide.cannotGuide;
     await speak(line);
@@ -173,14 +180,42 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
     return ok({ narration: line, objects: [], route: 'guide' });
   }
   fire('answer_ready');
-  // Approximate match (e.g. "termo" → bottle): be honest that this kind of
-  // object isn't fully supported, then guide as best we can.
-  if (target.approximate) await speak(COPY.guide.approxWarning);
-  await logEvent(true, now() - t0, target.approximate ? 'guide_approx' : null);
+  // Approximate match (e.g. "termo" → bottle): be honest that this kind of object
+  // isn't fully supported, then guide as best we can. (On-device path only — the
+  // cloud model handles the real object directly, so no proxy warning.)
+  if (target?.approximate && !cloud) await speak(COPY.guide.approxWarning);
+  await logEvent(true, now() - t0, target?.approximate ? 'guide_approx' : cloud ? 'guide_cloud' : null);
+
+  // Cloud: best-effort reference photo when targeting === 'reference'.
+  let refImageUri: string | null = null;
+  if (cloud && (await Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')) === 'reference') {
+    refImageUri = await findReferencePhoto(noun);
+  }
   return ok({
     narration: '', objects: [], route: 'guide',
-    guide: { cocoLabel: target.cocoLabel, spoken: target.spoken },
+    guide: {
+      cocoLabel: target?.cocoLabel ?? null,
+      spoken: target?.spoken ?? noun,
+      cloudQuery: cloud ? noun : undefined,
+      refImageUri: cloud ? refImageUri : undefined,
+    },
   });
+}
+
+// Find a saved catalog object's reference photo for the spoken noun (cloud spike,
+// reference targeting). Match the canonicalized noun against canonical_name, then
+// fall back to a display-name substring. Returns null if none has a photo.
+async function findReferencePhoto(noun: string): Promise<string | null> {
+  const catalog = await loadCatalogSafe();
+  if (!catalog) return null;
+  const canon = OnboardingService.canonicalize(noun);
+  const byCanon = catalog.find(o => o.canonical_name === canon && o.reference_image_uri);
+  if (byCanon?.reference_image_uri) return byCanon.reference_image_uri;
+  const lower = noun.trim().toLowerCase();
+  const bySubstr = catalog.find(
+    o => o.reference_image_uri && (o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase())),
+  );
+  return bySubstr?.reference_image_uri ?? null;
 }
 
 // Compact human-readable route label for the Debug Ask-trace readout.

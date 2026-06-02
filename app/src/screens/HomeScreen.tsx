@@ -49,6 +49,7 @@ import { DetectionPrepBanner } from '@/components/DetectionPrepBanner';
 import { presetForLevel, currentDetectionLevel, isModelDownloaded } from '@/adapters/detectionPresets';
 import { inferenceMode } from '@/services/ModelRouter';
 import * as VlmAdapter from '@/adapters/visionLLM';
+import { CONFIG } from '@/config';
 import { color, fontFamily } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 
@@ -70,7 +71,7 @@ export function HomeScreen({
 }: {
   onOpenSettings?: () => void;
   onDevDebug?: () => void;
-  onOpenGuide?: (target: { cocoLabel: string; spoken: string }) => void;
+  onOpenGuide?: (target: { cocoLabel: string | null; spoken: string; cloudQuery?: string; refImageUri?: string | null }) => void;
 }) {
   const [mode, setMode] = useState<Mode>('describe');
   const [state, setState] = useState<HomeState>('idle');
@@ -110,6 +111,19 @@ export function HomeScreen({
     setShowWelcome(false);
     void Settings.setBool(Settings.KEYS.welcomeSeen, true);
   };
+
+  // Dev-only: surface which cloud-guide model the spike is using (only when the
+  // guide backend is set to cloud in Debug). Never shown in the end-user build.
+  const [devGuideLabel, setDevGuideLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!onDevDebug) return;
+    void (async () => {
+      const backend = await Settings.getString(Settings.KEYS.guideBackend, 'device');
+      if (backend !== 'cloud') { setDevGuideLabel(null); return; }
+      const model = await Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
+      setDevGuideLabel(`cloud · ${model.replace(/^.*\//, '')}`);
+    })();
+  }, [onDevDebug]);
 
   // Tap anywhere while Lola is listening/thinking/speaking → stop her and
   // return to idle. (Re-tap a panel to start fresh.)
@@ -309,6 +323,7 @@ export function HomeScreen({
       >
         <Text style={styles.prompt}>{COPY.home.homePrompt}</Text>
         <View style={styles.topRight}>
+          {devGuideLabel && <Text style={styles.devGuideLabel}>{devGuideLabel}</Text>}
           {onDevDebug && (
             <Pressable
               onPress={onDevDebug}
@@ -604,6 +619,7 @@ const styles = StyleSheet.create({
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  devGuideLabel: { color: color.text.low, fontSize: 10, fontFamily: fontFamily.medium },
 
   cardWrap: { borderRadius: 34, minHeight: 190 },
   cardWrapLight: { backgroundColor: color.dad.describeBg, ...cardShadowLight },

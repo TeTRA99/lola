@@ -10,6 +10,7 @@ import * as VlmAdapter from '@/adapters/visionLLM';
 import * as TextAdapter from '@/adapters/textLLM';
 import { getAskTraces, type AskTrace } from '@/services/AskTrace';
 import { getVlmTraces, type VlmTrace } from '@/adapters/vlmTrace';
+import { getGuideTraces, type GuideTrace } from '@/adapters/guideTrace';
 import { CONFIG } from '@/config';
 import { TOP_INSET } from '@/theme/insets';
 import {
@@ -44,12 +45,24 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
   const [vlmStatus, setVlmStatus] = useState<VlmAdapter.VlmStatus>(() => VlmAdapter.getStatus());
   const [textStatus, setTextStatus] = useState<TextAdapter.TextStatus>(() => TextAdapter.getStatus());
 
+  // Cloud "guide me to it" spike controls.
+  const [guideBackend, setGuideBackend] = useState<'device' | 'cloud'>('device');
+  const [guideTargeting, setGuideTargeting] = useState<'text' | 'reference'>('text');
+  const [guideModel, setGuideModel] = useState<string>(CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
+  const [guideTraces, setGuideTraces] = useState<GuideTrace[]>(() => getGuideTraces());
+
   useEffect(() => {
     void Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT)
       .then(v => setInferMode(v === 'local' ? 'local' : 'cloud'));
     void Settings.getString(Settings.KEYS.vlmModel, CONFIG.LOCAL_VLM_DEFAULT_SIZE)
       .then(v => setVlmSize(v === '1.6b' ? '1.6b' : '450m'));
     void Settings.getBool(Settings.KEYS.allowCloudFallback, false).then(setAllowFallback);
+    void Settings.getString(Settings.KEYS.guideBackend, 'device')
+      .then(v => setGuideBackend(v === 'cloud' ? 'cloud' : 'device'));
+    void Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')
+      .then(v => setGuideTargeting(v === 'reference' ? 'reference' : 'text'));
+    void Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT)
+      .then(v => setGuideModel(v || CONFIG.GUIDE_CLOUD_MODEL_DEFAULT));
     const offV = VlmAdapter.subscribeStatus(setVlmStatus);
     const offT = TextAdapter.subscribeStatus(setTextStatus);
     return () => { offV(); offT(); };
@@ -77,6 +90,18 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
     const v = !allowFallback;
     setAllowFallback(v);
     void Settings.setBool(Settings.KEYS.allowCloudFallback, v);
+  };
+  const onSetGuideBackend = (b: 'device' | 'cloud') => {
+    setGuideBackend(b);
+    void Settings.setString(Settings.KEYS.guideBackend, b);
+  };
+  const onSetGuideTargeting = (m: 'text' | 'reference') => {
+    setGuideTargeting(m);
+    void Settings.setString(Settings.KEYS.guideCloudTargeting, m);
+  };
+  const onSetGuideModel = (m: string) => {
+    setGuideModel(m);
+    void Settings.setString(Settings.KEYS.guideCloudModel, m);
   };
   const onPreload = async () => {
     setExportNote('Preloading on-device models… (first time downloads weights)');
@@ -168,6 +193,72 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
           <Seg active={false} label="Preload models" onPress={() => void onPreload()} />
           <Seg active={false} label="Free memory" onPress={() => void onFreeMemory()} />
         </View>
+      </View>
+
+      {/* Cloud "Guide me to it" SPIKE — open-vocab grounding via OpenRouter.
+          Independent of the Describe/Ask backend above. */}
+      <View style={[styles.panel, styles.panelNeutral]}>
+        <Text style={styles.panelTitle}>Cloud guide (spike)</Text>
+        <Text style={styles.activeLine}>
+          {guideBackend === 'cloud'
+            ? `Cloud · ${guideModel.replace(/^.*\//, '')} · ${guideTargeting}`
+            : 'On-device YOLO/COCO (default)'}
+        </Text>
+
+        <Text style={styles.segLabel}>Guide backend</Text>
+        <View style={styles.segRow}>
+          <Seg active={guideBackend === 'device'} label="On-device" onPress={() => onSetGuideBackend('device')} />
+          <Seg active={guideBackend === 'cloud'} label="Cloud (open-vocab)" onPress={() => onSetGuideBackend('cloud')} />
+        </View>
+
+        <Text style={styles.segLabel}>Cloud targeting</Text>
+        <View style={styles.segRow}>
+          <Seg active={guideTargeting === 'text'} label="Name only" onPress={() => onSetGuideTargeting('text')} />
+          <Seg active={guideTargeting === 'reference'} label="Saved photo" onPress={() => onSetGuideTargeting('reference')} />
+        </View>
+
+        <Text style={styles.segLabel}>Grounding model</Text>
+        {CONFIG.GUIDE_CLOUD_MODELS.map(m => (
+          <Pressable key={m} style={[styles.modelRow, guideModel === m && styles.modelRowActive]} onPress={() => onSetGuideModel(m)}>
+            <Text style={[styles.modelText, guideModel === m && styles.modelTextActive]}>{m}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Cloud grounding traces — raw box + latency per poll (diagnose accuracy). */}
+      <View style={[styles.panel, styles.panelNeutral]}>
+        <View style={styles.traceHeader}>
+          <Text style={styles.panelTitle}>Last cloud grounding polls</Text>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable style={styles.headerBtn} onPress={() => setGuideTraces(getGuideTraces())}>
+              <Text style={styles.headerBtnText}>Refresh</Text>
+            </Pressable>
+            <Pressable
+              style={styles.headerBtn}
+              onPress={() => {
+                void Clipboard.setStringAsync(JSON.stringify(getGuideTraces(), null, 2));
+                setExportNote('Copied grounding traces to clipboard');
+                setTimeout(() => setExportNote(null), 2000);
+              }}
+            >
+              <Text style={styles.headerBtnText}>Copy</Text>
+            </Pressable>
+          </View>
+        </View>
+        {guideTraces.length === 0 ? (
+          <Text style={styles.panelText}>No cloud guide polls yet. Set backend = Cloud, run "guíame a …", then Refresh.</Text>
+        ) : (
+          guideTraces.map((tr, i) => (
+            <View key={`${tr.at}-${i}`} style={styles.traceRow}>
+              <Text style={styles.traceUtterance}>
+                "{tr.query}" → {tr.found ? 'FOUND' : 'miss'} {tr.error ? `(${tr.error})` : ''}
+              </Text>
+              <Text style={styles.traceRoute}>
+                {tr.model.replace(/^.*\//, '')} · {tr.latencyMs}ms · conf {tr.confidence.toFixed(2)} · box {tr.box ? `[${tr.box.map(n => Math.round(n)).join(',')}]` : 'null'}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Ask transcript trace — what STT heard + how it routed (Charly diagnostics) */}
@@ -317,6 +408,10 @@ const styles = StyleSheet.create({
   segText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
   segTextActive: { color: '#fff' },
   fallbackRow: { paddingVertical: 8 },
+  modelRow: { paddingVertical: 9, paddingHorizontal: 10, borderRadius: 6, backgroundColor: '#333', marginBottom: 6 },
+  modelRowActive: { backgroundColor: '#1A73E8' },
+  modelText: { color: '#aaa', fontSize: 12, fontFamily: 'monospace' },
+  modelTextActive: { color: '#fff', fontWeight: '700' },
   activeLine: { color: '#7fd', fontSize: 13, fontWeight: '700', marginTop: 2, marginBottom: 4 },
   content: { padding: 16, paddingTop: TOP_INSET + 16, paddingBottom: 64 },
   header: {

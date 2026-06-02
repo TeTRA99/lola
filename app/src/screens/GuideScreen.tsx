@@ -16,6 +16,8 @@ import {
   useWindowDimensions, Platform,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
+import { CameraView, Camera as ExpoCamera } from 'expo-camera';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services/CopyModule';
 import * as Settings from '@/services/Settings';
@@ -23,6 +25,7 @@ import { color, fontFamily } from '@/theme/tokens';
 import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
 import { activateKeepAwake, releaseKeepAwake } from '@/adapters/keepAwake';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
+import { useCloudGuideDetection, type CapturedFrame } from '@/adapters/useCloudGuideDetection';
 import {
   bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
   type RawDetection,
@@ -38,12 +41,23 @@ const TARGET_OPTIONS = [
 export function GuideScreen({
   targetLabel = 'the object',
   targetCocoLabel = null,
+  cloudQuery = null,
+  refImageUri = null,
   onClose,
 }: {
   targetLabel?: string;
   targetCocoLabel?: string | null;
+  // Cloud "guide me to it" spike: the open-vocabulary query to ground (set by the
+  // voice flow when guideBackend === 'cloud'). Present → use the cloud layer.
+  cloudQuery?: string | null;
+  // Saved-object reference photo to send when targeting === 'reference'.
+  refImageUri?: string | null;
   onClose: () => void;
 }) {
+  const cloud = !!cloudQuery;
+  // "Guiding" = the real (blind) flow, whether the target is an on-device COCO
+  // label or a cloud open-vocab query. Gates the audio cues + branded overlay.
+  const guiding = !!targetCocoLabel || cloud;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
@@ -69,7 +83,7 @@ export function GuideScreen({
 
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
-  const blind = !!targetCocoLabel;
+  const blind = guiding;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const handleExit = useCallback(() => onCloseRef.current(), []);
@@ -88,7 +102,9 @@ export function GuideScreen({
   }, [hasPermission, requestPermission]);
 
   useEffect(() => {
-    startGuide();
+    // Cloud re-localizes only every ~2.5s, so widen the freshness/decay windows
+    // (vs the ~7fps on-device detector) so proximity rides between polls.
+    startGuide(cloud ? { freshMs: CONFIG.GUIDE_CLOUD_FRESH_MS, decayMs: CONFIG.GUIDE_CLOUD_DECAY_MS } : undefined);
     return () => stopGuide();
   }, []);
 
@@ -112,7 +128,7 @@ export function GuideScreen({
   // Blind-user audio: announce the search once on open (real flow only). The
   // first time the homing flow is ever used, explain the vibration first.
   useEffect(() => {
-    if (!targetCocoLabel) return;
+    if (!guiding) return;
     void (async () => {
       if (!(await Settings.getBool(Settings.KEYS.guideHintSeen, false))) {
         await Settings.setBool(Settings.KEYS.guideHintSeen, true);
@@ -127,7 +143,7 @@ export function GuideScreen({
   // While the on-device model is still loading (first-use download can take
   // minutes), tell the user it's preparing so it doesn't seem broken.
   useEffect(() => {
-    if (!targetCocoLabel || model.isReady) return;
+    if (!guiding || model.isReady) return;
     const t = setTimeout(() => {
       if (!model.isReady && !preparingRef.current) {
         preparingRef.current = true;
@@ -141,7 +157,7 @@ export function GuideScreen({
   // the search (searchArmed), so neither the model download nor the intro
   // narration eats into the real searching window.
   useEffect(() => {
-    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    if (!guiding || !model.isReady || !searchArmed) return;
     const t = setTimeout(() => {
       if (!spottedRef.current && !notFoundRef.current) {
         notFoundRef.current = true;
@@ -158,7 +174,7 @@ export function GuideScreen({
   // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
   const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
   useEffect(() => {
-    if (!targetCocoLabel) return;
+    if (!guiding) return;
     if (proximity === null) {
       if (!lostTimer.current) {
         lostTimer.current = setTimeout(() => {
@@ -205,7 +221,7 @@ export function GuideScreen({
   }, [proximity]);
 
   useEffect(() => {
-    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    if (!guiding || !model.isReady || !searchArmed) return;
     const id = setInterval(() => {
       if (Date.now() - lastSeenRef.current >= CONFIG.GUIDE_CHECKIN_IDLE_MS) {
         lastSeenRef.current = Date.now(); // re-arm so it repeats on the interval
@@ -238,7 +254,15 @@ export function GuideScreen({
 
   return (
     <View style={styles.root}>
-      {live ? (
+      {cloud ? (
+        <CloudGuideLayer
+          query={cloudQuery as string}
+          refImageUri={refImageUri}
+          active={appActive}
+          onProximity={applyProximity}
+          onModelState={setModel}
+        />
+      ) : live ? (
         <LiveLayer
           device={device}
           hasPermission={hasPermission}
@@ -324,6 +348,107 @@ function BlindOverlay({
       <Text style={styles.blindTitle}>{title}</Text>
       <Text style={styles.blindHint}>{COPY.guide.tapHint}</Text>
     </Pressable>
+  );
+}
+
+/** CLOUD proximity: re-localizes an arbitrary (open-vocab) object via OpenRouter
+ *  every ~2.5s and feeds the latest box's proximity into the same haptic loop.
+ *  Mounts an expo-camera CameraView (NOT VisionCamera — no frame processor here;
+ *  the two never mount together since this is an alternate layer). */
+function CloudGuideLayer({
+  query,
+  refImageUri,
+  active,
+  onProximity,
+  onModelState,
+}: {
+  query: string;
+  refImageUri: string | null;
+  active: boolean;
+  onProximity: (p: number | null) => void;
+  onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
+}) {
+  const camRef = useRef<CameraView>(null);
+  const [perm, setPerm] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [ready, setReady] = useState(false); // camera stream is live
+  const [refBase64, setRefBase64] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const p = await ExpoCamera.requestCameraPermissionsAsync();
+      setPerm(p.granted ? 'granted' : 'denied');
+    })();
+  }, []);
+
+  // No model download for the cloud path — report "ready" right away so the
+  // GuideScreen skips "me estoy preparando" and arms the search immediately.
+  useEffect(() => { onModelState({ isReady: true, downloadProgress: 1 }); }, [onModelState]);
+
+  // Resolve the reference photo to a downscaled base64 ONCE (targeting=reference).
+  useEffect(() => {
+    if (!refImageUri) { setRefBase64(null); return; }
+    let alive = true;
+    void (async () => {
+      try {
+        const out = await manipulateAsync(
+          refImageUri,
+          [{ resize: { width: CONFIG.GUIDE_CLOUD_MAX_DIM } }],
+          { compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+        );
+        if (alive) setRefBase64(out.base64 ?? null);
+      } catch (e) {
+        console.log('[guide-cloud] ref image load failed:', e);
+        if (alive) setRefBase64(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [refImageUri]);
+
+  const capture = useCallback(async (): Promise<CapturedFrame | null> => {
+    const ref = camRef.current;
+    if (!ref || !ready) return null;
+    try {
+      type Shot = { uri: string; width: number; height: number };
+      type Cap = CameraView & {
+        takePictureAsync(o: { base64: boolean; quality: number; skipProcessing: boolean; shutterSound?: boolean }): Promise<Shot | undefined>;
+      };
+      const shot = await (ref as Cap).takePictureAsync({
+        base64: false, quality: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, skipProcessing: true, shutterSound: false,
+      });
+      if (!shot) return null;
+      const longer = Math.max(shot.width, shot.height);
+      const ratio = longer > CONFIG.GUIDE_CLOUD_MAX_DIM ? CONFIG.GUIDE_CLOUD_MAX_DIM / longer : 1;
+      const out = await manipulateAsync(
+        shot.uri,
+        ratio < 1 ? [{ resize: { width: Math.round(shot.width * ratio), height: Math.round(shot.height * ratio) } }] : [],
+        { compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+      );
+      if (!out.base64) return null;
+      return { base64: out.base64, width: out.width, height: out.height };
+    } catch (e) {
+      console.log('[guide-cloud] capture failed:', e);
+      return null;
+    }
+  }, [ready]);
+
+  useCloudGuideDetection({
+    query,
+    refBase64,
+    active: active && perm === 'granted' && ready,
+    capture,
+    onProximity,
+  });
+
+  if (perm !== 'granted') return <CamFallback hasPermission={perm !== 'denied'} />;
+  return (
+    <CameraView
+      ref={camRef}
+      style={StyleSheet.absoluteFill}
+      facing="back"
+      active={active}
+      onCameraReady={() => setReady(true)}
+      onMountError={(e) => { console.log('[guide-cloud] mount error:', e); setReady(false); }}
+    />
   );
 }
 

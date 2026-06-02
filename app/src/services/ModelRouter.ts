@@ -12,7 +12,7 @@
 // is inert until DebugScreen flips the toggle or the migration flips the default.
 
 import * as cloud from '@/gateways/openrouter';
-import type { ChatInput, ChatError, LolaResponse } from '@/gateways/openrouter';
+import type { ChatInput, ChatError, LolaResponse, GroundOutput } from '@/gateways/openrouter';
 import * as VlmAdapter from '@/adapters/visionLLM';
 import * as TextAdapter from '@/adapters/textLLM';
 import { ensureResident } from '@/adapters/llmResidency';
@@ -21,7 +21,7 @@ import { CONFIG } from '@/config';
 import { type Result } from '@/utils/result';
 
 // Re-export the shared shapes so callers can import everything from the seam.
-export type { ChatInput, ChatError, LolaResponse };
+export type { ChatInput, ChatError, LolaResponse, GroundOutput };
 
 /** Resolved inference backend for the current request. */
 export function inferenceMode(): 'local' | 'cloud' {
@@ -46,6 +46,20 @@ export async function chat(input: ChatInput): Promise<Result<LolaResponse, ChatE
     return cloud.chat(input);
   }
   return cloud.chat(input);
+}
+
+/**
+ * Open-vocabulary object grounding for the cloud "guide me to it" spike.
+ * Cloud-only by design — there's no on-device open-vocab detector; the on-device
+ * path is YOLO/COCO via useGuideDetection, a different code path entirely.
+ */
+export async function ground(args: {
+  query: string;
+  frameBase64: string;
+  refBase64?: string | null;
+  model: string;
+}): Promise<Result<GroundOutput, ChatError>> {
+  return cloud.groundObject(args);
 }
 
 /** Text-only structured JSON (intent routing, guide-target resolution). */
