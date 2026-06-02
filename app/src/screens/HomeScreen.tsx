@@ -623,9 +623,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.neutral.sunken,
     paddingHorizontal: 16,
     paddingTop: TOP_INSET,
-    // iOS: drop the cards close to the bottom edge (only the thin home indicator
-    // there, no nav bar). Android keeps clearance for the system nav bar.
-    paddingBottom: Platform.OS === 'ios' ? 10 : BOTTOM_INSET + 20,
+    // iOS: cards sit lower than Android (no system nav bar) but clear of the home
+    // indicator — BOTTOM_INSET is that safe area. Android keeps nav-bar clearance.
+    paddingBottom: Platform.OS === 'ios' ? BOTTOM_INSET : BOTTOM_INSET + 20,
   },
   topBar: {
     height: 46, marginVertical: 10,
