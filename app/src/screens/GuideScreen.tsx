@@ -468,27 +468,19 @@ function CloudGuideLayer({
       // skipProcessing:false so the JPEG is oriented UPRIGHT (matching the preview).
       // With skipProcessing:true the still is the sensor's landscape buffer + an EXIF
       // tag, so the model analyzes a sideways image and its box coords come back
-      // rotated relative to the portrait preview.
+      // rotated relative to the portrait preview. We send the FULL upright frame (no
+      // aspect crop — cropping to the screen risks cutting out the object).
       const shot = await (ref as Cap).takePictureAsync({
         base64: false, quality: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, skipProcessing: false, shutterSound: false,
       });
       if (!shot) return null;
-      // Center-crop the upright still to the PREVIEW's aspect ratio: the full-screen
-      // CameraView 'cover'-crops the still's sides, so without this the model sees a
-      // wider FOV than the user does and "where" cues / the overlay drift. After the
-      // crop, model-space == preview-space == overlay-space.
-      const targetAspect = width / height; // portrait → < 1
-      const stillAspect = shot.width / shot.height;
-      const crop = stillAspect > targetAspect
-        ? { originX: Math.round((shot.width - shot.height * targetAspect) / 2), originY: 0, width: Math.round(shot.height * targetAspect), height: shot.height }
-        : { originX: 0, originY: Math.round((shot.height - shot.width / targetAspect) / 2), width: shot.width, height: Math.round(shot.width / targetAspect) };
-      const longer = Math.max(crop.width, crop.height);
+      const longer = Math.max(shot.width, shot.height);
       const ratio = longer > CONFIG.GUIDE_CLOUD_MAX_DIM ? CONFIG.GUIDE_CLOUD_MAX_DIM / longer : 1;
-      const actions: Parameters<typeof manipulateAsync>[1] = [{ crop }];
-      if (ratio < 1) actions.push({ resize: { width: Math.round(crop.width * ratio), height: Math.round(crop.height * ratio) } });
-      const out = await manipulateAsync(shot.uri, actions, {
-        compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true,
-      });
+      const out = await manipulateAsync(
+        shot.uri,
+        ratio < 1 ? [{ resize: { width: Math.round(shot.width * ratio), height: Math.round(shot.height * ratio) } }] : [],
+        { compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+      );
       if (!out.base64) return null;
       return { base64: out.base64, width: out.width, height: out.height };
     } catch (e) {
