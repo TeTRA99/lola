@@ -192,6 +192,7 @@ export const iconNames = {
   retake: 'refresh',
   error: 'alert-circle-outline',
   lastSeen: 'time-outline',
+  debug: 'bug-outline',
 } as const;
 
 export type IconName = keyof typeof iconNames;

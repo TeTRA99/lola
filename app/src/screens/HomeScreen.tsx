@@ -315,7 +315,7 @@ export function HomeScreen({
               style={styles.devBtn}
               accessibilityLabel="Dev: open Debug"
             >
-              <Text style={styles.devBtnText}>🐞</Text>
+              <Icon name="debug" size={22} color={color.text.low} />
             </Pressable>
           )}
           {onOpenSettings && (
@@ -604,7 +604,6 @@ const styles = StyleSheet.create({
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  devBtnText: { fontSize: 20 },
 
   cardWrap: { borderRadius: 34, minHeight: 190 },
   cardWrapLight: { backgroundColor: color.dad.describeBg, ...cardShadowLight },
