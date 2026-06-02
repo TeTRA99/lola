@@ -155,6 +155,8 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                   })}
                 />
               ))}
+              {/* Keep the "why bother" copy visible even after items exist. */}
+              <Text style={styles.listFootnote}>{t.emptyObjBody}</Text>
             </ScrollView>
             <View style={styles.addFooter}>
               <PrimaryButton label={t.addObject} leadingIcon="add" onPress={() => setObjectMode({ kind: 'add' })} />
@@ -183,6 +185,7 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                   })}
                 />
               ))}
+              <Text style={styles.listFootnote}>{t.emptyRoomBody}</Text>
             </ScrollView>
             <View style={styles.addFooter}>
               <PrimaryButton label={t.addRoom} leadingIcon="add" onPress={() => setRoomMode({ kind: 'add' })} />
@@ -870,6 +873,11 @@ const styles = StyleSheet.create({
   settingsWrap: { flex: 1, padding: 18, paddingBottom: 18 + BOTTOM_INSET },
   settingsScroll: { gap: 12, paddingBottom: 12 },
   version: { marginTop: 12, textAlign: 'center', fontSize: 12.5, fontFamily: fontFamily.medium, color: color.text.low },
+  // Empty-state body repeated at the bottom of a populated list (kept visible).
+  listFootnote: {
+    paddingTop: 22, paddingHorizontal: 6, paddingBottom: 8,
+    fontSize: 14, fontFamily: fontFamily.regular, color: color.text.medium, lineHeight: 21,
+  },
   // Voice dropdown: a compact trigger that opens a modal list (was a full-length
   // inline list that could push the rest of Settings far down).
   voiceTrigger: {
