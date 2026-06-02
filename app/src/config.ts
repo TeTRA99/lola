@@ -83,12 +83,10 @@ export const CONFIG = {
 
   // Cloud "Guide me to it" SPIKE (open-vocab grounding via OpenRouter, Debug-only).
   // A cloud round-trip is ~1.5–3s, so this drives INTERMITTENT re-localization, not
-  // the per-frame loop: capture a still every POLL_MS, ground it, refresh proximity.
-  // The freshness/decay windows are stretched (vs the on-device ones above) so the
-  // haptic rate rides between polls instead of collapsing to the "searching" tick.
+  // the per-frame loop: capture a still every POLL_MS, ground it, then fire ONE
+  // discrete haptic pulse per result (guideHaptics.pulseGuide) — so a buzz always
+  // means a fresh result, rather than the continuous beat loop running on its own.
   GUIDE_CLOUD_POLL_MS: 2500,         // re-localize cadence (one image request per poll)
-  GUIDE_CLOUD_FRESH_MS: 1800,        // hold full proximity this long after a fresh box
-  GUIDE_CLOUD_DECAY_MS: 2400,        // then glide proximity → 0 over this (no hard snap)
   GUIDE_CLOUD_MAX_DIM: 512,          // downscale captured frames before upload (smaller = lower latency)
   GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
   GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)

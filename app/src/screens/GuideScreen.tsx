@@ -22,7 +22,7 @@ import { speak } from '@/adapters/tts';
 import { COPY } from '@/services/CopyModule';
 import * as Settings from '@/services/Settings';
 import { color, fontFamily } from '@/theme/tokens';
-import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
+import { startGuide, updateGuide, stopGuide, pulseGuide } from '@/adapters/guideHaptics';
 import { activateKeepAwake, releaseKeepAwake } from '@/adapters/keepAwake';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
 import { useCloudGuideDetection, type CapturedFrame } from '@/adapters/useCloudGuideDetection';
@@ -105,9 +105,10 @@ export function GuideScreen({
   }, [hasPermission, requestPermission]);
 
   useEffect(() => {
-    // Cloud re-localizes only every ~2.5s, so widen the freshness/decay windows
-    // (vs the ~7fps on-device detector) so proximity rides between polls.
-    startGuide(cloud ? { freshMs: CONFIG.GUIDE_CLOUD_FRESH_MS, decayMs: CONFIG.GUIDE_CLOUD_DECAY_MS } : undefined);
+    // The cloud path does NOT run the continuous beat loop — it fires one discrete
+    // pulseGuide() per poll result (see applyProximity), so a buzz always means a
+    // fresh result. Only the on-device detector drives the continuous Geiger loop.
+    if (!cloud) startGuide();
     return () => stopGuide();
   }, []);
 
@@ -238,15 +239,22 @@ export function GuideScreen({
     if (lostTimer.current) clearTimeout(lostTimer.current);
   }, []);
 
-  // Haptics update every frame via module state (no render); HUD number throttled.
+  // Cloud: one discrete buzz per poll result + update proximity (for audio/HUD)
+  // immediately — polls are ~2.5s apart, so no throttle needed.
+  // On-device: feed the continuous beat loop every frame; throttle the HUD number.
   const applyProximity = useCallback((p: number | null) => {
+    if (cloud) {
+      pulseGuide(p);
+      setProximity(p);
+      return;
+    }
     updateGuide(p);
     const now = Date.now();
     if (now - lastHudAt.current > 160) {
       lastHudAt.current = now;
       setProximity(p);
     }
-  }, []);
+  }, [cloud]);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
   const status: GuideStatus = !model.isReady
