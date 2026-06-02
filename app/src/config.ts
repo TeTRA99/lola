@@ -4,7 +4,7 @@ export const CONFIG = {
   // device for testing — so they'd be unreachable there. Flip this on to expose
   // them in a personal test build.
   // ⚠️ MUST be false for dad's production build (it's a Charly-only tool surface).
-  SHOW_DEV_TOOLS: false,
+  SHOW_DEV_TOOLS: true,
 
   // Model + gateway (NFR-11, AD-4)
   MODEL_ID: 'google/gemini-2.5-flash',
