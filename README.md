@@ -26,11 +26,16 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
 
 - **Describir** — point the phone; Lola narrates the scene.
 - **Preguntar** — ask a question out loud; Lola answers about what it sees.
-- **Guíame a X** — say *"llevame a la taza"* and Lola homes you in with a
-  Geiger-style vibration that quickens as you center and approach the object.
+- **Guíame a X** — say *"guiame a la taza"* and Lola homes you in, auto-picking the
+  engine per object: a **generic** thing (a cup, the remote) runs the fast **on-device**
+  detector with a Geiger-style vibration that quickens as you center it; one of **your
+  own saved things** (*"guiame a mi mate"*) — or anything outside the common-object
+  set — uses a **cloud** open-vocabulary model, showing the live camera through a
+  peephole with spoken "where" cues (direction + a nearby landmark).
 - **Setup** (caregiver) — register objects/rooms, tune the voice, pick the
   on-device **detection quality**.
-- **Debug** (dev-only) — usage telemetry + a live detector spike.
+- **Debug** (dev-only) — usage telemetry, a live detector spike, and model selection
+  for testing embedded (on-device) vs online (cloud) vision/guide.
 
 Designed for a blind / low-vision user: voice-first, large touch targets, audible
 cues for every state, and nothing that fails silently.
@@ -53,8 +58,9 @@ cues for every state, and nothing that fails silently.
   on-device path (VLM + small text LLM) via **react-native-executorch**, selectable
   per request through a routing seam (`src/services/ModelRouter.ts`).
 - **Guide detector** — on-device **YOLO26** (COCO) over **VisionCamera v5** frame
-  processors; quality is a per-device level (model + input size), see
-  `src/adapters/detectionPresets.ts`.
+  processors for generic objects (quality is a per-device level — model + input size,
+  see `src/adapters/detectionPresets.ts`), plus **cloud open-vocabulary grounding**
+  (OpenRouter) for saved/personal objects the on-device set can't cover.
 - **Speech** — on-device TTS (`expo-speech`) and STT (`expo-speech-recognition`).
 
 ## Project layout
