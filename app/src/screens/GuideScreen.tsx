@@ -353,10 +353,10 @@ export function GuideScreen({
 
 type GuideStatus = 'preparing' | 'searching' | 'spotted' | 'found';
 
-/** Branded, preview-less screen for the real (blind/low-vision) flow. The whole
- *  screen is the exit target. Camera + boxes are hidden (camera runs underneath
- *  in LiveLayer for detection). A gentle pulse + status text give low-vision
- *  users something to see instead of a black "broken" screen. */
+/** Branded screen for the real (blind/low-vision) flow. The whole screen is the
+ *  exit target. A clear circular PEEPHOLE in the center shows the live camera
+ *  (the rest is dimmed by a semi-transparent scrim) so low-vision users can aim a
+ *  little; detection boxes stay hidden. A gentle pulse ring + status text frame it. */
 function BlindOverlay({
   targetLabel,
   status,
@@ -388,10 +388,36 @@ function BlindOverlay({
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, homing ? 1.3 : 1.12] });
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
 
+  // Peephole: a clear circular window in the center showing the live camera, with
+  // a semi-transparent dim over the rest (low-vision users can aim a little). The
+  // donut = a huge circle whose transparent middle is the peephole and whose thick
+  // semi-transparent border is the scrim covering the rest of the screen.
+  const { width, height } = useWindowDimensions();
+  const HOLE = 150; // matches the pulse ring; iterate later
+  const RING = (width + height) * 1.5; // big enough to cover the corners
+
   return (
     <Pressable style={styles.blindRoot} onPress={onExit} accessibilityRole="button" accessibilityLabel={COPY.guide.tapHint}>
-      <Animated.View style={[styles.blindPulse, { borderColor: accent, transform: [{ scale }], opacity }]} />
-      <Text style={styles.blindTitle}>{title}</Text>
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          width: RING, height: RING, borderRadius: RING / 2,
+          left: width / 2 - RING / 2, top: height / 2 - RING / 2,
+          borderWidth: (RING - HOLE) / 2,
+          borderColor: 'rgba(0,0,0,0.6)',
+        }}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.blindPulse, {
+          position: 'absolute', left: width / 2 - 75, top: height / 2 - 75,
+          borderColor: accent, transform: [{ scale }], opacity,
+        }]}
+      />
+      <Text style={[styles.blindTitle, { position: 'absolute', top: height / 2 + HOLE / 2 + 32, left: 24, right: 24 }]}>
+        {title}
+      </Text>
       <Text style={styles.blindHint}>{COPY.guide.tapHint}</Text>
     </Pressable>
   );
@@ -795,8 +821,9 @@ const styles = StyleSheet.create({
   // Branded preview-less overlay (real/blind flow)
   blindRoot: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: color.neutral.ink,
-    alignItems: 'center', justifyContent: 'center', gap: 28,
+    // Transparent — the dim is the peephole donut's semi-transparent border, so the
+    // live camera shows through the clear center circle.
+    alignItems: 'center', justifyContent: 'center',
   },
   blindPulse: {
     width: 150, height: 150, borderRadius: 75, borderWidth: 3,
