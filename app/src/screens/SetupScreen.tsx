@@ -169,7 +169,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
               {rooms.map(item => (
                 <ListRow
                   key={item.id}
-                  thumbUri={item.reference_image_uri}
+                  // Re-derive from the live container (stored path goes stale across
+                  // reinstalls); fall back to the stored value.
+                  thumbUri={RoomCatalog.primaryUriFor(item.id) ?? item.reference_image_uri}
                   title={item.display_name}
                   subtitle={item.description || undefined}
                   onEdit={() => setRoomMode({ kind: 'edit', room: item })}

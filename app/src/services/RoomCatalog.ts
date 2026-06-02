@@ -45,6 +45,23 @@ function roomDir(roomId: number): Directory {
   return new Directory(ROOT, String(roomId));
 }
 
+function listFilesIn(dir: Directory): File[] {
+  if (!dir.exists) return [];
+  return (dir.list() as Array<File | Directory>)
+    .filter((e): e is File => e instanceof File)
+    .sort((a, b) => a.uri.localeCompare(b.uri));
+}
+
+/**
+ * Current absolute URI of the room's primary photo, or null if none. Re-derived
+ * from the live document directory — the stored reference_image_uri is absolute
+ * and its iOS container UUID goes stale across reinstalls (file stays at
+ * rooms/<id>/1.jpg). Mirrors CatalogPhotos.primaryUriFor for objects.
+ */
+export function primaryUriFor(roomId: number): string | null {
+  return listFilesIn(roomDir(roomId))[0]?.uri ?? null;
+}
+
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
   let dot = 0, na = 0, nb = 0;
