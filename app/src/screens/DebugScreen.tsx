@@ -9,6 +9,7 @@ import * as Settings from '@/services/Settings';
 import * as VlmAdapter from '@/adapters/visionLLM';
 import * as TextAdapter from '@/adapters/textLLM';
 import { getAskTraces, type AskTrace } from '@/services/AskTrace';
+import { getVlmTraces, type VlmTrace } from '@/adapters/vlmTrace';
 import { CONFIG } from '@/config';
 import { TOP_INSET } from '@/theme/insets';
 import {
@@ -34,6 +35,7 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [exportNote, setExportNote] = useState<string | null>(null);
   const [traces, setTraces] = useState<AskTrace[]>(() => getAskTraces());
+  const [vlmTraces, setVlmTraces] = useState<VlmTrace[]>(() => getVlmTraces());
 
   // On-device inference A/B controls.
   const [inferMode, setInferMode] = useState<'local' | 'cloud'>('cloud');
@@ -66,6 +68,10 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
   const onSetSize = (s: '450m' | '1.6b') => {
     setVlmSize(s);
     void Settings.setString(Settings.KEYS.vlmModel, s);
+    // Drop the currently-loaded VLM so the status stops falsely showing the OLD
+    // model as "ready". Back on Home, the idle phase makes ModelPrepBanner kick
+    // off the NEW size's download with visible progress (no need to tap Describir).
+    void VlmAdapter.unload();
   };
   const onToggleFallback = () => {
     const v = !allowFallback;
@@ -181,6 +187,39 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
                 {tr.utterance === null ? '(no transcript)' : `"${tr.utterance}"`}
               </Text>
               <Text style={styles.traceRoute}>→ {tr.route}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* On-device VLM raw output — tune the prompt against the REAL model text */}
+      <View style={[styles.panel, styles.panelNeutral]}>
+        <View style={styles.traceHeader}>
+          <Text style={styles.panelTitle}>Last on-device descriptions</Text>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable style={styles.headerBtn} onPress={() => setVlmTraces(getVlmTraces())}>
+              <Text style={styles.headerBtnText}>Refresh</Text>
+            </Pressable>
+            <Pressable
+              style={styles.headerBtn}
+              onPress={() => {
+                void Clipboard.setStringAsync(JSON.stringify(getVlmTraces(), null, 2));
+                setExportNote('Copied VLM output to clipboard');
+                setTimeout(() => setExportNote(null), 2000);
+              }}
+            >
+              <Text style={styles.headerBtnText}>Copy</Text>
+            </Pressable>
+          </View>
+        </View>
+        {vlmTraces.length === 0 ? (
+          <Text style={styles.panelText}>No on-device Describe yet. Set local mode, use Describir, then Refresh.</Text>
+        ) : (
+          vlmTraces.map((tr, i) => (
+            <View key={`${tr.at}-${i}`} style={styles.traceRow}>
+              <Text style={styles.traceRoute}>raw ({tr.raw.length} chars):</Text>
+              <Text style={styles.traceUtterance}>{tr.raw}</Text>
+              <Text style={styles.traceRoute}>spoken: {tr.narration}</Text>
             </View>
           ))
         )}

@@ -19,6 +19,7 @@ import {
 import { CONFIG } from '@/config';
 import * as Settings from '@/services/Settings';
 import { LOCAL_VLM_SYSTEM_PROMPT } from '@/prompts/lola';
+import { recordVlmTrace } from '@/adapters/vlmTrace';
 import { ok, err, type Result } from '@/utils/result';
 import type { ChatInput, ChatError, LolaResponse, LolaObject } from '@/gateways/openrouter';
 
@@ -190,6 +191,14 @@ export function toLolaResponse(text: string): LolaResponse {
   return { narration: trimmed, objects: [] };
 }
 
+// Warm "Veo …" opener for on-device Describe (Lola is the user's eyes). Just a
+// prefix + lowercased first letter — deliberately simple, no content rewriting.
+export function warmWithVeo(narration: string): string {
+  const s = narration.trim();
+  if (!s || /^veo\b/i.test(s)) return s;
+  return `Veo ${s.charAt(0).toLowerCase()}${s.slice(1)}`;
+}
+
 // Pull the narration string out of partial/!-parseable JSON. Operating on model
 // OUTPUT (allowed) — never on the user's words.
 function salvageNarration(text: string): string | null {
@@ -250,18 +259,32 @@ export async function describeLocal(input: ChatInput): Promise<Result<LolaRespon
     // use the plain-prose on-device prompt (not the caller's JSON cloud prompt),
     // since the small VLM can't reliably emit/non-truncate the {narration,objects}
     // JSON. userText still carries the actual task + room/context.
-    mod.configure({ chatConfig: { systemPrompt: LOCAL_VLM_SYSTEM_PROMPT, initialMessageHistory: [] } });
+    // Lower temperature + a repetition penalty rein in the small model's
+    // tendency to hallucinate ("...consume sustancias sin pagar") and ramble.
+    mod.configure({
+      chatConfig: { systemPrompt: LOCAL_VLM_SYSTEM_PROMPT, initialMessageHistory: [] },
+      generationConfig: { temperature: 0.3, repetitionPenalty: 1.3 },
+    });
     const started = Date.now();
+    // Use the on-device-specific instruction when the caller supplies one (Describe
+    // sends a sharper item-focused message — the small VLM obeys the user turn more).
+    const message = input.localUserText ?? input.userText;
     console.log('[vlm] sendMessage start (image?', !!uri, ', size', loadedSize, ')');
     const history = await withTimeout(
-      mod.sendMessage(input.userText, uri ? { imagePath: uri } : undefined),
+      mod.sendMessage(message, uri ? { imagePath: uri } : undefined),
       CONFIG.VLM_INFERENCE_TIMEOUT_MS,
       () => { try { mod.interrupt(); } catch { /* ignore */ } },
     );
     const text = lastAssistantText(history);
     console.log('[vlm] sendMessage done in', Date.now() - started, 'ms, len', text.length);
     if (!text.trim()) return err('parse_fail');
-    return ok(toLolaResponse(text));
+    const resp = toLolaResponse(text);
+    // Describe (caller set localUserText) gets a warm "Veo …" opener — Lola is the
+    // user's eyes. Not for Ask (answering a question shouldn't start with "Veo").
+    const narration = input.localUserText ? warmWithVeo(resp.narration) : resp.narration;
+    // Capture the RAW model text + what we speak, for the Debug readout.
+    recordVlmTrace({ at: Date.now(), raw: text, narration });
+    return ok({ ...resp, narration });
   } catch (e) {
     console.log('[vlm] sendMessage failed/timed out:', e);
     return err('unknown');

@@ -106,9 +106,15 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
   const userText = roomName
     ? `Estás en ${roomName}. Describi esta escena, empezando por mencionar el cuarto.`
     : 'Describe esta escena.';
+  // Sharper, item-focused instruction for the on-device VLM (it follows the user
+  // turn better than the system prompt). Lola is the user's eyes at home: name the
+  // things in front of them, not the "scene"/ambiance.
+  const objectsTask = 'Nombrá los objetos principales que tengo adelante, en una o dos frases cortas separadas por comas, y decime dónde está cada cosa. Solo los objetos cotidianos que ves, sin describir la escena ni el ambiente ni para qué sirven.';
+  const localUserText = roomName ? `Estás en ${roomName}. ${objectsTask}` : objectsTask;
   const resp = await chat({
     systemPrompt: buildSystemPrompt(catalog),
     userText,
+    localUserText,
     imageBase64: snap.value.base64,
     imageUri: snap.value.uri, // used by the on-device VLM path (cloud ignores it)
   });

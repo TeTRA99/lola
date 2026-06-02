@@ -89,7 +89,7 @@ export const CONFIG = {
   // is a hybrid thinking model that errors in executorch's runner. Swappable via
   // Settings.textModel; ids: llama-3.2-1b | qwen2.5-0.5b | qwen2.5-1.5b | smollm2.1-360m.
   LOCAL_TEXT_MODEL: 'llama-3.2-1b',
-  VLM_MAX_NEW_TOKENS: 256,
+  VLM_MAX_NEW_TOKENS: 128, // runaway guard only — high enough not to truncate a normal answer mid-sentence
   TEXT_LLM_MAX_NEW_TOKENS: 128,
   // Safety cap on a single on-device inference so a slow/hung run fails to a
   // calm error instead of sitting on "Un momento…" forever. Generous because the

@@ -15,9 +15,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import * as VlmAdapter from '@/adapters/visionLLM';
+import { preloadResident } from '@/adapters/llmResidency';
 import { inferenceMode } from '@/services/ModelRouter';
+import { CONFIG } from '@/config';
 import { COPY } from '@/services';
 import { color, fontFamily } from '@/theme/tokens';
+
+// Dev builds expose which model + phase + real % is loading (the user-facing copy
+// stays clean). Honest signal even when the phase mislabels as "preparing".
+const SHOW_DEV = __DEV__ || CONFIG.SHOW_DEV_TOOLS;
 
 const READY_VISIBLE_MS = 2500; // how long to show "ready" before hiding
 
@@ -30,6 +36,16 @@ export function ModelPrepBanner() {
   useEffect(() => {
     if (!active) return;
     return VlmAdapter.subscribeStatus(setVlm);
+  }, [active]);
+
+  // Kick the VLM download/load the moment Home appears in local mode — including
+  // when you RETURN to Home from Debug/Settings after flipping to local (Home
+  // remounts, so this fires). The download must NOT be deferred to (and triggered
+  // by) the first Describe/Ask tap. Idempotent: only fires from the idle phase;
+  // preloadResident is serialized and a no-op if already loading/ready.
+  useEffect(() => {
+    if (!active) return;
+    if (VlmAdapter.getStatus().phase === 'idle') void preloadResident('vlm');
   }, [active]);
 
   // Once the model is ready, show the confirmation briefly, then hide for good.
@@ -71,6 +87,11 @@ export function ModelPrepBanner() {
       accessibilityLabel={`${COPY.models.bannerTitle}. ${line}`}
     >
       <Text style={styles.title}>{isReady ? COPY.models.bannerReady : COPY.models.bannerTitle}</Text>
+      {SHOW_DEV && (
+        <Text style={styles.devLine}>
+          {`${vlm.label} · ${vlm.phase}${vlm.phase === 'downloading' ? ` ${Math.round(vlm.progress * 100)}%` : ''}`}
+        </Text>
+      )}
       {!isReady && <Text style={styles.subtitle}>{COPY.models.bannerSubtitle}</Text>}
       {showBar && (
         <View style={styles.track}>
@@ -92,9 +113,11 @@ const styles = StyleSheet.create({
     borderColor: color.neutral.border,
     paddingHorizontal: 18,
     paddingVertical: 14,
-    marginBottom: 12,
+    marginTop: 14,   // clear the dynamic island (TOP_INSET alone sits under it)
+    marginBottom: 6, // tighter gap to the content below
   },
   title: { color: color.text.high, fontSize: 17, fontFamily: fontFamily.bold, fontWeight: '700' },
+  devLine: { color: color.primary[500], fontSize: 12, fontFamily: 'monospace', marginTop: 2 },
   subtitle: { color: color.text.low, fontSize: 14, fontFamily: fontFamily.medium, marginTop: 4, lineHeight: 19 },
   track: {
     height: 8, borderRadius: 4, backgroundColor: 'rgba(96,110,132,0.18)',

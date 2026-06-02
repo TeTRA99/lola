@@ -23,6 +23,10 @@ export type ChatInput = {
   // base64 fields. Callers that may run either backend should set both.
   imageUri?: string;
   imageUris?: string[];
+  // Optional message override for the ON-DEVICE VLM only (the small model follows
+  // the user turn better than the system prompt, so Describe sends a sharper,
+  // item-focused instruction here). The cloud path ignores this and uses userText.
+  localUserText?: string;
   model?: string;
 };
 

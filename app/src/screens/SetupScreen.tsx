@@ -26,6 +26,7 @@ import * as CatalogPhotos from '@/services/CatalogPhotos';
 import * as RoomCatalog from '@/services/RoomCatalog';
 import * as MemoryService from '@/services/MemoryService';
 import * as Settings from '@/services/Settings';
+import { CONFIG } from '@/config';
 import type { CatalogObject } from '@/services/OnboardingService';
 import type { Room } from '@/services/RoomCatalog';
 import { CapturePhotoModal } from './CapturePhotoModal';
@@ -247,9 +248,12 @@ function SettingsTab() {
   const [rate, setRate] = useState(RATE_DEFAULT);
   const [pitch, setPitch] = useState(PITCH_DEFAULT);
   const [detectionLevel, setDetectionLevel] = useState<number>(defaultDetectionLevel());
+  const [aiMode, setAiMode] = useState<'cloud' | 'local'>(CONFIG.LOCAL_INFERENCE_DEFAULT);
 
   useEffect(() => {
     void (async () => {
+      const mode = await Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT);
+      setAiMode(mode === 'local' ? 'local' : 'cloud');
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
       setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, true));
       setUserName(await Settings.getString(Settings.KEYS.userName, ''));
@@ -283,6 +287,13 @@ function SettingsTab() {
     const lvl = clampDetectionLevel(v);
     setDetectionLevel(lvl);
     void Settings.setString(Settings.KEYS.detectionLevel, String(lvl));
+  };
+  // Cloud vs on-device. Persist instantly; the on-device model only downloads
+  // when the user returns to Home in local mode (ModelPrepBanner picks it up),
+  // never from this tap — same pattern as the detection-level slider.
+  const changeAiMode = (mode: 'cloud' | 'local') => {
+    setAiMode(mode);
+    void Settings.setString(Settings.KEYS.inferenceMode, mode);
   };
 
   const toggle = async () => {
@@ -341,6 +352,32 @@ function SettingsTab() {
               );
             })}
           </View>
+        </View>
+
+        {/* How Lola sees — cloud (recommended) vs on-device. The on-device model
+            only downloads when the user goes back to Home in local mode. */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.aiMode}</Text>
+          <Text style={styles.settingHint}>{t.aiModeHint}</Text>
+          <View style={styles.segment}>
+            {(['cloud', 'local'] as const).map(mode => {
+              const active = aiMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => changeAiMode(mode)}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {mode === 'cloud' ? t.aiModeCloud : t.aiModeLocal}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={[styles.settingHint, { marginTop: 10 }]}>
+            {aiMode === 'local' ? t.aiModeLocalHint : t.aiModeCloudHint}
+          </Text>
         </View>
 
         {/* Voice */}
