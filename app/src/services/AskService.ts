@@ -18,8 +18,6 @@ import { COPY } from '@/services/CopyModule';
 import { applyCatalogNarration } from '@/services/CatalogResolver';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
-import * as Settings from '@/services/Settings';
-import { CONFIG } from '@/config';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as MemoryService from '@/services/MemoryService';
 import * as RoomCatalog from '@/services/RoomCatalog';
@@ -161,7 +159,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
     case 'memory':
       return handleMemory(decision.object, utterance, t0, ensureSnapshot);
     case 'guide':
-      return handleGuide(decision.object, t0);
+      return handleGuide(decision.object, decision.savedObject ?? null, t0);
     case 'model': {
       // Reference-conditioned Ask: if the question is about a SAVED object
       // ("¿cuál es mi yerba?" / "describime mi yerba"), attach that object's
@@ -189,45 +187,40 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   }
 }
 
-// "Guíame a X": resolve the spoken object to a detectable target (LLM). If
-// guidable, return it so the caller opens the live guide (which announces +
-// homes by haptics); if not, say the graceful fallback and stay put.
-async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome, AskError>> {
+// "Guíame a X": route by WHAT the object is (same in Debug and prod):
+//  • a SAVED personal object ("mi mate", "mi taza") → CLOUD open-vocab + its photo
+//  • a generic COCO object ("una taza", "el control") → on-device Geiger
+//  • anything else (arbitrary, not saved, not COCO) → CLOUD, name-only
+// The intent classifier sets `savedObject` only when the user refers to one of their
+// saved things (possessive/name), so "mi taza" → cloud while "una taza" → Geiger.
+async function handleGuide(noun: string, savedObject: string | null, t0: number): Promise<Result<AskOutcome, AskError>> {
   fire('thinking_start');
-  const target = await resolveGuideTarget(noun);
-  // Cloud spike (Debug-only): the open-vocab grounding model can find arbitrary
-  // objects, so we DON'T need a COCO match — bypass the unsupported gate and
-  // guide on the raw noun. Independent of the production inferenceMode toggle.
-  // Cloud guide is a Debug-only spike — only honor the backend toggle in dev builds.
-  // In production (SHOW_DEV_TOOLS=false) the guide is ALWAYS on-device, so a stale
-  // 'cloud' toggle (set while testing) can't strand the prod guide online.
-  const cloud = CONFIG.SHOW_DEV_TOOLS
-    && (await Settings.getString(Settings.KEYS.guideBackend, 'device')) === 'cloud';
+  const target = await resolveGuideTarget(noun); // COCO label (exact/approx) or null
   fire('thinking_stop');
-  if (!target && !cloud) {
-    fire('answer_ready');
-    const line = COPY.guide.cannotGuide;
-    await speak(line);
-    await logEvent(true, now() - t0, 'guide_unsupported');
-    return ok({ narration: line, objects: [], route: 'guide' });
-  }
-  fire('answer_ready');
-  // Approximate match (e.g. "termo" → bottle): be honest that this kind of object
-  // isn't fully supported, then guide as best we can. (On-device path only — the
-  // cloud model handles the real object directly, so no proxy warning.)
-  if (target?.approximate && !cloud) await speak(COPY.guide.approxWarning);
-  await logEvent(true, now() - t0, target?.approximate ? 'guide_approx' : cloud ? 'guide_cloud' : null);
 
-  // Cloud: best-effort reference photo when targeting === 'reference'.
+  const saved = !!savedObject;
+  // Cloud when it's a saved personal object OR an arbitrary thing YOLO can't do.
+  // A plain COCO object with no saved match stays on the fast on-device Geiger.
+  const cloud = saved || !target;
+
+  fire('answer_ready');
+  // Approximate COCO proxy ("termo" → bottle) warning — on-device path only.
+  if (!cloud && target?.approximate) await speak(COPY.guide.approxWarning);
+  await logEvent(true, now() - t0, saved ? 'guide_cloud_saved' : cloud ? 'guide_cloud' : target?.approximate ? 'guide_approx' : null);
+
+  // For a saved object: attach its reference photo and say it by its saved name.
   let refImageUri: string | null = null;
-  if (cloud && (await Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')) === 'reference') {
-    refImageUri = await OnboardingService.referencePhotoFor(noun);
+  let spoken = target?.spoken ?? noun;
+  if (saved) {
+    refImageUri = await OnboardingService.referencePhotoFor(savedObject!);
+    spoken = savedObject!;
   }
+
   return ok({
     narration: '', objects: [], route: 'guide',
     guide: {
       cocoLabel: target?.cocoLabel ?? null,
-      spoken: target?.spoken ?? noun,
+      spoken,
       cloudQuery: cloud ? noun : undefined,
       refImageUri: cloud ? refImageUri : undefined,
     },

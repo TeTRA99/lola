@@ -50,7 +50,6 @@ export function DebugScreen({ onClose, onOpenGuide }: {
   const [textStatus, setTextStatus] = useState<TextAdapter.TextStatus>(() => TextAdapter.getStatus());
 
   // Cloud "guide me to it" spike controls.
-  const [guideBackend, setGuideBackend] = useState<'device' | 'cloud'>('device');
   const [guideTargeting, setGuideTargeting] = useState<'text' | 'reference'>('text');
   const [guideCloudDebug, setGuideCloudDebug] = useState(false);
   const [guideModel, setGuideModel] = useState<string>(CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
@@ -63,8 +62,6 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     void Settings.getString(Settings.KEYS.vlmModel, CONFIG.LOCAL_VLM_DEFAULT_SIZE)
       .then(v => setVlmSize(v === '1.6b' ? '1.6b' : '450m'));
     void Settings.getBool(Settings.KEYS.allowCloudFallback, false).then(setAllowFallback);
-    void Settings.getString(Settings.KEYS.guideBackend, 'device')
-      .then(v => setGuideBackend(v === 'cloud' ? 'cloud' : 'device'));
     void Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')
       .then(v => setGuideTargeting(v === 'reference' ? 'reference' : 'text'));
     void Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT)
@@ -98,10 +95,6 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     setAllowFallback(v);
     void Settings.setBool(Settings.KEYS.allowCloudFallback, v);
   };
-  const onSetGuideBackend = (b: 'device' | 'cloud') => {
-    setGuideBackend(b);
-    void Settings.setString(Settings.KEYS.guideBackend, b);
-  };
   const onToggleGuideCloudDebug = () => {
     const v = !guideCloudDebug;
     setGuideCloudDebug(v);
@@ -117,8 +110,10 @@ export function DebugScreen({ onClose, onOpenGuide }: {
   };
   // Launch the spike. In cloud mode, attach the saved object's photo when targeting
   // is 'reference' (matched by the test query) so we can test the saved-photo path.
+  // The 🎯 button always FORCES the online guide (its purpose is to test cloud),
+  // bypassing the normal per-object routing. Attaches the saved photo when
+  // targeting=reference and one matches the query.
   const openSpike = async () => {
-    if (guideBackend !== 'cloud') { onOpenGuide?.(); return; }
     const q = testQuery.trim() || 'una taza';
     const refImageUri = guideTargeting === 'reference' ? await OnboardingService.referencePhotoFor(q) : null;
     if (guideTargeting === 'reference' && !refImageUri) {
@@ -180,16 +175,13 @@ export function DebugScreen({ onClose, onOpenGuide }: {
         </Pressable>
       </View>
 
-      {/* feat/guide-me-to-it spike entry (dev-only). In cloud-backend mode it opens
-          the cloud guide with the test query below + a visible camera/box preview;
-          otherwise it opens the on-device mock/live spike. */}
+      {/* Dev-only: force the ONLINE guide with the test query (normal voice flow
+          auto-routes per object instead). Shows the blind peephole by default, or the
+          camera/box debug view if "Debug view" below is on. */}
       {onOpenGuide ? (
         <Pressable style={styles.guideBtn} onPress={() => void openSpike()}>
           <Text style={styles.guideBtnText}>
-            🎯 Open "Guide me to it" spike
-            {guideBackend === 'cloud'
-              ? ` (cloud · "${testQuery.trim() || 'una taza'}"${guideTargeting === 'reference' ? ' +photo' : ''})`
-              : ''}
+            🎯 Test online guide (cloud · "{testQuery.trim() || 'una taza'}"{guideTargeting === 'reference' ? ' +photo' : ''})
           </Text>
         </Pressable>
       ) : null}
@@ -231,16 +223,11 @@ export function DebugScreen({ onClose, onOpenGuide }: {
       <View style={[styles.panel, styles.panelNeutral]}>
         <Text style={styles.panelTitle}>Cloud guide (spike)</Text>
         <Text style={styles.activeLine}>
-          {guideBackend === 'cloud'
-            ? `Cloud · ${guideModel.replace(/^.*\//, '')} · ${guideTargeting}`
-            : 'On-device YOLO/COCO (default)'}
+          Auto-routed: saved object → cloud · generic → on-device · 🎯 forces cloud
         </Text>
-
-        <Text style={styles.segLabel}>Guide backend</Text>
-        <View style={styles.segRow}>
-          <Seg active={guideBackend === 'device'} label="On-device" onPress={() => onSetGuideBackend('device')} />
-          <Seg active={guideBackend === 'cloud'} label="Cloud (open-vocab)" onPress={() => onSetGuideBackend('cloud')} />
-        </View>
+        <Text style={styles.panelText}>
+          Model {guideModel.replace(/^.*\//, '')} · targeting {guideTargeting}
+        </Text>
 
         <Text style={styles.segLabel}>Cloud targeting</Text>
         <View style={styles.segRow}>

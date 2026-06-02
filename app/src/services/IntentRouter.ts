@@ -58,7 +58,9 @@ Ejemplos:
 - "cuántas papas hay en la bolsa" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
 - "estoy buscando unas papas" → { "intent": "memory", "noun": "papas", "needsCurrent": null, "chitchatKind": null }
 - (con [OBJETOS GUARDADOS: Mi yerba]) "¿cuál de estas es mi yerba?" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
-- (con [OBJETOS GUARDADOS: Mi yerba]) "describime mi yerba" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }`;
+- (con [OBJETOS GUARDADOS: Mi yerba]) "describime mi yerba" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
+- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a mi mate" → { "intent": "guide", "noun": "mate", "needsCurrent": null, "chitchatKind": null, "savedObject": "Mi mate" }
+- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a una taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null, "savedObject": null }`;
 
 type IntentRaw = {
   intent?: string;
@@ -127,7 +129,7 @@ export async function classifyIntent(
       return { type: 'model', needsCurrent, savedObject };
     case 'guide':
       if (typeof raw.noun === 'string' && raw.noun.trim()) {
-        return { type: 'guide', object: raw.noun.trim() };
+        return { type: 'guide', object: raw.noun.trim(), savedObject };
       }
       return { type: 'model', needsCurrent, savedObject };
     case 'model':

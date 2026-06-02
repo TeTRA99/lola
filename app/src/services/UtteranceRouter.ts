@@ -8,7 +8,10 @@ export type RouteDecision =
   | { type: 'repeat' }
   | { type: 'extend' }
   | { type: 'memory'; object: string }
-  | { type: 'guide'; object: string }
+  // savedObject: the catalogued personal object the user referred to ("mi mate" →
+  // "Mi mate"), or null. Set → route the guide to CLOUD (open-vocab + its photo);
+  // null + a COCO match → on-device Geiger; null + no COCO → cloud (arbitrary).
+  | { type: 'guide'; object: string; savedObject?: string | null }
   // savedObject: the display name of a catalogued personal object the question
   // is about ("mi yerba" → "Mi yerba"), or null. Set → AskService attaches that
   // object's reference photo so the model can identify/describe THE user's one.
