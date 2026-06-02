@@ -37,7 +37,14 @@ const MAP: Record<ErrorKind, keyof typeof COPY.errors> = {
 };
 
 export function errorCopyFor(kind: ErrorKind): string {
-  return COPY.errors[MAP[kind]];
+  const key = MAP[kind];
+  // Generic errors rotate through a few phrasings so the retry prompt doesn't
+  // feel repetitive when failures cluster.
+  if (key === 'generic') {
+    const v = COPY.errors.genericVariants;
+    return v[Math.floor(Math.random() * v.length)];
+  }
+  return COPY.errors[key] as string;
 }
 
 const LOW_CONFIDENCE_PREFIXES = ['No estoy segura', 'No tengo', 'No puedo'];

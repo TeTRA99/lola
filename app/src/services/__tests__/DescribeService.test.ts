@@ -53,6 +53,7 @@ jest.mock('@/services/RoomCatalog', () => ({
 }));
 
 import { run, getLastDescribe, _resetForTests } from '../DescribeService';
+import { COPY } from '@/services/CopyModule';
 import { speak } from '@/adapters/tts';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
@@ -148,7 +149,7 @@ describe('DescribeService.run', () => {
     const r = await run();
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('no_camera');
-    expect(mSpeak).toHaveBeenCalledWith('Algo se me cruzó — ¿lo intentamos de nuevo?');
+    expect(COPY.errors.genericVariants).toContain(mSpeak.mock.calls.at(-1)?.[0]);
   });
 
   test('network error → speaks noNetwork copy + heartbeat error, returns network', async () => {

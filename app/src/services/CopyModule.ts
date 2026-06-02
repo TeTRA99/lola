@@ -21,6 +21,13 @@ export const COPY = {
     cameraPermission: 'Necesito ver para ayudarte — ¿me dejás usar la cámara?',
     micPermission: '¿Me dejás escucharte?',
     generic: 'Algo se me cruzó — ¿lo intentamos de nuevo?',
+    // Spoken generic-error variants — errorCopyFor picks one at random so the
+    // retry prompt doesn't feel repetitive when errors cluster.
+    genericVariants: [
+      'Algo se me cruzó — ¿lo intentamos de nuevo?',
+      'Uy, se me trabó algo — ¿probamos otra vez?',
+      'Se me complicó por un momento — ¿lo volvemos a intentar?',
+    ],
   },
   buttons: {
     describeLabel: 'Describir',

@@ -57,6 +57,7 @@ jest.mock('@/services/RoomCatalog', () => ({
 }));
 
 import { run } from '../AskService';
+import { COPY } from '@/services/CopyModule';
 import { speak } from '@/adapters/tts';
 import { listen } from '@/adapters/stt';
 import { captureSnapshot } from '@/adapters/camera';
@@ -268,6 +269,6 @@ describe('AskService.run — error paths', () => {
 
     const r = await run();
     expect(r.ok).toBe(false);
-    expect(mSpeak).toHaveBeenCalledWith('Algo se me cruzó — ¿lo intentamos de nuevo?');
+    expect(COPY.errors.genericVariants).toContain(mSpeak.mock.calls.at(-1)?.[0]);
   });
 });

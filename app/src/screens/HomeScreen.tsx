@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { COPY } from '@/services';
+import { errorCopyFor } from '@/services/errorCopy';
 import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
@@ -242,14 +243,22 @@ export function HomeScreen({
       } else {
         console.log('[home] run returned error:', res.error);
         const perm = res.error === 'permission_denied' || res.error === 'permission_denied_mic';
-        setErrKind(perm ? 'perm' : 'camera');
-        setState('error');
+        if (perm) {
+          // Permission denial keeps its actionable recovery screen ("Abrir ajustes").
+          setErrKind('perm');
+          setState('error');
+        } else {
+          // Other errors: the service already SPOKE the error line, so the
+          // full-screen error is redundant — return straight to the menu.
+          setState('idle');
+        }
       }
     } catch (e) {
       console.log('[home] run THREW:', e);
       if (cancelledRef.current) return;
-      setErrKind('camera');
-      setState('error');
+      // Unexpected throw — the service may not have spoken; say a generic line, then idle.
+      await speak(errorCopyFor('unknown'));
+      setState('idle');
     }
   };
 
@@ -396,7 +405,9 @@ function Card({
   active: boolean;
   onPress: () => void;
 }) {
-  const baseFlex = dark ? 0.92 : 1.32;
+  // iOS has no system nav bar eating the bottom, so we use that space: a taller
+  // Describir and (via the root's smaller bottom padding) both cards sit lower.
+  const baseFlex = dark ? 0.92 : (Platform.OS === 'ios' ? 1.62 : 1.32);
   const flex = useRef(new Animated.Value(baseFlex)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const dimmed = running && !active;
@@ -612,7 +623,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.neutral.sunken,
     paddingHorizontal: 16,
     paddingTop: TOP_INSET,
-    paddingBottom: BOTTOM_INSET + 20,
+    // iOS: drop the cards close to the bottom edge (only the thin home indicator
+    // there, no nav bar). Android keeps clearance for the system nav bar.
+    paddingBottom: Platform.OS === 'ios' ? 10 : BOTTOM_INSET + 20,
   },
   topBar: {
     height: 46, marginVertical: 10,
