@@ -167,7 +167,7 @@ export function GuideScreen({
         notFoundRef.current = true;
         void speak(COPY.guide.notFound(targetLabel));
       }
-    }, CONFIG.GUIDE_NOT_FOUND_MS);
+    }, cloud ? CONFIG.GUIDE_CLOUD_NOT_FOUND_MS : CONFIG.GUIDE_NOT_FOUND_MS);
     return () => clearTimeout(t);
   }, [model.isReady, targetCocoLabel, searchArmed]);
 

@@ -87,6 +87,8 @@ export const CONFIG = {
   // discrete haptic pulse per result (guideHaptics.pulseGuide) — so a buzz always
   // means a fresh result, rather than the continuous beat loop running on its own.
   GUIDE_CLOUD_POLL_MS: 2500,         // re-localize cadence (one image request per poll)
+  GUIDE_CLOUD_TIMEOUT_MS: 9000,      // per-poll grounding timeout (NO retries — fail fast, next poll is fresh)
+  GUIDE_CLOUD_NOT_FOUND_MS: 40000,   // cloud "no la encuentro" window (polls are slow — give it many tries)
   GUIDE_CLOUD_MAX_DIM: 512,          // downscale captured frames before upload (smaller = lower latency)
   GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
   GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)

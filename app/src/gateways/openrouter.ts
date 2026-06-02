@@ -86,20 +86,25 @@ async function postOnce(input: ChatInput, signal: AbortSignal): Promise<Response
  * retry/timeout). Callers parse it however they like. Factored out of chatJson so
  * groundObject can parse leniently (models often wrap JSON in ```fences``` / prose).
  */
-async function requestContent(input: ChatInput): Promise<Result<string, ChatError>> {
+async function requestContent(
+  input: ChatInput,
+  opts?: { timeoutMs?: number; retryDelays?: number[] },
+): Promise<Result<string, ChatError>> {
   const key = apiKey();
   if (!key) return err('auth');
+  const timeoutMs = opts?.timeoutMs ?? PER_ATTEMPT_TIMEOUT_MS;
+  const retryDelays = opts?.retryDelays ?? RETRY_DELAYS_MS;
 
   for (let attempt = 0; ; attempt++) {
     const ctl = new AbortController();
-    const timeoutId = setTimeout(() => ctl.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => ctl.abort(), timeoutMs);
     let resp: Response;
     try {
       resp = await postOnce(input, ctl.signal);
     } catch {
       clearTimeout(timeoutId);
-      if (attempt < RETRY_DELAYS_MS.length) {
-        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      if (attempt < retryDelays.length) {
+        await new Promise(r => setTimeout(r, retryDelays[attempt]));
         continue;
       }
       return err('network');
@@ -109,8 +114,8 @@ async function requestContent(input: ChatInput): Promise<Result<string, ChatErro
     if (resp.status === 401 || resp.status === 403) return err('auth');
     if (resp.status === 429) return err('rate_limit');
     if (resp.status >= 500 && resp.status < 600) {
-      if (attempt < RETRY_DELAYS_MS.length) {
-        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      if (attempt < retryDelays.length) {
+        await new Promise(r => setTimeout(r, retryDelays[attempt]));
         continue;
       }
       return err('network');
@@ -227,12 +232,15 @@ export async function groundObject(args: {
     ? `Reference photo (image 1) shows: "${args.query}". Find that same object in the scene (image 2).`
     : `Find this object in the image: "${args.query}".`;
   const images = hasRef ? [args.refBase64 as string, args.frameBase64] : [args.frameBase64];
+  // Fail-fast: NO retries and a tight timeout. In a ~2.5s poll loop a retried/stale
+  // grounding call is worthless and (with skip-while-in-flight) blocks fresh polls
+  // — better to drop this poll and let the next frame be current.
   const resp = await requestContent({
     systemPrompt: buildGroundPrompt(args.model, hasRef),
     userText,
     imagesBase64: images,
     model: args.model,
-  });
+  }, { timeoutMs: CONFIG.GUIDE_CLOUD_TIMEOUT_MS, retryDelays: [] });
   if (!resp.ok) return err(resp.error);
   const raw = resp.value.slice(0, 300);
   // Models often wrap JSON in ```fences``` or add a sentence — parse leniently.
