@@ -16,13 +16,16 @@ import {
   useWindowDimensions, Platform,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, type CameraDevice } from 'react-native-vision-camera';
+import { CameraView, Camera as ExpoCamera } from 'expo-camera';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { speak } from '@/adapters/tts';
 import { COPY } from '@/services/CopyModule';
 import * as Settings from '@/services/Settings';
 import { color, fontFamily } from '@/theme/tokens';
-import { startGuide, updateGuide, stopGuide } from '@/adapters/guideHaptics';
+import { startGuide, updateGuide, stopGuide, pulseGuide } from '@/adapters/guideHaptics';
 import { activateKeepAwake, releaseKeepAwake } from '@/adapters/keepAwake';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
+import { useCloudGuideDetection, type CapturedFrame, type CloudGuideHint } from '@/adapters/useCloudGuideDetection';
 import {
   bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
   type RawDetection,
@@ -38,12 +41,23 @@ const TARGET_OPTIONS = [
 export function GuideScreen({
   targetLabel = 'the object',
   targetCocoLabel = null,
+  cloudQuery = null,
+  refImageUri = null,
   onClose,
 }: {
   targetLabel?: string;
   targetCocoLabel?: string | null;
+  // Cloud "guide me to it" spike: the open-vocabulary query to ground (set by the
+  // voice flow when guideBackend === 'cloud'). Present → use the cloud layer.
+  cloudQuery?: string | null;
+  // Saved-object reference photo to send when targeting === 'reference'.
+  refImageUri?: string | null;
   onClose: () => void;
 }) {
+  const cloud = !!cloudQuery;
+  // "Guiding" = the real (blind) flow, whether the target is an on-device COCO
+  // label or a cloud open-vocab query. Gates the audio cues + branded overlay.
+  const guiding = !!targetCocoLabel || cloud;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [live, setLive] = useState(!!targetCocoLabel); // real flow opens live; dev opens mock
@@ -53,6 +67,7 @@ export function GuideScreen({
   const [proximity, setProximity] = useState<number | null>(null);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
+  const lastSaidAt = useRef(0); // throttle the cloud "¡Ahí está!" so TTS doesn't back up
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const lastFoundAt = useRef(0);    // timestamp of the last "¡ahí está!" (cooldown)
@@ -69,7 +84,12 @@ export function GuideScreen({
 
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
-  const blind = !!targetCocoLabel;
+  const blind = guiding;
+  // Cloud guide uses the SAME blind peephole view as the on-device flow by default.
+  // The raw camera + box + grounding banner is opt-in for tuning (Debug toggle), so
+  // it no longer hijacks the real experience just because dev tools are on.
+  const devPreview = cloud && CONFIG.SHOW_DEV_TOOLS
+    && Settings.getBoolSync(Settings.KEYS.guideCloudDebug, false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const handleExit = useCallback(() => onCloseRef.current(), []);
@@ -88,7 +108,10 @@ export function GuideScreen({
   }, [hasPermission, requestPermission]);
 
   useEffect(() => {
-    startGuide();
+    // The cloud path does NOT run the continuous beat loop — it fires one discrete
+    // pulseGuide() per poll result (see applyProximity), so a buzz always means a
+    // fresh result. Only the on-device detector drives the continuous Geiger loop.
+    if (!cloud) startGuide();
     return () => stopGuide();
   }, []);
 
@@ -112,8 +135,16 @@ export function GuideScreen({
   // Blind-user audio: announce the search once on open (real flow only). The
   // first time the homing flow is ever used, explain the vibration first.
   useEffect(() => {
-    if (!targetCocoLabel) return;
+    if (!guiding) return;
     void (async () => {
+      if (cloud) {
+        // Cloud is a different interaction than the continuous Geiger — point at an
+        // area, wait for the buzz (one answer per area), move on. Give matching
+        // instructions and skip the Geiger-specific first-use hint.
+        setSearchArmed(true);
+        void speak(COPY.guide.searchingCloud(targetLabel));
+        return;
+      }
       if (!(await Settings.getBool(Settings.KEYS.guideHintSeen, false))) {
         await Settings.setBool(Settings.KEYS.guideHintSeen, true);
         await speak(COPY.onboarding.guideHint);
@@ -127,7 +158,7 @@ export function GuideScreen({
   // While the on-device model is still loading (first-use download can take
   // minutes), tell the user it's preparing so it doesn't seem broken.
   useEffect(() => {
-    if (!targetCocoLabel || model.isReady) return;
+    if (!guiding || model.isReady) return;
     const t = setTimeout(() => {
       if (!model.isReady && !preparingRef.current) {
         preparingRef.current = true;
@@ -141,13 +172,13 @@ export function GuideScreen({
   // the search (searchArmed), so neither the model download nor the intro
   // narration eats into the real searching window.
   useEffect(() => {
-    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    if (!guiding || !model.isReady || !searchArmed) return;
     const t = setTimeout(() => {
       if (!spottedRef.current && !notFoundRef.current) {
         notFoundRef.current = true;
         void speak(COPY.guide.notFound(targetLabel));
       }
-    }, CONFIG.GUIDE_NOT_FOUND_MS);
+    }, cloud ? CONFIG.GUIDE_CLOUD_NOT_FOUND_MS : CONFIG.GUIDE_NOT_FOUND_MS);
     return () => clearTimeout(t);
   }, [model.isReady, targetCocoLabel, searchArmed]);
 
@@ -158,7 +189,9 @@ export function GuideScreen({
   // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
   const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
   useEffect(() => {
-    if (!targetCocoLabel) return;
+    // Cloud handles its own per-result confirmation in applyProximity (it speaks
+    // "¡Ahí está!" on every positive); skip the on-device once-only tiered cues.
+    if (!guiding || cloud) return;
     if (proximity === null) {
       if (!lostTimer.current) {
         lostTimer.current = setTimeout(() => {
@@ -194,7 +227,7 @@ export function GuideScreen({
     } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
       foundRef.current = false;
     }
-  }, [proximity, targetCocoLabel, handleExit]);
+  }, [proximity, targetCocoLabel, handleExit, cloud]);
 
   // Idle check-in — the search never closes itself; instead, after a long stretch
   // with the target not in view, Lola reassures + reminds how to leave, and keeps
@@ -205,7 +238,7 @@ export function GuideScreen({
   }, [proximity]);
 
   useEffect(() => {
-    if (!targetCocoLabel || !model.isReady || !searchArmed) return;
+    if (!guiding || !model.isReady || !searchArmed) return;
     const id = setInterval(() => {
       if (Date.now() - lastSeenRef.current >= CONFIG.GUIDE_CHECKIN_IDLE_MS) {
         lastSeenRef.current = Date.now(); // re-arm so it repeats on the interval
@@ -219,14 +252,41 @@ export function GuideScreen({
     if (lostTimer.current) clearTimeout(lostTimer.current);
   }, []);
 
-  // Haptics update every frame via module state (no render); HUD number throttled.
+  // Cloud: one discrete buzz per poll result + update proximity (for audio/HUD)
+  // immediately — polls are ~2.5s apart, so no throttle needed.
+  // On-device: feed the continuous beat loop every frame; throttle the HUD number.
   const applyProximity = useCallback((p: number | null) => {
+    if (cloud) {
+      pulseGuide(p);
+      setProximity(p);
+      // Mark "seen at least once" so the "no la encuentro" timer doesn't fire after
+      // a real find — the tiered effect that normally sets this is skipped for cloud.
+      if (p !== null) spottedRef.current = true;
+      // Speaking is handled by handleCloudHint (it has the box + landmark to build
+      // a "where" cue); applyProximity only drives the haptic + proximity state.
+      return;
+    }
     updateGuide(p);
     const now = Date.now();
     if (now - lastHudAt.current > 160) {
       lastHudAt.current = now;
       setProximity(p);
     }
+  }, [cloud]);
+
+  // Cloud-only: on each positive poll, speak a short "where" cue — which way to
+  // point (from the box's frame position) + any landmark the model reported.
+  // Throttled (2s) so consecutive polls can't queue overlapping speech.
+  const handleCloudHint = useCallback((hint: CloudGuideHint | null) => {
+    if (!hint) return;
+    const now = Date.now();
+    if (now - lastSaidAt.current <= 2000) return;
+    lastSaidAt.current = now;
+    const cx = hint.box.x + hint.box.width / 2;
+    const cy = hint.box.y + hint.box.height / 2;
+    const dx = cx < 0.4 ? 'left' : cx > 0.6 ? 'right' : null;
+    const dy = cy < 0.4 ? 'up' : cy > 0.6 ? 'down' : null;
+    void speak(COPY.guide.locate({ dx, dy, near: hint.near }));
   }, []);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
@@ -238,7 +298,17 @@ export function GuideScreen({
 
   return (
     <View style={styles.root}>
-      {live ? (
+      {cloud ? (
+        <CloudGuideLayer
+          query={cloudQuery as string}
+          refImageUri={refImageUri}
+          active={appActive}
+          debug={devPreview}
+          onProximity={applyProximity}
+          onHint={handleCloudHint}
+          onModelState={setModel}
+        />
+      ) : live ? (
         <LiveLayer
           device={device}
           hasPermission={hasPermission}
@@ -253,7 +323,12 @@ export function GuideScreen({
         <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
       )}
 
-      {blind ? (
+      {blind && devPreview ? (
+        // Dev cloud preview: camera + box shown by CloudGuideLayer; just an exit.
+        <Pressable style={styles.close} onPress={handleExit} hitSlop={16}>
+          <Text style={styles.closeText}>Close</Text>
+        </Pressable>
+      ) : blind ? (
         // Real (blind) flow: branded screen over the hidden camera, tap to exit.
         <BlindOverlay targetLabel={targetLabel} status={status} onExit={handleExit} />
       ) : (
@@ -283,10 +358,10 @@ export function GuideScreen({
 
 type GuideStatus = 'preparing' | 'searching' | 'spotted' | 'found';
 
-/** Branded, preview-less screen for the real (blind/low-vision) flow. The whole
- *  screen is the exit target. Camera + boxes are hidden (camera runs underneath
- *  in LiveLayer for detection). A gentle pulse + status text give low-vision
- *  users something to see instead of a black "broken" screen. */
+/** Branded screen for the real (blind/low-vision) flow. The whole screen is the
+ *  exit target. A clear circular PEEPHOLE in the center shows the live camera
+ *  (the rest is dimmed by a semi-transparent scrim) so low-vision users can aim a
+ *  little; detection boxes stay hidden. A gentle pulse ring + status text frame it. */
 function BlindOverlay({
   targetLabel,
   status,
@@ -318,12 +393,195 @@ function BlindOverlay({
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, homing ? 1.3 : 1.12] });
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
 
+  // Peephole: a clear circular window in the center showing the live camera, with
+  // a semi-transparent dim over the rest (low-vision users can aim a little). The
+  // donut = a huge circle whose transparent middle is the peephole and whose thick
+  // semi-transparent border is the scrim covering the rest of the screen.
+  const { width, height } = useWindowDimensions();
+  const HOLE = 150; // matches the pulse ring; iterate later
+  const RING = (width + height) * 1.5; // big enough to cover the corners
+
   return (
     <Pressable style={styles.blindRoot} onPress={onExit} accessibilityRole="button" accessibilityLabel={COPY.guide.tapHint}>
-      <Animated.View style={[styles.blindPulse, { borderColor: accent, transform: [{ scale }], opacity }]} />
-      <Text style={styles.blindTitle}>{title}</Text>
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          width: RING, height: RING, borderRadius: RING / 2,
+          left: width / 2 - RING / 2, top: height / 2 - RING / 2,
+          borderWidth: (RING - HOLE) / 2,
+          borderColor: 'rgba(0,0,0,0.6)',
+        }}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.blindPulse, {
+          position: 'absolute', left: width / 2 - 75, top: height / 2 - 75,
+          borderColor: accent, transform: [{ scale }], opacity,
+        }]}
+      />
+      <Text style={[styles.blindTitle, { position: 'absolute', top: height / 2 + HOLE / 2 + 32, left: 24, right: 24 }]}>
+        {title}
+      </Text>
       <Text style={styles.blindHint}>{COPY.guide.tapHint}</Text>
     </Pressable>
+  );
+}
+
+/** CLOUD proximity: re-localizes an arbitrary (open-vocab) object via OpenRouter
+ *  every ~2.5s and feeds the latest box's proximity into the same haptic loop.
+ *  Mounts an expo-camera CameraView (NOT VisionCamera — no frame processor here;
+ *  the two never mount together since this is an alternate layer). */
+function CloudGuideLayer({
+  query,
+  refImageUri,
+  active,
+  debug = false,
+  onProximity,
+  onHint,
+  onModelState,
+}: {
+  query: string;
+  refImageUri: string | null;
+  active: boolean;
+  // Dev builds: show the camera preview + the latest box + a status banner so we
+  // can SEE what the model is looking at and finding (the real flow hides all of it).
+  debug?: boolean;
+  onProximity: (p: number | null) => void;
+  onHint: (hint: CloudGuideHint | null) => void;
+  onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
+}) {
+  const { width, height } = useWindowDimensions();
+  const camRef = useRef<CameraView>(null);
+  const [perm, setPerm] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [ready, setReady] = useState(false); // camera stream is live
+  const [refBase64, setRefBase64] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const p = await ExpoCamera.requestCameraPermissionsAsync();
+      setPerm(p.granted ? 'granted' : 'denied');
+    })();
+  }, []);
+
+  // No model download for the cloud path — report "ready" right away so the
+  // GuideScreen skips "me estoy preparando" and arms the search immediately.
+  useEffect(() => { onModelState({ isReady: true, downloadProgress: 1 }); }, [onModelState]);
+
+  // Resolve the reference photo to a downscaled base64 ONCE (targeting=reference).
+  useEffect(() => {
+    if (!refImageUri) { setRefBase64(null); return; }
+    let alive = true;
+    void (async () => {
+      try {
+        const out = await manipulateAsync(
+          refImageUri,
+          [{ resize: { width: CONFIG.GUIDE_CLOUD_MAX_DIM } }],
+          { compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+        );
+        if (alive) setRefBase64(out.base64 ?? null);
+      } catch (e) {
+        console.log('[guide-cloud] ref image load failed:', e);
+        if (alive) setRefBase64(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [refImageUri]);
+
+  const capture = useCallback(async (): Promise<CapturedFrame | null> => {
+    const ref = camRef.current;
+    if (!ref || !ready) return null;
+    try {
+      type Shot = { uri: string; width: number; height: number };
+      type Cap = CameraView & {
+        takePictureAsync(o: { base64: boolean; quality: number; skipProcessing: boolean; shutterSound?: boolean }): Promise<Shot | undefined>;
+      };
+      // skipProcessing:false so the JPEG is oriented UPRIGHT (matching the preview).
+      // With skipProcessing:true the still is the sensor's landscape buffer + an EXIF
+      // tag, so the model analyzes a sideways image and its box coords come back
+      // rotated relative to the portrait preview. We send the FULL upright frame (no
+      // aspect crop — cropping to the screen risks cutting out the object).
+      const shot = await (ref as Cap).takePictureAsync({
+        base64: false, quality: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, skipProcessing: false, shutterSound: false,
+      });
+      if (!shot) return null;
+      const longer = Math.max(shot.width, shot.height);
+      const ratio = longer > CONFIG.GUIDE_CLOUD_MAX_DIM ? CONFIG.GUIDE_CLOUD_MAX_DIM / longer : 1;
+      const out = await manipulateAsync(
+        shot.uri,
+        ratio < 1 ? [{ resize: { width: Math.round(shot.width * ratio), height: Math.round(shot.height * ratio) } }] : [],
+        { compress: CONFIG.GUIDE_CLOUD_JPEG_QUALITY, format: SaveFormat.JPEG, base64: true },
+      );
+      if (!out.base64) return null;
+      return { base64: out.base64, width: out.width, height: out.height };
+    } catch (e) {
+      console.log('[guide-cloud] capture failed:', e);
+      return null;
+    }
+  }, [ready]);
+
+  const cg = useCloudGuideDetection({
+    query,
+    refBase64,
+    active: active && perm === 'granted' && ready,
+    capture,
+    onProximity,
+    onHint,
+  });
+
+  if (perm !== 'granted') return <CamFallback hasPermission={perm !== 'denied'} />;
+
+  // Dev preview box. The full-screen CameraView 'cover'-fits the captured frame
+  // (crops whichever axis overflows), so map the NormBox through that same transform
+  // — naive b.x*screenW would be off by the cropped margin. Falls back to naive
+  // until we know the frame aspect.
+  const b = cg.lastBox;
+  const fa = cg.lastFrameW > 0 && cg.lastFrameH > 0 ? cg.lastFrameW / cg.lastFrameH : 0;
+  const sa = width / height;
+  const rW = fa <= 0 ? width : fa > sa ? height * fa : width;
+  const rH = fa <= 0 ? height : fa > sa ? height : width / fa;
+  const offX = (width - rW) / 2;
+  const offY = (height - rH) / 2;
+  return (
+    <>
+      <CameraView
+        ref={camRef}
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        active={active}
+        onCameraReady={() => setReady(true)}
+        onMountError={(e) => { console.log('[guide-cloud] mount error:', e); setReady(false); }}
+      />
+      {debug && (
+        <>
+          {b && (
+            <View
+              style={[styles.detBoxActive, {
+                left: offX + b.x * rW, top: offY + b.y * rH, width: b.width * rW, height: b.height * rH,
+              }]}
+            >
+              <Text style={[styles.detLabel, styles.detLabelActive]}>
+                {query} {Math.round(cg.lastConfidence * 100)}%
+              </Text>
+            </View>
+          )}
+          <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              {cg.model.replace(/^.*\//, '')} · "{query}"{refBase64 ? ' +ref' : ''} · poll {cg.polls}
+              {cg.lastLatencyMs != null ? ` · ${cg.lastLatencyMs}ms` : ''}
+              {cg.lastError ? ` · ERR ${cg.lastError}` : cg.lastFound ? ' · FOUND' : ' · …'}
+            </Text>
+            {cg.lastFound && cg.lastNear ? (
+              <Text style={styles.bannerRaw} numberOfLines={2}>near: {cg.lastNear}</Text>
+            ) : null}
+            {!cg.lastFound && cg.lastRaw ? (
+              <Text style={styles.bannerRaw} numberOfLines={3}>raw: {cg.lastRaw}</Text>
+            ) : null}
+          </View>
+        </>
+      )}
+    </>
   );
 }
 
@@ -568,8 +826,9 @@ const styles = StyleSheet.create({
   // Branded preview-less overlay (real/blind flow)
   blindRoot: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: color.neutral.ink,
-    alignItems: 'center', justifyContent: 'center', gap: 28,
+    // Transparent — the dim is the peephole donut's semi-transparent border, so the
+    // live camera shows through the clear center circle.
+    alignItems: 'center', justifyContent: 'center',
   },
   blindPulse: {
     width: 150, height: 150, borderRadius: 75, borderWidth: 3,
@@ -600,6 +859,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
   bannerText: { color: '#fff', fontSize: 14 },
+  bannerRaw: { color: '#fbbf24', fontSize: 11, marginTop: 4, maxWidth: 320 },
   detBox: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(74,222,128,0.7)' },
   detBoxActive: { position: 'absolute', borderWidth: 3, borderColor: '#22d3ee' },
   detLabel: {

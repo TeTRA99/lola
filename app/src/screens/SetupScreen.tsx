@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +27,7 @@ import * as CatalogPhotos from '@/services/CatalogPhotos';
 import * as RoomCatalog from '@/services/RoomCatalog';
 import * as MemoryService from '@/services/MemoryService';
 import * as Settings from '@/services/Settings';
+import { CONFIG } from '@/config';
 import type { CatalogObject } from '@/services/OnboardingService';
 import type { Room } from '@/services/RoomCatalog';
 import { CapturePhotoModal } from './CapturePhotoModal';
@@ -138,7 +140,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
               {catalog.map(item => (
                 <ListRow
                   key={item.id}
-                  thumbUri={item.reference_image_uri}
+                  // Re-derive from the current container (stored absolute path goes
+                  // stale across reinstalls); fall back to the stored value.
+                  thumbUri={CatalogPhotos.primaryUriFor(item.id) ?? item.reference_image_uri}
                   title={item.display_name}
                   subtitle={objectSubtitle(item)}
                   seenIcon
@@ -151,6 +155,8 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                   })}
                 />
               ))}
+              {/* Keep the "why bother" copy visible even after items exist. */}
+              <Text style={styles.listFootnote}>{t.emptyObjBody}</Text>
             </ScrollView>
             <View style={styles.addFooter}>
               <PrimaryButton label={t.addObject} leadingIcon="add" onPress={() => setObjectMode({ kind: 'add' })} />
@@ -166,7 +172,9 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
               {rooms.map(item => (
                 <ListRow
                   key={item.id}
-                  thumbUri={item.reference_image_uri}
+                  // Re-derive from the live container (stored path goes stale across
+                  // reinstalls); fall back to the stored value.
+                  thumbUri={RoomCatalog.primaryUriFor(item.id) ?? item.reference_image_uri}
                   title={item.display_name}
                   subtitle={item.description || undefined}
                   onEdit={() => setRoomMode({ kind: 'edit', room: item })}
@@ -177,6 +185,7 @@ export function SetupScreen({ onClose }: { onClose: () => void }) {
                   })}
                 />
               ))}
+              <Text style={styles.listFootnote}>{t.emptyRoomBody}</Text>
             </ScrollView>
             <View style={styles.addFooter}>
               <PrimaryButton label={t.addRoom} leadingIcon="add" onPress={() => setRoomMode({ kind: 'add' })} />
@@ -244,12 +253,16 @@ function SettingsTab() {
   const [userName, setUserName] = useState('');
   const [voices, setVoices] = useState<Speech.Voice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('');
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [rate, setRate] = useState(RATE_DEFAULT);
   const [pitch, setPitch] = useState(PITCH_DEFAULT);
   const [detectionLevel, setDetectionLevel] = useState<number>(defaultDetectionLevel());
+  const [aiMode, setAiMode] = useState<'cloud' | 'local'>(CONFIG.LOCAL_INFERENCE_DEFAULT);
 
   useEffect(() => {
     void (async () => {
+      const mode = await Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT);
+      setAiMode(mode === 'local' ? 'local' : 'cloud');
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
       setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, true));
       setUserName(await Settings.getString(Settings.KEYS.userName, ''));
@@ -283,6 +296,28 @@ function SettingsTab() {
     const lvl = clampDetectionLevel(v);
     setDetectionLevel(lvl);
     void Settings.setString(Settings.KEYS.detectionLevel, String(lvl));
+  };
+  // Cloud vs on-device. Persist instantly; the on-device model only downloads
+  // when the user returns to Home in local mode (ModelPrepBanner picks it up),
+  // never from this tap — same pattern as the detection-level slider.
+  const changeAiMode = (mode: 'cloud' | 'local') => {
+    if (mode === aiMode) return; // tapping the active mode: no-op, no dialog
+    // Confirm both directions — switching to Online starts sending photos to the
+    // cloud (privacy); switching to On-the-phone trades capability + a download.
+    Alert.alert(
+      t.aiModeSwitchTitle,
+      mode === 'cloud' ? t.aiModeToCloudBody : t.aiModeToLocalBody,
+      [
+        { text: t.aiModeSwitchCancel, style: 'cancel' },
+        {
+          text: t.aiModeSwitchConfirm,
+          onPress: () => {
+            setAiMode(mode);
+            void Settings.setString(Settings.KEYS.inferenceMode, mode);
+          },
+        },
+      ],
+    );
   };
 
   const toggle = async () => {
@@ -343,6 +378,32 @@ function SettingsTab() {
           </View>
         </View>
 
+        {/* How Lola sees — cloud (recommended) vs on-device. The on-device model
+            only downloads when the user goes back to Home in local mode. */}
+        <View style={styles.settingCard}>
+          <Text style={styles.settingLabel}>{t.aiMode}</Text>
+          <Text style={styles.settingHint}>{t.aiModeHint}</Text>
+          <View style={styles.segment}>
+            {(['cloud', 'local'] as const).map(mode => {
+              const active = aiMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => changeAiMode(mode)}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {mode === 'cloud' ? t.aiModeCloud : t.aiModeLocal}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={[styles.settingHint, { marginTop: 10 }]}>
+            {aiMode === 'local' ? t.aiModeLocalHint : t.aiModeCloudHint}
+          </Text>
+        </View>
+
         {/* Voice */}
         <View style={styles.settingCard}>
           <Text style={styles.settingLabel}>{t.voice}</Text>
@@ -350,21 +411,41 @@ function SettingsTab() {
           {voices.length === 0 ? (
             <Text style={[styles.settingHint, { marginTop: 10 }]}>{t.noVoices}</Text>
           ) : (
-            <View style={styles.voiceList}>
-              {voiceRows.map(row => {
-                const active = selectedVoice === row.id;
-                return (
-                  <Pressable key={row.id || 'default'} onPress={() => selectVoice(row.id)} style={styles.voiceRow}>
-                    <Text style={[styles.voiceName, active && styles.voiceNameActive]} numberOfLines={1}>
-                      {row.label}
-                    </Text>
-                    {active && <Icon name="check" size={20} color={color.primary[500]} />}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Pressable style={styles.voiceTrigger} onPress={() => setVoicePickerOpen(true)}>
+              <Text style={styles.voiceTriggerText} numberOfLines={1}>
+                {voiceRows.find(r => r.id === selectedVoice)?.label ?? t.voiceDefault}
+              </Text>
+              <Text style={styles.voiceCaret}>▾</Text>
+            </Pressable>
           )}
         </View>
+
+        {/* Voice dropdown — a modal list so a long voice catalog doesn't push the
+            rest of Settings way down on devices with many engines. */}
+        <Modal visible={voicePickerOpen} transparent animationType="fade" onRequestClose={() => setVoicePickerOpen(false)}>
+          <Pressable style={styles.voiceModalBackdrop} onPress={() => setVoicePickerOpen(false)}>
+            <Pressable style={styles.voiceModalSheet} onPress={() => {}}>
+              <Text style={styles.voiceModalTitle}>{t.voice}</Text>
+              <ScrollView style={styles.voiceModalList} keyboardShouldPersistTaps="handled">
+                {voiceRows.map(row => {
+                  const active = selectedVoice === row.id;
+                  return (
+                    <Pressable
+                      key={row.id || 'default'}
+                      onPress={() => { selectVoice(row.id); setVoicePickerOpen(false); }}
+                      style={styles.voiceRow}
+                    >
+                      <Text style={[styles.voiceName, active && styles.voiceNameActive]} numberOfLines={1}>
+                        {row.label}
+                      </Text>
+                      {active && <Icon name="check" size={20} color={color.primary[500]} />}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Voice tuning — speed + pitch for the system voice. */}
         <View style={styles.settingCard}>
@@ -604,12 +685,9 @@ function RoomForm({
   const full = photos.length >= MAX;
 
   useEffect(() => {
-    if (existing) {
-      void (async () => {
-        const list = await RoomCatalog.listPhotosForRoom(existing.id);
-        setPhotos(list.map(p => p.uri));
-      })();
-    }
+    // Re-derive photo URIs from the LIVE container (the room_photos table's stored
+    // absolute paths go stale across reinstalls — same fix as the objects editor).
+    if (existing) setPhotos(RoomCatalog.listForRoom(existing.id));
   }, [existing]);
 
   useEffect(() => onDownloadProgress(p => setDownloadPct(p > 0 && p < 1 ? p : null)), []);
@@ -795,7 +873,28 @@ const styles = StyleSheet.create({
   settingsWrap: { flex: 1, padding: 18, paddingBottom: 18 + BOTTOM_INSET },
   settingsScroll: { gap: 12, paddingBottom: 12 },
   version: { marginTop: 12, textAlign: 'center', fontSize: 12.5, fontFamily: fontFamily.medium, color: color.text.low },
-  voiceList: { marginTop: 10, borderTopWidth: 1, borderTopColor: color.neutral.border },
+  // Empty-state body repeated at the bottom of a populated list (kept visible).
+  listFootnote: {
+    paddingTop: 22, paddingHorizontal: 6, paddingBottom: 8,
+    fontSize: 14, fontFamily: fontFamily.regular, color: color.text.medium, lineHeight: 21,
+  },
+  // Voice dropdown: a compact trigger that opens a modal list (was a full-length
+  // inline list that could push the rest of Settings far down).
+  voiceTrigger: {
+    marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 13, paddingHorizontal: 14, gap: 12,
+    borderWidth: 1, borderColor: color.neutral.border, borderRadius: radius.md,
+    backgroundColor: color.neutral.white,
+  },
+  voiceTriggerText: { flex: 1, fontSize: 15, fontFamily: fontFamily.medium, color: color.text.high },
+  voiceCaret: { fontSize: 16, color: color.text.low },
+  voiceModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
+  voiceModalSheet: {
+    backgroundColor: color.neutral.white, borderRadius: radius.lg, padding: 16,
+    maxHeight: '70%',
+  },
+  voiceModalTitle: { fontSize: 17, fontFamily: fontFamily.bold, fontWeight: '700', color: color.text.high, marginBottom: 6 },
+  voiceModalList: { flexGrow: 0 },
   voiceRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 13, gap: 12,

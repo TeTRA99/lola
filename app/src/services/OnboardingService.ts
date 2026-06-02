@@ -5,6 +5,7 @@ import type { SQLiteBindValue } from 'expo-sqlite';
 import { getDb } from '@/adapters/storage';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
+import * as CatalogPhotos from '@/services/CatalogPhotos';
 
 export type CatalogObject = {
   id: number;
@@ -130,6 +131,28 @@ export async function removeObject(
   } catch {
     return err('storage_error');
   }
+}
+
+/**
+ * Best-effort: find a saved catalog object's reference photo for a spoken noun
+ * (cloud guide, reference targeting). Matches the canonicalized noun against
+ * canonical_name first, then a display-name substring. Returns null if none has a
+ * photo. Shared by the Ask voice flow and the Debug spike launch.
+ */
+export async function referencePhotoFor(noun: string): Promise<string | null> {
+  const catalog = await getCatalog();
+  const canon = canonicalize(noun);
+  const lower = noun.trim().toLowerCase();
+  // Match by NAME (not by the stored path — that goes stale across reinstalls).
+  const match =
+    catalog.find(o => o.canonical_name === canon) ??
+    (lower
+      ? catalog.find(o => o.display_name.toLowerCase().includes(lower) || lower.includes(o.display_name.toLowerCase()))
+      : undefined);
+  if (!match) return null;
+  // Re-derive the live photo path from the current container (see CatalogPhotos.
+  // primaryUriFor); fall back to the stored column only if no file is present.
+  return CatalogPhotos.primaryUriFor(match.id) ?? match.reference_image_uri;
 }
 
 export async function getCatalog(): Promise<ObjectCatalog> {

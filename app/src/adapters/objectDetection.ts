@@ -44,6 +44,43 @@ export function proximityFromBox(box: NormBox): number {
   return w * centering + (1 - w) * size;
 }
 
+// ── Cloud grounding (feat: cloud "guide me to it" spike) ───────────────────
+// A cloud VLM returns a box for an arbitrary object. All our candidates emit
+// NORMALIZED 0–1000 coordinates; only the AXIS ORDER differs: Gemini →
+// [ymin, xmin, ymax, xmax]; Qwen3-VL → [x1, y1, x2, y2]. (Confirmed on-device:
+// Qwen returns 0–1000 values that exceed the uploaded pixel dims, i.e. it is NOT
+// pixel coordinates.) parseGroundingBox normalizes either into a NormBox so the
+// rest of the guide pipeline (proximityFromBox) is unchanged. The matching
+// prompt-side instruction lives in gateways/openrouter.ts.
+
+/** True when the model emits boxes in [x1,y1,x2,y2] order (Qwen) vs Gemini's
+ *  [ymin,xmin,ymax,xmax]. Both are normalized 0–1000. */
+export function groundingIsXYXY(model: string): boolean {
+  return /qwen/i.test(model);
+}
+
+/**
+ * Normalize a raw 4-number grounding box (normalized 0–1000) into a NormBox
+ * (0..1, origin top-left). Returns null if the array isn't a usable box.
+ */
+export function parseGroundingBox(model: string, raw: number[] | null | undefined): NormBox | null {
+  if (!Array.isArray(raw) || raw.length !== 4 || raw.some(n => typeof n !== 'number' || !isFinite(n))) {
+    return null;
+  }
+  // Both conventions are 0–1000; only the order differs.
+  const [x1, y1, x2, y2] = groundingIsXYXY(model)
+    ? [raw[0] / 1000, raw[1] / 1000, raw[2] / 1000, raw[3] / 1000]   // Qwen [x1,y1,x2,y2]
+    : [raw[1] / 1000, raw[0] / 1000, raw[3] / 1000, raw[2] / 1000];  // Gemini [ymin,xmin,ymax,xmax]
+  const left = Math.max(0, Math.min(x1, x2));
+  const top = Math.max(0, Math.min(y1, y2));
+  const right = Math.min(1, Math.max(x1, x2));
+  const bottom = Math.min(1, Math.max(y1, y2));
+  const width = right - left;
+  const height = bottom - top;
+  if (width <= 0 || height <= 0) return null;
+  return { x: left, y: top, width, height };
+}
+
 /** Convert a pixel bbox + frame size into a normalized box (origin top-left). */
 export function normalizePixelBox(b: PixelBBox, frameW: number, frameH: number): NormBox {
   if (frameW <= 0 || frameH <= 0) return { x: 0, y: 0, width: 0, height: 0 };

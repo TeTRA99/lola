@@ -5,6 +5,8 @@ import {
   frameBoxToScreen,
   proximityFromScreenRect,
   screenSpaceDims,
+  parseGroundingBox,
+  groundingIsXYXY,
   type RawDetection,
 } from '@/adapters/objectDetection';
 
@@ -127,5 +129,47 @@ describe('frameBoxToScreen + proximityFromScreenRect', () => {
   it('screenSpaceDims returns portrait (min,max)', () => {
     expect(screenSpaceDims(1280, 720)).toEqual({ w: 720, h: 1280 });
     expect(screenSpaceDims(720, 1280)).toEqual({ w: 720, h: 1280 });
+  });
+});
+
+describe('parseGroundingBox (cloud grounding, normalized 0–1000, per-model order)', () => {
+  it('groundingIsXYXY is true only for Qwen-style models', () => {
+    expect(groundingIsXYXY('qwen/qwen3-vl-8b-instruct')).toBe(true);
+    expect(groundingIsXYXY('google/gemini-3.5-flash')).toBe(false);
+    expect(groundingIsXYXY('google/gemini-2.5-flash')).toBe(false);
+  });
+
+  // Gemini: normalized 0–1000 [ymin, xmin, ymax, xmax].
+  it('parses a Gemini box (reorders yxyx + /1000)', () => {
+    const box = parseGroundingBox('google/gemini-3.5-flash', [200, 100, 600, 500]);
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeCloseTo(0.1, 5);   // xmin/1000
+    expect(box!.y).toBeCloseTo(0.2, 5);   // ymin/1000
+    expect(box!.width).toBeCloseTo(0.4, 5);  // (xmax-xmin)/1000
+    expect(box!.height).toBeCloseTo(0.4, 5); // (ymax-ymin)/1000
+  });
+
+  // Qwen: normalized 0–1000 [x1, y1, x2, y2] (confirmed on-device — NOT pixels).
+  it('parses a Qwen box (xyxy + /1000)', () => {
+    const box = parseGroundingBox('qwen/qwen3-vl-8b-instruct', [250, 250, 500, 750]);
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeCloseTo(0.25, 5);
+    expect(box!.y).toBeCloseTo(0.25, 5);
+    expect(box!.width).toBeCloseTo(0.25, 5);
+    expect(box!.height).toBeCloseTo(0.5, 5);
+  });
+
+  it('a centered Gemini box yields high proximity', () => {
+    const box = parseGroundingBox('google/gemini-3.5-flash', [200, 200, 800, 800]);
+    expect(box).not.toBeNull();
+    expect(proximityFromBox(box!)).toBeGreaterThan(0.7);
+  });
+
+  it('rejects malformed / out-of-shape boxes', () => {
+    expect(parseGroundingBox('google/gemini-3.5-flash', null)).toBeNull();
+    expect(parseGroundingBox('google/gemini-3.5-flash', [1, 2, 3])).toBeNull();
+    expect(parseGroundingBox('google/gemini-3.5-flash', [1, 2, 3, NaN])).toBeNull();
+    // Degenerate (zero-area) box.
+    expect(parseGroundingBox('google/gemini-3.5-flash', [500, 500, 500, 500])).toBeNull();
   });
 });

@@ -21,6 +21,13 @@ export const COPY = {
     cameraPermission: 'Necesito ver para ayudarte — ¿me dejás usar la cámara?',
     micPermission: '¿Me dejás escucharte?',
     generic: 'Algo se me cruzó — ¿lo intentamos de nuevo?',
+    // Spoken generic-error variants — errorCopyFor picks one at random so the
+    // retry prompt doesn't feel repetitive when errors cluster.
+    genericVariants: [
+      'Algo se me cruzó — ¿lo intentamos de nuevo?',
+      'Uy, se me trabó algo — ¿probamos otra vez?',
+      'Se me complicó por un momento — ¿lo volvemos a intentar?',
+    ],
   },
   buttons: {
     describeLabel: 'Describir',
@@ -71,6 +78,11 @@ export const COPY = {
   // "Guíame a X" guidance flow (FR voseo). `obj` is the noun the user said.
   guide: {
     searching: (obj: string): string => `Buscando ${obj}. Movéme despacio por el lugar.`,
+    // Cloud (online) opening instructions — a DIFFERENT interaction than the
+    // continuous Geiger: point at one area, wait for the buzz (one answer per
+    // area), then move to another area. Spoken on open in cloud mode.
+    searchingCloud: (obj: string): string =>
+      `Buscando ${obj}. Apuntá la cámara a una zona y mantené quieto un momento. Cada vibración es una respuesta de esa zona y te digo dónde lo veo. Movéme despacio a otra zona para seguir buscando.`,
     spotted: 'Creo que lo veo. Movéme despacio.',
     // Truly unsupported object: be warm and point to Describir instead. No noun
     // here — the IntentRouter gives a bare, article-less noun ("termo"), which
@@ -80,6 +92,22 @@ export const COPY = {
     // Approximate match (e.g. "termo" → botella): warn before guiding anyway.
     approxWarning: 'Ese tipo de objeto todavía no lo reconozco del todo, pero voy a hacer lo posible para guiarte.',
     found: '¡Ahí está! Lo tenés enfrente. Tocá la pantalla cuando termines.',
+    // Cloud-only short spoken hint per positive poll: which way to point (from the
+    // box's frame position) + an optional landmark the model reported ("al lado del
+    // termo"). Kept short — it's spoken every ~3s. `near` is model-generated Spanish.
+    locate: (p: { dx: 'left' | 'right' | null; dy: 'up' | 'down' | null; near: string | null }): string => {
+      const parts: string[] = [];
+      if (p.dy === 'up') parts.push('arriba');
+      if (p.dy === 'down') parts.push('abajo');
+      if (p.dx === 'left') parts.push('a la izquierda');
+      if (p.dx === 'right') parts.push('a la derecha');
+      const dir = parts.join(' ');
+      let s = dir
+        ? `¡Ahí está! ${dir.charAt(0).toUpperCase()}${dir.slice(1)}`
+        : '¡Ahí está! Lo tenés enfrente';
+      if (p.near) s += `, ${p.near}`;
+      return `${s}.`;
+    },
     notFound: (obj: string): string => `No encuentro ${obj} por acá. Tocá la pantalla para volver.`,
     // Spoken on a long idle so the search never closes silently on a blind user.
     // After "found": a gentle reminder how to leave; while still searching: a

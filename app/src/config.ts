@@ -81,6 +81,31 @@ export const CONFIG = {
   GUIDE_CHECKIN_IDLE_MS: 60000, // idle (target unseen) this long → spoken check-in
   GUIDE_CHECKIN_TICK_MS: 5000,  // how often we poll the idle clock
 
+  // Cloud "Guide me to it" SPIKE (open-vocab grounding via OpenRouter, Debug-only).
+  // A cloud round-trip is ~1.5–3s, so this drives INTERMITTENT re-localization, not
+  // the per-frame loop: capture a still every POLL_MS, ground it, then fire ONE
+  // discrete haptic pulse per result (guideHaptics.pulseGuide) — so a buzz always
+  // means a fresh result, rather than the continuous beat loop running on its own.
+  GUIDE_CLOUD_POLL_MS: 2500,         // re-localize cadence (one image request per poll)
+  GUIDE_CLOUD_TIMEOUT_MS: 9000,      // per-poll grounding timeout (NO retries — fail fast, next poll is fresh)
+  GUIDE_CLOUD_NOT_FOUND_MS: 40000,   // cloud "no la encuentro" window (polls are slow — give it many tries)
+  GUIDE_CLOUD_MAX_DIM: 512,          // downscale captured frames before upload (smaller = lower latency)
+  GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
+  GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)
+  // Default model: Gemini 2.5 Flash — on-device tests showed it the most accurate
+  // of the candidates at a usable latency (3.5-flash was ~2-3× slower).
+  GUIDE_CLOUD_MODEL_DEFAULT: 'google/gemini-2.5-flash',
+  // Candidate grounding models (Debug picker). All do open-vocab boxes on OpenRouter;
+  // box conventions differ — see groundingIsPixelBox()/parseGroundingBox in
+  // adapters/objectDetection.ts (Gemini = normalized 0–1000 [ymin,xmin,ymax,xmax];
+  // Qwen = absolute pixel [x1,y1,x2,y2]).
+  GUIDE_CLOUD_MODELS: [
+    'google/gemini-3.5-flash',
+    'google/gemini-3.1-flash-lite',
+    'qwen/qwen3-vl-8b-instruct',
+    'google/gemini-2.5-flash',
+  ] as const,
+
   // On-device inference (feat/on-device-models). Default mode flips to 'local'
   // in the final migration step; 450m is the realistic Galaxy A12 VLM size.
   LOCAL_INFERENCE_DEFAULT: 'cloud' as 'local' | 'cloud',
@@ -89,7 +114,7 @@ export const CONFIG = {
   // is a hybrid thinking model that errors in executorch's runner. Swappable via
   // Settings.textModel; ids: llama-3.2-1b | qwen2.5-0.5b | qwen2.5-1.5b | smollm2.1-360m.
   LOCAL_TEXT_MODEL: 'llama-3.2-1b',
-  VLM_MAX_NEW_TOKENS: 256,
+  VLM_MAX_NEW_TOKENS: 128, // runaway guard only — high enough not to truncate a normal answer mid-sentence
   TEXT_LLM_MAX_NEW_TOKENS: 128,
   // Safety cap on a single on-device inference so a slow/hung run fails to a
   // calm error instead of sitting on "Un momento…" forever. Generous because the

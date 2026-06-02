@@ -54,7 +54,9 @@ fast and expected to pass.
 - **Model usage / privacy:** see `docs/design/model-usage.md`. On-device: YOLO26n
   (guide), CLIP (room ID), TTS, STT. Cloud (OpenRouter → Gemini 2.5 Flash):
   Describe/Ask (sends the photo), intent + guide-target resolution (text only).
-- `docs/runbooks/` — dev-build-and-run, eas-secrets, android-sideload, testflight.
+- `docs/runbooks/` — dev-build-and-run, eas-secrets, android-sideload, testflight,
+  **ios-local-build-and-install** (sign + install onto Charly's iPhone from this Mac:
+  ~2-min Hermes JS-only cycle + the full native build, device id, free-provisioning).
 - Decisions & rationale that aren't in code live in the per-session memory
   (`MEMORY.md` index).
 

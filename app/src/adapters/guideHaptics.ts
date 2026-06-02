@@ -30,6 +30,11 @@ let smoothed = 0;      // eased proximity the buzz rate actually follows
 let lastStepAt = 0;    // ms timestamp of the last smoothing step (for real dt)
 let prevInterval = CONFIG.GUIDE_SEARCH_TICK_MS; // for the per-beat slew cap
 let nextBeatAt = 0;    // ms timestamp the next beat is scheduled for (acquire pull-in)
+// Freshness/decay windows. Defaults suit the ~7fps on-device detector; the cloud
+// guide path runs them MUCH longer (polls are ~2.5s apart) so proximity rides
+// between updates instead of collapsing to the searching tick. Set by startGuide.
+let freshMs = CONFIG.GUIDE_FRESH_MS;
+let decayMs = CONFIG.GUIDE_DECAY_MS;
 
 const SEARCH_EPS = 0.03; // below this eased proximity → "searching" tick/feel
 
@@ -56,10 +61,10 @@ function intervalMs(p: number): number {
 function decayedLevel(): number {
   if (lastSeenAt <= 0) return 0;
   const ageMs = now() - lastSeenAt;
-  if (ageMs <= CONFIG.GUIDE_FRESH_MS) return rawTarget;
-  const over = ageMs - CONFIG.GUIDE_FRESH_MS;
-  if (over >= CONFIG.GUIDE_DECAY_MS) return 0;
-  return rawTarget * (1 - over / CONFIG.GUIDE_DECAY_MS);
+  if (ageMs <= freshMs) return rawTarget;
+  const over = ageMs - freshMs;
+  if (over >= decayMs) return 0;
+  return rawTarget * (1 - over / decayMs);
 }
 
 // Steady clock: ease `smoothed` toward the decayed level with an FPS-independent
@@ -96,13 +101,19 @@ function beat(): void {
   beatTimer = setTimeout(beat, interval);
 }
 
-/** Begin the loop. Starts in "searching" until updateGuide() reports a detection. */
-export function startGuide(): void {
+/**
+ * Begin the loop. Starts in "searching" until updateGuide() reports a detection.
+ * `opts.freshMs/decayMs` widen the freshness/decay windows for the slow cloud
+ * cadence; omit them for the on-device detector (uses the CONFIG defaults).
+ */
+export function startGuide(opts?: { freshMs?: number; decayMs?: number }): void {
   if (running) return;
   running = true;
   rawTarget = 0;
   lastSeenAt = 0;
   smoothed = 0;
+  freshMs = opts?.freshMs ?? CONFIG.GUIDE_FRESH_MS;
+  decayMs = opts?.decayMs ?? CONFIG.GUIDE_DECAY_MS;
   prevInterval = CONFIG.GUIDE_SEARCH_TICK_MS;
   nextBeatAt = 0;
   lastStepAt = now();
@@ -122,7 +133,7 @@ export function updateGuide(p: number | null): void {
   const t = now();
   // Re-seed the filter after a full loss so stale velocity doesn't kick the
   // re-acquired value around.
-  if (lastSeenAt > 0 && t - lastSeenAt > CONFIG.GUIDE_FRESH_MS + CONFIG.GUIDE_DECAY_MS) {
+  if (lastSeenAt > 0 && t - lastSeenAt > freshMs + decayMs) {
     prox.reset();
   }
   rawTarget = clamp01(prox.filter(clamp01(p), t));
@@ -146,9 +157,35 @@ export function stopGuide(): void {
   rawTarget = 0;
   lastSeenAt = 0;
   smoothed = 0;
+  freshMs = CONFIG.GUIDE_FRESH_MS;
+  decayMs = CONFIG.GUIDE_DECAY_MS;
   prevInterval = CONFIG.GUIDE_SEARCH_TICK_MS;
   nextBeatAt = 0;
   prox.reset();
+}
+
+/**
+ * Discrete one-shot pulse for the CLOUD guide — fired exactly when a poll result
+ * arrives (every ~2.5s), instead of the continuous beat loop. One buzz = one fresh
+ * result. We do NOT encode proximity in the pulse: the magnitude tiers were
+ * imperceptible (esp. on a weak Android motor), and the spoken "where" cue carries
+ * direction anyway. So it's a hard binary contrast:
+ *   • FOUND  → a strong, unmistakable triple-Heavy BURST (count/rate reads clearly
+ *              even when amplitude doesn't).
+ *   • miss   → a single faint tick.
+ * @param proximity null = not found this poll; any number = found (magnitude unused).
+ */
+export function pulseGuide(proximity: number | null): void {
+  try {
+    if (proximity === null) {
+      void Haptics.selectionAsync(); // checked, nothing found — a faint tick
+      return;
+    }
+    // Found — a strong triple-Heavy burst, clearly distinct from the faint miss tick.
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(() => { try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch { /* ignore */ } }, 90);
+    setTimeout(() => { try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch { /* ignore */ } }, 180);
+  } catch { /* haptics must never throw */ }
 }
 
 /** Test seam — leave the module clean between tests. */

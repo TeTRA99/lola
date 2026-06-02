@@ -2,25 +2,27 @@ import { errorCopyFor, isLowConfidenceResponse, type ErrorKind } from '../errorC
 import { COPY } from '../CopyModule';
 
 describe('errorCopyFor', () => {
-  const cases: Array<[ErrorKind, string]> = [
+  // Specific kinds map to a single exact line.
+  const exactCases: Array<[ErrorKind, string]> = [
     ['low_confidence', COPY.errors.lowConfidence],
     ['network', COPY.errors.noNetwork],
     ['permission_denied_camera', COPY.errors.cameraPermission],
     ['permission_denied_mic', COPY.errors.micPermission],
-    ['parse_fail', COPY.errors.generic],
-    ['no_camera', COPY.errors.generic],
-    ['no_speech', COPY.errors.generic],
-    ['timeout', COPY.errors.generic],
-    ['no_locale', COPY.errors.generic],
-    ['engine_unavailable', COPY.errors.generic],
-    ['auth', COPY.errors.generic],
-    ['rate_limit', COPY.errors.generic],
-    ['unknown', COPY.errors.generic],
   ];
-
-  for (const [kind, expected] of cases) {
-    test(`${kind} → ${expected.slice(0, 30)}...`, () => {
+  for (const [kind, expected] of exactCases) {
+    test(`${kind} → exact copy`, () => {
       expect(errorCopyFor(kind)).toBe(expected);
+    });
+  }
+
+  // Generic kinds rotate randomly through genericVariants — assert membership.
+  const genericKinds: ErrorKind[] = [
+    'parse_fail', 'no_camera', 'no_speech', 'timeout', 'no_locale',
+    'engine_unavailable', 'auth', 'rate_limit', 'unknown',
+  ];
+  for (const kind of genericKinds) {
+    test(`${kind} → one of the generic variants`, () => {
+      expect(COPY.errors.genericVariants).toContain(errorCopyFor(kind));
     });
   }
 });

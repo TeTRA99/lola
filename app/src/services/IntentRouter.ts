@@ -24,8 +24,10 @@ REGLA IMPORTANTE: si te paso un bloque "[CONTEXTO RECIENTE: ...]" con tu última
 
 Si no hay contexto o el sustantivo no aparece en él, default a needsCurrent=true.
 
+OBJETOS GUARDADOS: si te paso un bloque "[OBJETOS GUARDADOS: ...]" y el usuario se refiere a uno de ELLOS como suyo (con posesivo "mi/mis/la mía/el mío", o por su nombre), poné el NOMBRE EXACTO de esa lista en "savedObject". Sirve tanto para describirlo ("describime mi yerba") como para distinguirlo entre varios ("¿cuál de estas es mi yerba?"). Si no se refiere a ninguno de la lista, savedObject = null.
+
 Respondé SOLO con un objeto JSON de esta forma exacta:
-{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null }
+{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null, "savedObject": "<nombre exacto de la lista de objetos guardados o null>" }
 
 Ejemplos:
 - "¿dónde estoy?" → { "intent": "where_am_i", "noun": null, "needsCurrent": null, "chitchatKind": null }
@@ -54,18 +56,24 @@ Ejemplos:
 - "de qué color era la bolsa" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
 - "qué dice la etiqueta de las papas" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
 - "cuántas papas hay en la bolsa" → { "intent": "model", "noun": null, "needsCurrent": false, "chitchatKind": null }
-- "estoy buscando unas papas" → { "intent": "memory", "noun": "papas", "needsCurrent": null, "chitchatKind": null }`;
+- "estoy buscando unas papas" → { "intent": "memory", "noun": "papas", "needsCurrent": null, "chitchatKind": null }
+- (con [OBJETOS GUARDADOS: Mi yerba]) "¿cuál de estas es mi yerba?" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
+- (con [OBJETOS GUARDADOS: Mi yerba]) "describime mi yerba" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }`;
 
 type IntentRaw = {
   intent?: string;
   noun?: string | null;
   needsCurrent?: boolean | null;
   chitchatKind?: string | null;
+  savedObject?: string | null;
 };
 
 const VALID_CHITCHAT_KINDS = ['thanks', 'greeting', 'goodbye', 'affirm', 'other'] as const;
 
-export async function classifyIntent(utterance: string): Promise<RouteDecision> {
+export async function classifyIntent(
+  utterance: string,
+  catalogNames: string[] = [],
+): Promise<RouteDecision> {
   console.log('[intent] classifying:', utterance);
   // Inject the last describe/ask narration as recent context so needsCurrent
   // can be decided with knowledge of what was already in the scene.
@@ -73,9 +81,14 @@ export async function classifyIntent(utterance: string): Promise<RouteDecision> 
   const contextBlock = latest?.narration
     ? `\n\n[CONTEXTO RECIENTE: hace unos segundos describiste: "${latest.narration}"]`
     : '';
+  // The user's saved objects, so the LLM can flag when a question is about one
+  // of THEM ("mi yerba") — drives reference-photo attachment downstream.
+  const savedBlock = catalogNames.length
+    ? `\n\n[OBJETOS GUARDADOS: ${catalogNames.join(', ')}]`
+    : '';
   const resp = await chatJson<IntentRaw>({
     systemPrompt: INTENT_SYSTEM_PROMPT,
-    userText: utterance + contextBlock,
+    userText: utterance + contextBlock + savedBlock,
   });
   if (!resp.ok) {
     console.log('[intent] classifier FAILED with:', resp.error, '— defaulting to model route');
@@ -86,7 +99,13 @@ export async function classifyIntent(utterance: string): Promise<RouteDecision> 
   const raw = resp.value;
   const intent = typeof raw.intent === 'string' ? raw.intent : null;
   const needsCurrent = raw.needsCurrent === true;
-  console.log('[intent] classified as:', intent, 'noun:', raw.noun, 'needsCurrent:', needsCurrent, 'chitchatKind:', raw.chitchatKind);
+  // Accept savedObject only if it's actually one of the catalog names (guard the
+  // model output): match case-insensitively, return the canonical catalog spelling.
+  const savedObject =
+    typeof raw.savedObject === 'string' && raw.savedObject.trim()
+      ? catalogNames.find(n => n.toLowerCase() === raw.savedObject!.trim().toLowerCase()) ?? null
+      : null;
+  console.log('[intent] classified as:', intent, 'noun:', raw.noun, 'needsCurrent:', needsCurrent, 'savedObject:', savedObject);
 
   switch (intent) {
     case 'where_am_i':
@@ -105,14 +124,14 @@ export async function classifyIntent(utterance: string): Promise<RouteDecision> 
       if (typeof raw.noun === 'string' && raw.noun.trim()) {
         return { type: 'memory', object: raw.noun.trim() };
       }
-      return { type: 'model', needsCurrent };
+      return { type: 'model', needsCurrent, savedObject };
     case 'guide':
       if (typeof raw.noun === 'string' && raw.noun.trim()) {
         return { type: 'guide', object: raw.noun.trim() };
       }
-      return { type: 'model', needsCurrent };
+      return { type: 'model', needsCurrent, savedObject };
     case 'model':
     default:
-      return { type: 'model', needsCurrent };
+      return { type: 'model', needsCurrent, savedObject };
   }
 }

@@ -9,6 +9,9 @@ export type RouteDecision =
   | { type: 'extend' }
   | { type: 'memory'; object: string }
   | { type: 'guide'; object: string }
-  | { type: 'model'; needsCurrent?: boolean }
+  // savedObject: the display name of a catalogued personal object the question
+  // is about ("mi yerba" → "Mi yerba"), or null. Set → AskService attaches that
+  // object's reference photo so the model can identify/describe THE user's one.
+  | { type: 'model'; needsCurrent?: boolean; savedObject?: string | null }
   | { type: 'chitchat'; kind: ChitchatKind }
   | { type: 'where_am_i' };

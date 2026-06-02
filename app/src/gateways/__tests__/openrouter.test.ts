@@ -1,7 +1,7 @@
 // Mock fetch + inject the API key so the gateway accepts the request path.
 process.env.EXPO_PUBLIC_OPENROUTER_API_KEY = 'sk-or-v1-test-fake';
 
-import { chat } from '../openrouter';
+import { chat, groundObject } from '../openrouter';
 import { buildSystemPrompt } from '@/prompts/lola';
 
 const mockFetch = jest.fn();
@@ -160,6 +160,81 @@ describe('openrouter.chat', () => {
     });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.model).toBe('google/gemini-2.5-flash-lite');
+  });
+});
+
+describe('openrouter.groundObject (cloud guide spike)', () => {
+  test('happy path returns the raw box + found + confidence + near', async () => {
+    const payload = JSON.stringify({ found: true, box: [200, 100, 600, 500], confidence: 0.82, near: 'al lado del termo' });
+    mockFetch.mockReturnValue(mockResponse(200, mockOpenRouterChoice(payload)));
+
+    const r = await groundObject({ query: 'el auricular', frameBase64: 'FRAME', model: 'google/gemini-3.5-flash' });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.found).toBe(true);
+      expect(r.value.box).toEqual([200, 100, 600, 500]);
+      expect(r.value.confidence).toBeCloseTo(0.82, 5);
+      expect(r.value.near).toBe('al lado del termo');
+    }
+  });
+
+  test('found:false (no box) returns found=false', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({ found: false, box: null, confidence: 0 }))),
+    );
+    const r = await groundObject({ query: 'el lápiz', frameBase64: 'F', model: 'google/gemini-3.5-flash' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.found).toBe(false);
+      expect(r.value.box).toBeNull();
+    }
+  });
+
+  test('found:true but malformed box → found=false (box rejected)', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({ found: true, box: [1, 2, 3], confidence: 0.5 }))),
+    );
+    const r = await groundObject({ query: 'x', frameBase64: 'F', model: 'google/gemini-3.5-flash' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.found).toBe(false);
+  });
+
+  test('uses the requested model and sends only the frame when no reference', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({ found: false, box: null, confidence: 0 }))),
+    );
+    await groundObject({ query: 'el mate', frameBase64: 'FRAME64', model: 'qwen/qwen3-vl-8b-instruct' });
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.model).toBe('qwen/qwen3-vl-8b-instruct');
+    // one text part + one image part (the scene frame).
+    const imageParts = body.messages[1].content.filter((c: { type: string }) => c.type === 'image_url');
+    expect(imageParts).toHaveLength(1);
+    expect(imageParts[0].image_url.url).toBe('data:image/jpeg;base64,FRAME64');
+    // Qwen gets a normalized 0–1000 instruction in [x1,y1,x2,y2] order.
+    expect(body.messages[0].content).toContain('normalized coordinates from 0 to 1000');
+    expect(body.messages[0].content).toContain('x1, y1, x2, y2');
+  });
+
+  test('reference targeting sends ref first, then the scene frame', async () => {
+    mockFetch.mockReturnValue(
+      mockResponse(200, mockOpenRouterChoice(JSON.stringify({ found: false, box: null, confidence: 0 }))),
+    );
+    await groundObject({ query: 'el auricular', frameBase64: 'SCENE', refBase64: 'REF', model: 'google/gemini-3.5-flash' });
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const imageParts = body.messages[1].content.filter((c: { type: string }) => c.type === 'image_url');
+    expect(imageParts).toHaveLength(2);
+    expect(imageParts[0].image_url.url).toBe('data:image/jpeg;base64,REF');   // reference first
+    expect(imageParts[1].image_url.url).toBe('data:image/jpeg;base64,SCENE'); // scene second
+    // Gemini gets a normalized-coordinate instruction.
+    expect(body.messages[0].content).toContain('normalized coordinates from 0 to 1000');
+  });
+
+  test('auth error bubbles up', async () => {
+    mockFetch.mockReturnValue(mockResponse(401, {}));
+    const r = await groundObject({ query: 'x', frameBase64: 'F', model: 'google/gemini-3.5-flash' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('auth');
   });
 });
 

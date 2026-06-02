@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { COPY } from '@/services';
+import { errorCopyFor } from '@/services/errorCopy';
 import * as DescribeService from '@/services/DescribeService';
 import * as AskService from '@/services/AskService';
 import { CameraHost } from '@/adapters/CameraHost';
@@ -49,6 +50,7 @@ import { DetectionPrepBanner } from '@/components/DetectionPrepBanner';
 import { presetForLevel, currentDetectionLevel, isModelDownloaded } from '@/adapters/detectionPresets';
 import { inferenceMode } from '@/services/ModelRouter';
 import * as VlmAdapter from '@/adapters/visionLLM';
+import { CONFIG } from '@/config';
 import { color, fontFamily } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 
@@ -70,7 +72,7 @@ export function HomeScreen({
 }: {
   onOpenSettings?: () => void;
   onDevDebug?: () => void;
-  onOpenGuide?: (target: { cocoLabel: string; spoken: string }) => void;
+  onOpenGuide?: (target: { cocoLabel: string | null; spoken: string; cloudQuery?: string; refImageUri?: string | null }) => void;
 }) {
   const [mode, setMode] = useState<Mode>('describe');
   const [state, setState] = useState<HomeState>('idle');
@@ -110,6 +112,19 @@ export function HomeScreen({
     setShowWelcome(false);
     void Settings.setBool(Settings.KEYS.welcomeSeen, true);
   };
+
+  // Dev-only: surface which cloud-guide model the spike is using (only when the
+  // guide backend is set to cloud in Debug). Never shown in the end-user build.
+  const [devGuideLabel, setDevGuideLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!onDevDebug) return;
+    void (async () => {
+      const backend = await Settings.getString(Settings.KEYS.guideBackend, 'device');
+      if (backend !== 'cloud') { setDevGuideLabel(null); return; }
+      const model = await Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
+      setDevGuideLabel(`cloud · ${model.replace(/^.*\//, '')}`);
+    })();
+  }, [onDevDebug]);
 
   // Tap anywhere while Lola is listening/thinking/speaking → stop her and
   // return to idle. (Re-tap a panel to start fresh.)
@@ -228,14 +243,22 @@ export function HomeScreen({
       } else {
         console.log('[home] run returned error:', res.error);
         const perm = res.error === 'permission_denied' || res.error === 'permission_denied_mic';
-        setErrKind(perm ? 'perm' : 'camera');
-        setState('error');
+        if (perm) {
+          // Permission denial keeps its actionable recovery screen ("Abrir ajustes").
+          setErrKind('perm');
+          setState('error');
+        } else {
+          // Other errors: the service already SPOKE the error line, so the
+          // full-screen error is redundant — return straight to the menu.
+          setState('idle');
+        }
       }
     } catch (e) {
       console.log('[home] run THREW:', e);
       if (cancelledRef.current) return;
-      setErrKind('camera');
-      setState('error');
+      // Unexpected throw — the service may not have spoken; say a generic line, then idle.
+      await speak(errorCopyFor('unknown'));
+      setState('idle');
     }
   };
 
@@ -335,6 +358,10 @@ export function HomeScreen({
         </View>
       </Animated.View>
 
+      {/* Dev-only: active cloud-guide model, placed UNDER the title so a long name
+          doesn't crowd the top-bar icons. */}
+      {devGuideLabel && <Text style={styles.devGuideLabel}>{devGuideLabel}</Text>}
+
       <Card
         dark={false}
         action="describe"
@@ -378,7 +405,9 @@ function Card({
   active: boolean;
   onPress: () => void;
 }) {
-  const baseFlex = dark ? 0.92 : 1.32;
+  // iOS has no system nav bar eating the bottom, so we use that space: a taller
+  // Describir and (via the root's smaller bottom padding) both cards sit lower.
+  const baseFlex = dark ? 0.92 : (Platform.OS === 'ios' ? 1.62 : 1.32);
   const flex = useRef(new Animated.Value(baseFlex)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const dimmed = running && !active;
@@ -594,7 +623,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.neutral.sunken,
     paddingHorizontal: 16,
     paddingTop: TOP_INSET,
-    paddingBottom: BOTTOM_INSET + 20,
+    // iOS: cards sit lower than Android (no system nav bar) but clear of the home
+    // indicator — BOTTOM_INSET is that safe area. Android keeps nav-bar clearance.
+    paddingBottom: Platform.OS === 'ios' ? BOTTOM_INSET : BOTTOM_INSET + 20,
   },
   topBar: {
     height: 46, marginVertical: 10,
@@ -604,6 +635,7 @@ const styles = StyleSheet.create({
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  devGuideLabel: { color: color.text.low, fontSize: 11, fontFamily: fontFamily.medium, marginTop: -4, marginBottom: 6 },
 
   cardWrap: { borderRadius: 34, minHeight: 190 },
   cardWrapLight: { backgroundColor: color.dad.describeBg, ...cardShadowLight },
