@@ -132,7 +132,10 @@ export default function App() {
           either way Done returns to Dad's Home (see closeSetup). */}
       {screen === 'setup' && <SetupScreen onClose={closeSetup} />}
       {screen === 'debug' && (
-        <DebugScreen onClose={() => setScreen('home')} onOpenGuide={() => setScreen('guide')} />
+        <DebugScreen
+          onClose={() => setScreen('home')}
+          onOpenGuide={(t) => { setGuideTarget(t ?? null); setScreen('guide'); }}
+        />
       )}
       {screen === 'guide' && (
         <ErrorBoundary

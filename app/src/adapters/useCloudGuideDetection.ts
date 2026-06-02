@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONFIG } from '@/config';
 import * as Settings from '@/services/Settings';
 import * as ModelRouter from '@/services/ModelRouter';
-import { parseGroundingBox, proximityFromBox } from '@/adapters/objectDetection';
+import { parseGroundingBox, proximityFromBox, type NormBox } from '@/adapters/objectDetection';
 import { recordGuideTrace } from '@/adapters/guideTrace';
 
 /** A captured frame ready to upload — base64 JPEG + its pixel dimensions. */
@@ -24,6 +24,9 @@ export type CloudGuideState = {
   lastLatencyMs: number | null;
   lastError: string | null;
   lastFound: boolean;
+  // Latest normalized box (for the dev preview overlay) + its confidence.
+  lastBox: NormBox | null;
+  lastConfidence: number;
 };
 
 export function useCloudGuideDetection(opts: {
@@ -44,6 +47,7 @@ export function useCloudGuideDetection(opts: {
   );
   const [state, setState] = useState<CloudGuideState>({
     model, polls: 0, lastLatencyMs: null, lastError: null, lastFound: false,
+    lastBox: null, lastConfidence: 0,
   });
 
   // Keep the latest callbacks/inputs in refs so the polling effect can stay
@@ -88,7 +92,7 @@ export function useCloudGuideDetection(opts: {
                 at: t0, query: queryRef.current, model, found: !!box,
                 box: res.value.box, confidence: res.value.confidence, latencyMs, error: null,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence }));
             } else {
               onProxRef.current(null);
               const error = res.ok ? null : res.error;
@@ -97,7 +101,7 @@ export function useCloudGuideDetection(opts: {
                 box: res.ok ? res.value.box : null, confidence: res.ok ? res.value.confidence : 0,
                 latencyMs, error,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null }));
             }
           } else if (!cancelled) {
             onProxRef.current(null);

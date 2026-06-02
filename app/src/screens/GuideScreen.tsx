@@ -84,6 +84,9 @@ export function GuideScreen({
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
   const blind = guiding;
+  // Dev builds (SHOW_DEV_TOOLS): show the cloud camera + box instead of the blind
+  // overlay so we can see what the model sees/finds. Never on in production.
+  const devPreview = cloud && CONFIG.SHOW_DEV_TOOLS;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const handleExit = useCallback(() => onCloseRef.current(), []);
@@ -259,6 +262,7 @@ export function GuideScreen({
           query={cloudQuery as string}
           refImageUri={refImageUri}
           active={appActive}
+          debug={devPreview}
           onProximity={applyProximity}
           onModelState={setModel}
         />
@@ -277,7 +281,12 @@ export function GuideScreen({
         <MockLayer device={device} hasPermission={hasPermission} active={appActive} onProximity={applyProximity} />
       )}
 
-      {blind ? (
+      {blind && devPreview ? (
+        // Dev cloud preview: camera + box shown by CloudGuideLayer; just an exit.
+        <Pressable style={styles.close} onPress={handleExit} hitSlop={16}>
+          <Text style={styles.closeText}>Close</Text>
+        </Pressable>
+      ) : blind ? (
         // Real (blind) flow: branded screen over the hidden camera, tap to exit.
         <BlindOverlay targetLabel={targetLabel} status={status} onExit={handleExit} />
       ) : (
@@ -359,15 +368,20 @@ function CloudGuideLayer({
   query,
   refImageUri,
   active,
+  debug = false,
   onProximity,
   onModelState,
 }: {
   query: string;
   refImageUri: string | null;
   active: boolean;
+  // Dev builds: show the camera preview + the latest box + a status banner so we
+  // can SEE what the model is looking at and finding (the real flow hides all of it).
+  debug?: boolean;
   onProximity: (p: number | null) => void;
   onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
 }) {
+  const { width, height } = useWindowDimensions();
   const camRef = useRef<CameraView>(null);
   const [perm, setPerm] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const [ready, setReady] = useState(false); // camera stream is live
@@ -431,7 +445,7 @@ function CloudGuideLayer({
     }
   }, [ready]);
 
-  useCloudGuideDetection({
+  const cg = useCloudGuideDetection({
     query,
     refBase64,
     active: active && perm === 'granted' && ready,
@@ -440,15 +454,44 @@ function CloudGuideLayer({
   });
 
   if (perm !== 'granted') return <CamFallback hasPermission={perm !== 'denied'} />;
+
+  // Dev preview: the box is normalized to the captured (upright) frame; the preview
+  // is 'cover'-fit, so this is approximate but enough to see what's being found.
+  const b = cg.lastBox;
   return (
-    <CameraView
-      ref={camRef}
-      style={StyleSheet.absoluteFill}
-      facing="back"
-      active={active}
-      onCameraReady={() => setReady(true)}
-      onMountError={(e) => { console.log('[guide-cloud] mount error:', e); setReady(false); }}
-    />
+    <>
+      <CameraView
+        ref={camRef}
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        active={active}
+        onCameraReady={() => setReady(true)}
+        onMountError={(e) => { console.log('[guide-cloud] mount error:', e); setReady(false); }}
+      />
+      {debug && (
+        <>
+          {b && (
+            <View
+              style={[styles.detBoxActive, {
+                left: b.x * width, top: b.y * height, width: b.width * width, height: b.height * height,
+              }]}
+            >
+              <Text style={[styles.detLabel, styles.detLabelActive]}>
+                {query} {Math.round(cg.lastConfidence * 100)}%
+              </Text>
+            </View>
+          )}
+          <View style={[styles.reticle, { left: width / 2 - 30, top: height / 2 - 30 }]} />
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              {cg.model.replace(/^.*\//, '')} · "{query}"{refBase64 ? ' +ref' : ''} · poll {cg.polls}
+              {cg.lastLatencyMs != null ? ` · ${cg.lastLatencyMs}ms` : ''}
+              {cg.lastError ? ` · ERR ${cg.lastError}` : cg.lastFound ? ' · FOUND' : ' · …'}
+            </Text>
+          </View>
+        </>
+      )}
+    </>
   );
 }
 

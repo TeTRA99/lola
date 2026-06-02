@@ -2,7 +2,7 @@
 // Charly-only. English UI (Charly tool). Surfaces local usage_events per AD-6.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { getDb } from '@/adapters/storage';
 import * as Settings from '@/services/Settings';
@@ -32,7 +32,10 @@ const ONBOARDING_KEYS = [
   Settings.KEYS.caregiverIntroSeen,
 ];
 
-export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onOpenGuide?: () => void }) {
+export function DebugScreen({ onClose, onOpenGuide }: {
+  onClose: () => void;
+  onOpenGuide?: (target?: { cocoLabel: string | null; spoken: string; cloudQuery?: string; refImageUri?: string | null }) => void;
+}) {
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [exportNote, setExportNote] = useState<string | null>(null);
   const [traces, setTraces] = useState<AskTrace[]>(() => getAskTraces());
@@ -50,6 +53,7 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
   const [guideTargeting, setGuideTargeting] = useState<'text' | 'reference'>('text');
   const [guideModel, setGuideModel] = useState<string>(CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
   const [guideTraces, setGuideTraces] = useState<GuideTrace[]>(() => getGuideTraces());
+  const [testQuery, setTestQuery] = useState('una taza');
 
   useEffect(() => {
     void Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT)
@@ -156,10 +160,21 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
         </Pressable>
       </View>
 
-      {/* feat/guide-me-to-it spike entry (dev-only). */}
+      {/* feat/guide-me-to-it spike entry (dev-only). In cloud-backend mode it opens
+          the cloud guide with the test query below + a visible camera/box preview;
+          otherwise it opens the on-device mock/live spike. */}
       {onOpenGuide ? (
-        <Pressable style={styles.guideBtn} onPress={onOpenGuide}>
-          <Text style={styles.guideBtnText}>🎯 Open "Guide me to it" spike</Text>
+        <Pressable
+          style={styles.guideBtn}
+          onPress={() => onOpenGuide(
+            guideBackend === 'cloud'
+              ? { cocoLabel: null, spoken: testQuery.trim() || 'una taza', cloudQuery: testQuery.trim() || 'una taza' }
+              : undefined,
+          )}
+        >
+          <Text style={styles.guideBtnText}>
+            🎯 Open "Guide me to it" spike{guideBackend === 'cloud' ? ` (cloud · "${testQuery.trim() || 'una taza'}")` : ''}
+          </Text>
         </Pressable>
       ) : null}
 
@@ -223,6 +238,20 @@ export function DebugScreen({ onClose, onOpenGuide }: { onClose: () => void; onO
             <Text style={[styles.modelText, guideModel === m && styles.modelTextActive]}>{m}</Text>
           </Pressable>
         ))}
+
+        <Text style={styles.segLabel}>Spike test query (🎯 button, cloud)</Text>
+        <TextInput
+          style={styles.queryInput}
+          value={testQuery}
+          onChangeText={setTestQuery}
+          placeholder="una taza"
+          placeholderTextColor="#666"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Text style={styles.panelText}>
+          Opens the spike with a live camera + box overlay so you can SEE what the model finds.
+        </Text>
       </View>
 
       {/* Cloud grounding traces — raw box + latency per poll (diagnose accuracy). */}
@@ -412,6 +441,11 @@ const styles = StyleSheet.create({
   modelRowActive: { backgroundColor: '#1A73E8' },
   modelText: { color: '#aaa', fontSize: 12, fontFamily: 'monospace' },
   modelTextActive: { color: '#fff', fontWeight: '700' },
+  queryInput: {
+    backgroundColor: '#222', color: '#fff', fontSize: 14, borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 9, marginBottom: 6,
+    borderWidth: 1, borderColor: '#444',
+  },
   activeLine: { color: '#7fd', fontSize: 13, fontWeight: '700', marginTop: 2, marginBottom: 4 },
   content: { padding: 16, paddingTop: TOP_INSET + 16, paddingBottom: 64 },
   header: {
