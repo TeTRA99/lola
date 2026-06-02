@@ -19,6 +19,7 @@ import { applyCatalogNarration } from '@/services/CatalogResolver';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
 import * as Settings from '@/services/Settings';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as MemoryService from '@/services/MemoryService';
 import * as RoomCatalog from '@/services/RoomCatalog';
 import { ok, err, type Result } from '@/utils/result';
@@ -52,6 +53,19 @@ export type AskOutcome = {
 async function loadCatalogSafe() {
   try { return await OnboardingService.getCatalog(); }
   catch { return null; }
+}
+
+// Downscale a saved reference photo to base64 for the model call (token cost).
+async function loadRefBase64(uri: string): Promise<string | null> {
+  try {
+    const out = await manipulateAsync(uri, [{ resize: { width: 768 } }], {
+      compress: 0.7, format: SaveFormat.JPEG, base64: true,
+    });
+    return out.base64 ?? null;
+  } catch (e) {
+    console.log('[ask] ref photo load failed:', e);
+    return null;
+  }
 }
 
 async function logEvent(
@@ -100,7 +114,10 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   console.log('[ask] STT OK, utterance:', sttResult.value);
 
   const utterance = sttResult.value;
-  const decision = await classifyIntent(utterance);
+  // Pass saved-object names so the classifier can flag a question about one of
+  // THE user's things ("mi yerba") → we attach its reference photo below.
+  const catalog = await loadCatalogSafe();
+  const decision = await classifyIntent(utterance, (catalog ?? []).map(o => o.display_name));
   console.log('[ask] routed to:', decision.type);
   recordAskTrace({ at: now(), utterance, route: describeRoute(decision) });
 
@@ -145,6 +162,16 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
     case 'guide':
       return handleGuide(decision.object, t0);
     case 'model': {
+      // Reference-conditioned Ask: if the question is about a SAVED object
+      // ("¿cuál es mi yerba?" / "describime mi yerba"), attach that object's
+      // reference photo so the model can identify/describe THE user's one rather
+      // than reciting the catalog text. Re-derives the live path (reinstall-proof).
+      let ref: { base64: string; name: string } | null = null;
+      if (decision.savedObject) {
+        const uri = await OnboardingService.referencePhotoFor(decision.savedObject);
+        const b64 = uri ? await loadRefBase64(uri) : null;
+        if (b64) ref = { base64: b64, name: decision.savedObject };
+      }
       // If the question is about something already in cache (needsCurrent=false)
       // and we have a cached snapshot, skip the fresh capture — the user may
       // not even be looking at the original scene anymore.
@@ -152,11 +179,11 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       const cachedB64 = latest?.uri ? SnapshotCache.readBase64(latest.uri) : null;
       if (decision.needsCurrent === false && cachedB64) {
         console.log('[ask] needsCurrent=false → skipping fresh snapshot, using cached only');
-        return handleModel(cachedB64, utterance, t0, { skipFreshCapture: true, imageUri: latest?.uri });
+        return handleModel(cachedB64, utterance, t0, { skipFreshCapture: true, imageUri: latest?.uri, ref });
       }
       const s = await ensureSnapshot();
       if (!s.ok) return s;
-      return handleModel(s.value.base64, utterance, t0, { imageUri: s.value.uri });
+      return handleModel(s.value.base64, utterance, t0, { imageUri: s.value.uri, ref });
     }
   }
 }
@@ -366,7 +393,7 @@ async function handleModel(
   imageBase64: string,
   userText: string,
   t0: number,
-  opts: { skipFreshCapture?: boolean; imageUri?: string } = {},
+  opts: { skipFreshCapture?: boolean; imageUri?: string; ref?: { base64: string; name: string } | null } = {},
 ): Promise<Result<AskOutcome, AskError>> {
   fire('thinking_start');
   const catalog = await loadCatalogSafe();
@@ -379,12 +406,22 @@ async function handleModel(
   const prevBase64 = !opts.skipFreshCapture && latest?.uri
     ? SnapshotCache.readBase64(latest.uri)
     : null;
-  const images = prevBase64 ? [prevBase64, imageBase64] : [imageBase64];
-  console.log('[ask] handleModel images count:', images.length, 'skipFresh:', !!opts.skipFreshCapture);
+  // Reference-conditioned: image 1 = the saved object's reference photo, image 2 =
+  // the current scene (skip the prior-scene frame to keep the comparison clean).
+  // The addendum tells the model to identify/describe the user's specific object.
+  let images: string[];
+  let refLine = '';
+  if (opts.ref) {
+    images = [opts.ref.base64, imageBase64];
+    refLine = `\n\n[La imagen 1 es la foto de referencia del objeto guardado del usuario, «${opts.ref.name}». La imagen 2 es la escena actual. Si el usuario pregunta cuál de los objetos de la escena es su «${opts.ref.name}», comparalo con la referencia y decí cuál es y dónde está. Si te pide que se lo describas, describilo a partir de la referencia.]`;
+  } else {
+    images = prevBase64 ? [prevBase64, imageBase64] : [imageBase64];
+  }
+  console.log('[ask] handleModel images count:', images.length, 'ref:', !!opts.ref, 'skipFresh:', !!opts.skipFreshCapture);
 
   const resp = await chat({
     systemPrompt: buildSystemPrompt(catalog),
-    userText: userText + buildContextLine(prevNarration),
+    userText: userText + buildContextLine(prevNarration) + refLine,
     imagesBase64: images,
     // On-device VLM uses a single current frame (it can't do the cloud's
     // prior+current two-image trick); the text context line carries continuity.
