@@ -19,6 +19,7 @@ import { applyCatalogNarration } from '@/services/CatalogResolver';
 import * as OnboardingService from '@/services/OnboardingService';
 import * as SnapshotCache from '@/services/SnapshotCache';
 import * as Settings from '@/services/Settings';
+import { CONFIG } from '@/config';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as MemoryService from '@/services/MemoryService';
 import * as RoomCatalog from '@/services/RoomCatalog';
@@ -197,7 +198,11 @@ async function handleGuide(noun: string, t0: number): Promise<Result<AskOutcome,
   // Cloud spike (Debug-only): the open-vocab grounding model can find arbitrary
   // objects, so we DON'T need a COCO match — bypass the unsupported gate and
   // guide on the raw noun. Independent of the production inferenceMode toggle.
-  const cloud = (await Settings.getString(Settings.KEYS.guideBackend, 'device')) === 'cloud';
+  // Cloud guide is a Debug-only spike — only honor the backend toggle in dev builds.
+  // In production (SHOW_DEV_TOOLS=false) the guide is ALWAYS on-device, so a stale
+  // 'cloud' toggle (set while testing) can't strand the prod guide online.
+  const cloud = CONFIG.SHOW_DEV_TOOLS
+    && (await Settings.getString(Settings.KEYS.guideBackend, 'device')) === 'cloud';
   fire('thinking_stop');
   if (!target && !cloud) {
     fire('answer_ready');
