@@ -114,4 +114,7 @@ export const KEYS = {
   guideBackend: 'guide_backend',
   guideCloudTargeting: 'guide_cloud_targeting',
   guideCloudModel: 'guide_cloud_model',
+  // Cloud guide shows the blind peephole view by default; flip this on (Debug) to
+  // see the raw camera + box + grounding banner for tuning.
+  guideCloudDebug: 'guide_cloud_debug',
 } as const;

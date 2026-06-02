@@ -52,6 +52,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
   // Cloud "guide me to it" spike controls.
   const [guideBackend, setGuideBackend] = useState<'device' | 'cloud'>('device');
   const [guideTargeting, setGuideTargeting] = useState<'text' | 'reference'>('text');
+  const [guideCloudDebug, setGuideCloudDebug] = useState(false);
   const [guideModel, setGuideModel] = useState<string>(CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
   const [guideTraces, setGuideTraces] = useState<GuideTrace[]>(() => getGuideTraces());
   const [testQuery, setTestQuery] = useState('una taza');
@@ -68,6 +69,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
       .then(v => setGuideTargeting(v === 'reference' ? 'reference' : 'text'));
     void Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT)
       .then(v => setGuideModel(v || CONFIG.GUIDE_CLOUD_MODEL_DEFAULT));
+    void Settings.getBool(Settings.KEYS.guideCloudDebug, false).then(setGuideCloudDebug);
     const offV = VlmAdapter.subscribeStatus(setVlmStatus);
     const offT = TextAdapter.subscribeStatus(setTextStatus);
     return () => { offV(); offT(); };
@@ -99,6 +101,11 @@ export function DebugScreen({ onClose, onOpenGuide }: {
   const onSetGuideBackend = (b: 'device' | 'cloud') => {
     setGuideBackend(b);
     void Settings.setString(Settings.KEYS.guideBackend, b);
+  };
+  const onToggleGuideCloudDebug = () => {
+    const v = !guideCloudDebug;
+    setGuideCloudDebug(v);
+    void Settings.setBool(Settings.KEYS.guideCloudDebug, v);
   };
   const onSetGuideTargeting = (m: 'text' | 'reference') => {
     setGuideTargeting(m);
@@ -248,6 +255,12 @@ export function DebugScreen({ onClose, onOpenGuide }: {
           </Pressable>
         ))}
 
+        <Pressable style={styles.fallbackRow} onPress={onToggleGuideCloudDebug}>
+          <Text style={styles.panelText}>
+            Debug view (camera + box + banner): {guideCloudDebug ? 'ON' : 'OFF — uses the blind peephole view'}
+          </Text>
+        </Pressable>
+
         <Text style={styles.segLabel}>Spike test query (🎯 button, cloud)</Text>
         <TextInput
           style={styles.queryInput}
@@ -259,7 +272,8 @@ export function DebugScreen({ onClose, onOpenGuide }: {
           autoCorrect={false}
         />
         <Text style={styles.panelText}>
-          Opens the spike with a live camera + box overlay so you can SEE what the model finds.
+          Opens the cloud guide with the test query. Default = the blind peephole view; turn on
+          “Debug view” above to see the raw camera + box + grounding banner.
         </Text>
       </View>
 

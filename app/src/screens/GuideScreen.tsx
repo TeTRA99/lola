@@ -85,9 +85,11 @@ export function GuideScreen({
   // Real flow (target known) = blind UX: no preview/boxes, branded screen,
   // tap-to-exit. Dev (no target) keeps the debug preview + chips.
   const blind = guiding;
-  // Dev builds (SHOW_DEV_TOOLS): show the cloud camera + box instead of the blind
-  // overlay so we can see what the model sees/finds. Never on in production.
-  const devPreview = cloud && CONFIG.SHOW_DEV_TOOLS;
+  // Cloud guide uses the SAME blind peephole view as the on-device flow by default.
+  // The raw camera + box + grounding banner is opt-in for tuning (Debug toggle), so
+  // it no longer hijacks the real experience just because dev tools are on.
+  const devPreview = cloud && CONFIG.SHOW_DEV_TOOLS
+    && Settings.getBoolSync(Settings.KEYS.guideCloudDebug, false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const handleExit = useCallback(() => onCloseRef.current(), []);
@@ -257,6 +259,9 @@ export function GuideScreen({
     if (cloud) {
       pulseGuide(p);
       setProximity(p);
+      // Mark "seen at least once" so the "no la encuentro" timer doesn't fire after
+      // a real find — the tiered effect that normally sets this is skipped for cloud.
+      if (p !== null) spottedRef.current = true;
       // Speaking is handled by handleCloudHint (it has the box + landmark to build
       // a "where" cue); applyProximity only drives the haptic + proximity state.
       return;
