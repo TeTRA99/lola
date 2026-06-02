@@ -294,6 +294,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
               <Text style={styles.traceRoute}>
                 {tr.model.replace(/^.*\//, '')} · {tr.latencyMs}ms · conf {tr.confidence.toFixed(2)} · box {tr.box ? `[${tr.box.map(n => Math.round(n)).join(',')}]` : 'null'}
               </Text>
+              {tr.found && tr.near ? <Text style={styles.traceRaw} numberOfLines={2}>near: {tr.near}</Text> : null}
               {!tr.found && tr.raw ? <Text style={styles.traceRaw} numberOfLines={4}>raw: {tr.raw}</Text> : null}
             </View>
           ))

@@ -25,7 +25,7 @@ import { color, fontFamily } from '@/theme/tokens';
 import { startGuide, updateGuide, stopGuide, pulseGuide } from '@/adapters/guideHaptics';
 import { activateKeepAwake, releaseKeepAwake } from '@/adapters/keepAwake';
 import { useGuideDetection } from '@/adapters/useGuideDetection';
-import { useCloudGuideDetection, type CapturedFrame } from '@/adapters/useCloudGuideDetection';
+import { useCloudGuideDetection, type CapturedFrame, type CloudGuideHint } from '@/adapters/useCloudGuideDetection';
 import {
   bestDetectionFor, frameBoxToScreen, normalizePixelBox, proximityFromBox, screenSpaceDims,
   type RawDetection,
@@ -249,16 +249,8 @@ export function GuideScreen({
     if (cloud) {
       pulseGuide(p);
       setProximity(p);
-      // Cloud is slow, so a buzz fades from memory between polls — speak a short
-      // confirmation on EVERY positive result so the user knows it's still on it.
-      // Throttled so consecutive fast polls can't queue up overlapping speech.
-      if (p !== null) {
-        const now = Date.now();
-        if (now - lastSaidAt.current > 2000) {
-          lastSaidAt.current = now;
-          void speak(COPY.guide.here);
-        }
-      }
+      // Speaking is handled by handleCloudHint (it has the box + landmark to build
+      // a "where" cue); applyProximity only drives the haptic + proximity state.
       return;
     }
     updateGuide(p);
@@ -268,6 +260,21 @@ export function GuideScreen({
       setProximity(p);
     }
   }, [cloud]);
+
+  // Cloud-only: on each positive poll, speak a short "where" cue — which way to
+  // point (from the box's frame position) + any landmark the model reported.
+  // Throttled (2s) so consecutive polls can't queue overlapping speech.
+  const handleCloudHint = useCallback((hint: CloudGuideHint | null) => {
+    if (!hint) return;
+    const now = Date.now();
+    if (now - lastSaidAt.current <= 2000) return;
+    lastSaidAt.current = now;
+    const cx = hint.box.x + hint.box.width / 2;
+    const cy = hint.box.y + hint.box.height / 2;
+    const dx = cx < 0.4 ? 'left' : cx > 0.6 ? 'right' : null;
+    const dy = cy < 0.4 ? 'up' : cy > 0.6 ? 'down' : null;
+    void speak(COPY.guide.locate({ dx, dy, near: hint.near }));
+  }, []);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
   const status: GuideStatus = !model.isReady
@@ -285,6 +292,7 @@ export function GuideScreen({
           active={appActive}
           debug={devPreview}
           onProximity={applyProximity}
+          onHint={handleCloudHint}
           onModelState={setModel}
         />
       ) : live ? (
@@ -391,6 +399,7 @@ function CloudGuideLayer({
   active,
   debug = false,
   onProximity,
+  onHint,
   onModelState,
 }: {
   query: string;
@@ -400,6 +409,7 @@ function CloudGuideLayer({
   // can SEE what the model is looking at and finding (the real flow hides all of it).
   debug?: boolean;
   onProximity: (p: number | null) => void;
+  onHint: (hint: CloudGuideHint | null) => void;
   onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -472,6 +482,7 @@ function CloudGuideLayer({
     active: active && perm === 'granted' && ready,
     capture,
     onProximity,
+    onHint,
   });
 
   if (perm !== 'granted') return <CamFallback hasPermission={perm !== 'denied'} />;
@@ -509,6 +520,9 @@ function CloudGuideLayer({
               {cg.lastLatencyMs != null ? ` · ${cg.lastLatencyMs}ms` : ''}
               {cg.lastError ? ` · ERR ${cg.lastError}` : cg.lastFound ? ' · FOUND' : ' · …'}
             </Text>
+            {cg.lastFound && cg.lastNear ? (
+              <Text style={styles.bannerRaw} numberOfLines={2}>near: {cg.lastNear}</Text>
+            ) : null}
             {!cg.lastFound && cg.lastRaw ? (
               <Text style={styles.bannerRaw} numberOfLines={3}>raw: {cg.lastRaw}</Text>
             ) : null}

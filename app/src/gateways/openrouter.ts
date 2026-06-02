@@ -191,6 +191,8 @@ export type GroundOutput = {
   /** Raw 4-number box in the model's native convention (parsed downstream). */
   box: number[] | null;
   confidence: number;
+  /** Short Spanish landmark phrase ("al lado del termo") — what it's next to/on. */
+  near?: string | null;
   /** Truncated raw model text — for the dev preview/trace when a box isn't parsed. */
   raw?: string;
 };
@@ -210,9 +212,10 @@ function buildGroundPrompt(model: string, hasRef: boolean): string {
     ? 'You are given a REFERENCE photo of the target object first, then the SCENE image to search. Find the SAME object in the scene.\n'
     : '';
   return `You locate a single object in an image for a blind-assistance app. ${refLine}Return STRICT JSON only, no prose:
-{ "found": true|false, "box": [${order}], "confidence": 0.0-1.0 }
+{ "found": true|false, "box": [${order}], "confidence": 0.0-1.0, "near": "<short Spanish phrase or null>" }
 - "box" is the tightest bounding box around the target, as normalized coordinates from 0 to 1000 in the order [${order}] ${orderDesc}.
-- If the target is NOT visible, return { "found": false, "box": null, "confidence": 0 }.
+- "near": a SHORT phrase in RIOPLATENSE SPANISH (max 6 words) saying what the target is next to or resting on, e.g. "al lado del termo", "sobre la mesa, cerca del plato". Use null if nothing clear.
+- If the target is NOT visible, return { "found": false, "box": null, "confidence": 0, "near": null }.
 - Pick the single best instance if several are visible. Do not invent a box when unsure.`;
 }
 
@@ -246,15 +249,17 @@ export async function groundObject(args: {
   // Models often wrap JSON in ```fences``` or add a sentence — parse leniently.
   // If still unparseable, surface the raw text (don't hard-fail) so the dev
   // preview shows what the model actually said.
-  const v = parseLooseJsonObject<{ found?: unknown; box?: unknown; confidence?: unknown }>(resp.value);
-  if (!v) return ok({ found: false, box: null, confidence: 0, raw });
+  const v = parseLooseJsonObject<{ found?: unknown; box?: unknown; confidence?: unknown; near?: unknown }>(resp.value);
+  if (!v) return ok({ found: false, box: null, confidence: 0, near: null, raw });
   const box = Array.isArray(v.box) && v.box.length === 4 && v.box.every(n => typeof n === 'number')
     ? (v.box as number[])
     : null;
+  const near = typeof v.near === 'string' && v.near.trim() ? v.near.trim().slice(0, 60) : null;
   return ok({
     found: v.found === true && box !== null,
     box,
     confidence: typeof v.confidence === 'number' ? v.confidence : 0,
+    near,
     raw,
   });
 }

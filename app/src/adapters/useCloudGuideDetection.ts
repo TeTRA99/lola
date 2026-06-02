@@ -29,7 +29,12 @@ export type CloudGuideState = {
   lastConfidence: number;
   // Truncated raw model text from the last poll (shown when no box was parsed).
   lastRaw: string | null;
+  // Short landmark phrase the model reported ("al lado del termo"), or null.
+  lastNear: string | null;
 };
+
+/** Per-result hint for the spoken cue: the box (for frame direction) + landmark. */
+export type CloudGuideHint = { box: NormBox; near: string | null };
 
 export function useCloudGuideDetection(opts: {
   /** What the user asked to be guided to (open-vocabulary, e.g. "el auricular"). */
@@ -42,6 +47,8 @@ export function useCloudGuideDetection(opts: {
   capture: () => Promise<CapturedFrame | null>;
   /** Proximity 0..1 (centered+near) for a found box, or null when not found. */
   onProximity: (p: number | null) => void;
+  /** Per-result hint (box + landmark) on a positive, or null on a miss. */
+  onHint?: (hint: CloudGuideHint | null) => void;
 }) {
   const model = useMemo(
     () => Settings.getStringSync(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT),
@@ -49,17 +56,19 @@ export function useCloudGuideDetection(opts: {
   );
   const [state, setState] = useState<CloudGuideState>({
     model, polls: 0, lastLatencyMs: null, lastError: null, lastFound: false,
-    lastBox: null, lastConfidence: 0, lastRaw: null,
+    lastBox: null, lastConfidence: 0, lastRaw: null, lastNear: null,
   });
 
   // Keep the latest callbacks/inputs in refs so the polling effect can stay
   // mounted across re-renders without restarting the loop on every prop change.
   const captureRef = useRef(opts.capture);
   const onProxRef = useRef(opts.onProximity);
+  const onHintRef = useRef(opts.onHint);
   const queryRef = useRef(opts.query);
   const refRef = useRef(opts.refBase64);
   captureRef.current = opts.capture;
   onProxRef.current = opts.onProximity;
+  onHintRef.current = opts.onHint;
   queryRef.current = opts.query;
   refRef.current = opts.refBase64;
 
@@ -89,14 +98,17 @@ export function useCloudGuideDetection(opts: {
             if (cancelled) return;
             if (res.ok && res.value.found) {
               const box = parseGroundingBox(model, res.value.box);
+              const near = res.value.near ?? null;
               onProxRef.current(box ? proximityFromBox(box) : null);
+              onHintRef.current?.(box ? { box, near } : null);
               recordGuideTrace({
                 at: t0, query: queryRef.current, model, found: !!box,
-                box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw,
+                box: res.value.box, confidence: res.value.confidence, latencyMs, error: null, raw: res.value.raw, near,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: null, lastFound: !!box, lastBox: box, lastConfidence: res.value.confidence, lastRaw: res.value.raw ?? null, lastNear: near }));
             } else {
               onProxRef.current(null);
+              onHintRef.current?.(null);
               const error = res.ok ? null : res.error;
               const raw = res.ok ? res.value.raw ?? null : null;
               recordGuideTrace({
@@ -104,7 +116,7 @@ export function useCloudGuideDetection(opts: {
                 box: res.ok ? res.value.box : null, confidence: res.ok ? res.value.confidence : 0,
                 latencyMs, error, raw: raw ?? undefined,
               });
-              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null, lastRaw: raw }));
+              setState(s => ({ ...s, polls, lastLatencyMs: latencyMs, lastError: error, lastFound: false, lastBox: null, lastRaw: raw, lastNear: null }));
             }
           } else if (!cancelled) {
             onProxRef.current(null);

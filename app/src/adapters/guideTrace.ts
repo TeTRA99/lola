@@ -15,6 +15,8 @@ export type GuideTrace = {
   error: string | null;
   /** Truncated raw model text — shown when a box wasn't parsed (diagnose misses). */
   raw?: string;
+  /** Short landmark phrase the model reported ("al lado del termo"), or null. */
+  near?: string | null;
 };
 
 const MAX = 16;

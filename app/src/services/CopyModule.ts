@@ -80,6 +80,22 @@ export const COPY = {
     // Approximate match (e.g. "termo" → botella): warn before guiding anyway.
     approxWarning: 'Ese tipo de objeto todavía no lo reconozco del todo, pero voy a hacer lo posible para guiarte.',
     found: '¡Ahí está! Lo tenés enfrente. Tocá la pantalla cuando termines.',
+    // Cloud-only short spoken hint per positive poll: which way to point (from the
+    // box's frame position) + an optional landmark the model reported ("al lado del
+    // termo"). Kept short — it's spoken every ~3s. `near` is model-generated Spanish.
+    locate: (p: { dx: 'left' | 'right' | null; dy: 'up' | 'down' | null; near: string | null }): string => {
+      const parts: string[] = [];
+      if (p.dy === 'up') parts.push('arriba');
+      if (p.dy === 'down') parts.push('abajo');
+      if (p.dx === 'left') parts.push('a la izquierda');
+      if (p.dx === 'right') parts.push('a la derecha');
+      const dir = parts.join(' ');
+      let s = dir
+        ? `¡Ahí está! ${dir.charAt(0).toUpperCase()}${dir.slice(1)}`
+        : '¡Ahí está! Lo tenés enfrente';
+      if (p.near) s += `, ${p.near}`;
+      return `${s}.`;
+    },
     notFound: (obj: string): string => `No encuentro ${obj} por acá. Tocá la pantalla para volver.`,
     // Spoken on a long idle so the search never closes silently on a blind user.
     // After "found": a gentle reminder how to leave; while still searching: a

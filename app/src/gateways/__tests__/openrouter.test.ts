@@ -164,8 +164,8 @@ describe('openrouter.chat', () => {
 });
 
 describe('openrouter.groundObject (cloud guide spike)', () => {
-  test('happy path returns the raw box + found + confidence', async () => {
-    const payload = JSON.stringify({ found: true, box: [200, 100, 600, 500], confidence: 0.82 });
+  test('happy path returns the raw box + found + confidence + near', async () => {
+    const payload = JSON.stringify({ found: true, box: [200, 100, 600, 500], confidence: 0.82, near: 'al lado del termo' });
     mockFetch.mockReturnValue(mockResponse(200, mockOpenRouterChoice(payload)));
 
     const r = await groundObject({ query: 'el auricular', frameBase64: 'FRAME', model: 'google/gemini-3.5-flash' });
@@ -175,6 +175,7 @@ describe('openrouter.groundObject (cloud guide spike)', () => {
       expect(r.value.found).toBe(true);
       expect(r.value.box).toEqual([200, 100, 600, 500]);
       expect(r.value.confidence).toBeCloseTo(0.82, 5);
+      expect(r.value.near).toBe('al lado del termo');
     }
   });
 
