@@ -86,6 +86,10 @@ export const COPY = {
     searchingCloud: (obj: string): string =>
       `Buscando ${obj}. Apuntá la cámara a una zona y mantené quieto un momento. Cada vibración es una respuesta de esa zona y te digo dónde lo veo. Movéme despacio a otra zona para seguir buscando.`,
     spotted: 'Creo que lo veo. Movéme despacio.',
+    // Confidence-tiered on-device guide: tentative spot → ask to stop & focus; if it
+    // doesn't firm up within a few seconds, retract it so a phantom isn't trusted.
+    checking: 'Creo que lo veo. Parate y enfocá ahí.',
+    notThere: 'No, parece que no está. Seguí buscando.',
     // Truly unsupported object: be warm and point to Describir instead. No noun
     // here — the IntentRouter gives a bare, article-less noun ("termo"), which
     // reads wrong inserted into a sentence, and naming it doesn't matter when we

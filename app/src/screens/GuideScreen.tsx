@@ -65,10 +65,16 @@ export function GuideScreen({
   // Starts null (nothing seen yet) so "creo que lo veo" only fires on a real
   // detection, not on open.
   const [proximity, setProximity] = useState<number | null>(null);
+  // On-device detector confidence of the tracked box (0..1), null when not seen.
+  // Drives the tentative→confirm/dismiss audio so a low-confidence false positive
+  // never gets a confident "¡ahí está!".
+  const [confidence, setConfidence] = useState<number | null>(null);
   const [liveTarget, setLiveTarget] = useState<string | null>(targetCocoLabel);
   const lastHudAt = useRef(0);
   const lastSaidAt = useRef(0); // throttle the cloud "¡Ahí está!" so TTS doesn't back up
   const spottedRef = useRef(false); // said the tentative "creo que lo veo"
+  const tentativeRef = useRef(false); // a low-confidence "creo que lo veo" is pending confirmation
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // 3s confirm-or-dismiss
   const foundRef = useRef(false);   // said the affirmative "¡ahí está!"
   const lastFoundAt = useRef(0);    // timestamp of the last "¡ahí está!" (cooldown)
   const notFoundRef = useRef(false); // said "no la encuentro"
@@ -182,52 +188,57 @@ export function GuideScreen({
     return () => clearTimeout(t);
   }, [model.isReady, targetCocoLabel, searchArmed]);
 
-  // Tiered audio (real flow only):
-  //  • detected in frame (any proximity) → tentative "creo que lo veo" once
-  //  • centered enough (reachable threshold) → affirmative "¡ahí está!" once
-  // Re-arm "found" when moving away; re-arm "spotted" only after the object has
-  // been LOST for ~1.5s (so detector flicker doesn't re-trigger it).
+  // Confidence-tiered audio (on-device real flow only — cloud has its own per-poll
+  // cue). A false positive is usually a LOW-confidence box, so:
+  //  • high confidence (≥ CONFIRM) → "¡ahí está!" (once, with cooldown).
+  //  • low confidence (a returned box below CONFIRM) → tentative "creo que lo veo,
+  //    parate y enfocá", then a 3s window: if it climbs to CONFIRM → "¡ahí está!";
+  //    if not → retract it ("no, parece que no está, seguí buscando") so the user
+  //    never trusts a phantom they can't see.
+  // Haptic homing stays proximity-based (applyProximity → updateGuide), unchanged.
   const locked = (proximity ?? 0) >= CONFIG.GUIDE_LOCK_PROXIMITY; // HUD "THERE!"
   useEffect(() => {
-    // Cloud handles its own per-result confirmation in applyProximity (it speaks
-    // "¡Ahí está!" on every positive); skip the on-device once-only tiered cues.
     if (!guiding || cloud) return;
-    if (proximity === null) {
-      if (!lostTimer.current) {
-        lostTimer.current = setTimeout(() => {
-          // Re-arm only "found" on a brief loss; keep "creo que lo veo" said once
-          // per session so detector flicker doesn't repeat it (it fired 3× on the
-          // Redmi as detection stabilized).
-          foundRef.current = false;
-          lostTimer.current = null;
-        }, 1500);
+    const conf = confidence ?? 0;
+
+    if (conf > 0) {
+      if (lostTimer.current) { clearTimeout(lostTimer.current); lostTimer.current = null; }
+      spottedRef.current = true; // suppresses the global "no la encuentro" timer
+
+      if (conf >= CONFIG.GUIDE_CONFIRM_CONFIDENCE) {
+        // High confidence → confirm; cancel the tentative dismiss.
+        if (confirmTimer.current) { clearTimeout(confirmTimer.current); confirmTimer.current = null; }
+        tentativeRef.current = false;
+        if (!foundRef.current && Date.now() - lastFoundAt.current >= CONFIG.GUIDE_FOUND_COOLDOWN_MS) {
+          foundRef.current = true;
+          lastFoundAt.current = Date.now();
+          void speak(COPY.guide.found);
+        }
+      } else if (!tentativeRef.current && !foundRef.current) {
+        // Low confidence → tentative, with a 3s confirm-or-retract window.
+        tentativeRef.current = true;
+        void speak(COPY.guide.checking);
+        confirmTimer.current = setTimeout(() => {
+          confirmTimer.current = null;
+          if (!foundRef.current) {
+            void speak(COPY.guide.notThere);
+            tentativeRef.current = false; // re-armable for the next blip
+          }
+        }, CONFIG.GUIDE_DISMISS_MS);
       }
       return;
     }
-    if (lostTimer.current) { clearTimeout(lostTimer.current); lostTimer.current = null; }
-    if (!spottedRef.current) {
-      spottedRef.current = true;
-      void speak(COPY.guide.spotted);
+
+    // Nothing in frame — brief grace, then re-arm (tolerate detector flicker).
+    if (!lostTimer.current) {
+      lostTimer.current = setTimeout(() => {
+        foundRef.current = false;
+        tentativeRef.current = false;
+        if (confirmTimer.current) { clearTimeout(confirmTimer.current); confirmTimer.current = null; }
+        lostTimer.current = null;
+      }, 1500);
     }
-    // "¡ahí está!" fires when reachable, but only once per re-arm AND no sooner
-    // than the cooldown — otherwise small wobbles across the threshold make Lola
-    // repeat it back-to-back. After the cooldown, a genuine lose-and-refind says
-    // it again (which is what we want).
-    if (
-      proximity >= CONFIG.GUIDE_FOUND_PROXIMITY &&
-      !foundRef.current &&
-      Date.now() - lastFoundAt.current >= CONFIG.GUIDE_FOUND_COOLDOWN_MS
-    ) {
-      foundRef.current = true;
-      lastFoundAt.current = Date.now();
-      void speak(COPY.guide.found);
-      // No auto-close — the "found" line already tells the user to tap when done,
-      // and a blind user must never be dropped silently. The idle check-in below
-      // is the only follow-up; tap is the only exit.
-    } else if (proximity < CONFIG.GUIDE_REARM_PROXIMITY) {
-      foundRef.current = false;
-    }
-  }, [proximity, targetCocoLabel, handleExit, cloud]);
+  }, [confidence, targetCocoLabel, cloud]);
 
   // Idle check-in — the search never closes itself; instead, after a long stretch
   // with the target not in view, Lola reassures + reminds how to leave, and keeps
@@ -250,12 +261,13 @@ export function GuideScreen({
 
   useEffect(() => () => {
     if (lostTimer.current) clearTimeout(lostTimer.current);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
   }, []);
 
   // Cloud: one discrete buzz per poll result + update proximity (for audio/HUD)
   // immediately — polls are ~2.5s apart, so no throttle needed.
   // On-device: feed the continuous beat loop every frame; throttle the HUD number.
-  const applyProximity = useCallback((p: number | null) => {
+  const applyProximity = useCallback((p: number | null, conf?: number | null) => {
     if (cloud) {
       pulseGuide(p);
       setProximity(p);
@@ -266,11 +278,12 @@ export function GuideScreen({
       // a "where" cue); applyProximity only drives the haptic + proximity state.
       return;
     }
-    updateGuide(p);
+    updateGuide(p); // haptic homing stays proximity-based
     const now = Date.now();
     if (now - lastHudAt.current > 160) {
       lastHudAt.current = now;
       setProximity(p);
+      setConfidence(conf ?? null); // drives the confidence-tiered audio below
     }
   }, [cloud]);
 
@@ -290,11 +303,13 @@ export function GuideScreen({
   }, []);
 
   const hudTarget = live ? liveTarget ?? 'best object' : targetLabel;
+  // On-device: status follows CONFIDENCE (matches the tentative/confirm audio).
+  // Cloud: no per-frame confidence, so it follows proximity (box centering).
   const status: GuideStatus = !model.isReady
     ? 'preparing'
-    : proximity === null
-      ? 'searching'
-      : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted';
+    : cloud
+      ? (proximity === null ? 'searching' : proximity >= CONFIG.GUIDE_FOUND_PROXIMITY ? 'found' : 'spotted')
+      : (!confidence ? 'searching' : confidence >= CONFIG.GUIDE_CONFIRM_CONFIDENCE ? 'found' : 'spotted');
 
   return (
     <View style={styles.root}>
@@ -666,7 +681,7 @@ function LiveLayer({
   blind: boolean;
   target: string | null;
   setTarget: (t: string | null) => void;
-  onProximity: (p: number | null) => void;
+  onProximity: (p: number | null, conf?: number | null) => void;
   onModelState: (s: { isReady: boolean; downloadProgress: number }) => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -693,7 +708,7 @@ function LiveLayer({
       // executorch returns screen-space coords, so normalize by the portrait
       // screen-space dims (min,max), not the native landscape frame dims.
       const ss = screenSpaceDims(w, h);
-      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, ss.w, ss.h)) : null);
+      onProximity(best ? proximityFromBox(normalizePixelBox(best.bbox, ss.w, ss.h)) : null, best ? best.score : null);
       const now = Date.now();
       // Throttled detection log (~1.5s) so we can see if frames flow and what
       // the model sees vs. the target we're homing on.

@@ -78,6 +78,11 @@ export const CONFIG = {
   // produced many false positives (esp. while walking — lots of scene churn). 0.5
   // is a calmer default; raise toward 0.6 if phantoms persist, lower if it misses.
   GUIDE_DETECTION_THRESHOLD: 0.5,
+  // Confidence tiers for the on-device guide audio. A returned box below CONFIRM is
+  // "tentative" (creo que lo veo); ≥ CONFIRM is "ahí está". A tentative spot that
+  // doesn't reach CONFIRM within DISMISS_MS is retracted ("parece que no está").
+  GUIDE_CONFIRM_CONFIDENCE: 0.7,
+  GUIDE_DISMISS_MS: 3000,
   // The Guide NEVER closes itself — a blind user must not be dropped silently
   // (FR/UX). Instead, after this long with the target not in view, Lola gives an
   // audible "still there? tap to exit" check-in and repeats it on this interval.
