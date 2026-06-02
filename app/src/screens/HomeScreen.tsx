@@ -323,7 +323,6 @@ export function HomeScreen({
       >
         <Text style={styles.prompt}>{COPY.home.homePrompt}</Text>
         <View style={styles.topRight}>
-          {devGuideLabel && <Text style={styles.devGuideLabel}>{devGuideLabel}</Text>}
           {onDevDebug && (
             <Pressable
               onPress={onDevDebug}
@@ -349,6 +348,10 @@ export function HomeScreen({
           )}
         </View>
       </Animated.View>
+
+      {/* Dev-only: active cloud-guide model, placed UNDER the title so a long name
+          doesn't crowd the top-bar icons. */}
+      {devGuideLabel && <Text style={styles.devGuideLabel}>{devGuideLabel}</Text>}
 
       <Card
         dark={false}
@@ -619,7 +622,7 @@ const styles = StyleSheet.create({
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gearBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   devBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  devGuideLabel: { color: color.text.low, fontSize: 10, fontFamily: fontFamily.medium },
+  devGuideLabel: { color: color.text.low, fontSize: 11, fontFamily: fontFamily.medium, marginTop: -4, marginBottom: 6 },
 
   cardWrap: { borderRadius: 34, minHeight: 190 },
   cardWrapLight: { backgroundColor: color.dad.describeBg, ...cardShadowLight },
