@@ -17,4 +17,8 @@ export type RouteDecision =
   // object's reference photo so the model can identify/describe THE user's one.
   | { type: 'model'; needsCurrent?: boolean; savedObject?: string | null }
   | { type: 'chitchat'; kind: ChitchatKind }
-  | { type: 'where_am_i' };
+  | { type: 'where_am_i' }
+  // Local SOS / "call family": contactName = the person named ("Charly"), or null
+  // for a bare "ayuda"/"emergencia" → the emergency contact. channel = how to reach
+  // them (a phone call, or a pre-filled WhatsApp message). No backend.
+  | { type: 'call_family'; contactName: string | null; channel: 'call' | 'whatsapp' };

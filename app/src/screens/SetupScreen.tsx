@@ -27,6 +27,7 @@ import * as CatalogPhotos from '@/services/CatalogPhotos';
 import * as RoomCatalog from '@/services/RoomCatalog';
 import * as MemoryService from '@/services/MemoryService';
 import * as Settings from '@/services/Settings';
+import * as ContactService from '@/services/ContactService';
 import { CONFIG } from '@/config';
 import type { CatalogObject } from '@/services/OnboardingService';
 import type { Room } from '@/services/RoomCatalog';
@@ -258,11 +259,13 @@ function SettingsTab() {
   const [pitch, setPitch] = useState(PITCH_DEFAULT);
   const [detectionLevel, setDetectionLevel] = useState<number>(defaultDetectionLevel());
   const [aiMode, setAiMode] = useState<'cloud' | 'local'>(CONFIG.LOCAL_INFERENCE_DEFAULT);
+  const [volumeTriggerOn, setVolumeTriggerOn] = useState(false);
 
   useEffect(() => {
     void (async () => {
       const mode = await Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT);
       setAiMode(mode === 'local' ? 'local' : 'cloud');
+      setVolumeTriggerOn(await Settings.getBool(Settings.KEYS.volumeTrigger, false));
       setQuietCapture(await Settings.getBool(Settings.KEYS.quietCapture, false));
       setHeartbeatOn(await Settings.getBool(Settings.KEYS.idleHeartbeat, true));
       setUserName(await Settings.getString(Settings.KEYS.userName, ''));
@@ -329,6 +332,11 @@ function SettingsTab() {
     const next = !heartbeatOn;
     setHeartbeatOn(next);
     await Settings.setBool(Settings.KEYS.idleHeartbeat, next);
+  };
+  const toggleVolumeTrigger = async () => {
+    const next = !volumeTriggerOn;
+    setVolumeTriggerOn(next);
+    await Settings.setBool(Settings.KEYS.volumeTrigger, next);
   };
 
   const selectVoice = (id: string) => {
@@ -510,9 +518,117 @@ function SettingsTab() {
             <View style={[styles.toggleKnob, heartbeatOn && styles.toggleKnobOn]} />
           </View>
         </Pressable>
+
+        {/* Volume-button trigger (needs the native build to actually fire). */}
+        <Pressable style={styles.settingRow} onPress={toggleVolumeTrigger}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingLabel}>{t.volumeTrigger}</Text>
+            <Text style={styles.settingHint}>{t.volumeTriggerHint}</Text>
+          </View>
+          <View style={[styles.toggle, volumeTriggerOn && styles.toggleOn]}>
+            <View style={[styles.toggleKnob, volumeTriggerOn && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+
+        {/* Family contacts — who Lola calls when dad asks for help (local SOS). */}
+        <FamilyContactsCard />
       </ScrollView>
 
       <Text style={styles.version}>Lola v{APP_VERSION} (build {APP_BUILD})</Text>
+    </View>
+  );
+}
+
+// ---------------- FAMILY CONTACTS (local SOS) ----------------
+function FamilyContactsCard() {
+  const t = useSetupStrings();
+  const [contacts, setContacts] = useState<ContactService.Contact[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+
+  useEffect(() => { void ContactService.listContacts().then(setContacts); }, []);
+
+  const persist = async (next: ContactService.Contact[]) => {
+    setContacts(await ContactService.saveContacts(next));
+  };
+
+  const startAdd = () => { setEditingId(null); setName(''); setPhone(''); setAdding(true); };
+  const startEdit = (c: ContactService.Contact) => { setEditingId(c.id); setName(c.name); setPhone(c.phone); setAdding(true); };
+  const cancel = () => { setAdding(false); setEditingId(null); setName(''); setPhone(''); };
+
+  const save = async () => {
+    if (!name.trim() || !phone.trim()) return;
+    const next = editingId
+      ? contacts.map(c => (c.id === editingId ? { ...c, name: name.trim(), phone: phone.trim() } : c))
+      : [...contacts, { id: '', name: name.trim(), phone: phone.trim(), emergency: contacts.length === 0 }];
+    await persist(next);
+    cancel();
+  };
+
+  const remove = (id: string) => { void persist(contacts.filter(c => c.id !== id)); };
+  // Single-select: marking one emergency clears the others.
+  const setEmergency = (id: string) => { void persist(contacts.map(c => ({ ...c, emergency: c.id === id }))); };
+
+  const full = contacts.length >= ContactService.MAX_CONTACTS;
+
+  return (
+    <View style={styles.settingCard}>
+      <Text style={styles.settingLabel}>{t.family}</Text>
+      <Text style={styles.settingHint}>{t.familyHint}</Text>
+
+      {contacts.length === 0 && !adding ? (
+        <Text style={[styles.settingHint, { marginTop: 10 }]}>{t.emptyContacts}</Text>
+      ) : null}
+
+      {contacts.map(c => (
+        <View key={c.id} style={styles.contactRow}>
+          <Pressable
+            style={styles.contactStar}
+            onPress={() => setEmergency(c.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t.emergencyContact}
+          >
+            <Icon name={c.emergency ? 'star' : 'starOutline'} size={20} color={c.emergency ? color.primary[500] : color.neutral[300]} />
+          </Pressable>
+          <Pressable style={{ flex: 1 }} onPress={() => startEdit(c)}>
+            <Text style={styles.contactName} numberOfLines={1}>{c.name}</Text>
+            <Text style={styles.contactPhone} numberOfLines={1}>
+              {c.phone}{c.emergency ? ` · ${t.emergencyContact}` : ''}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.contactDelete}
+            onPress={() => remove(c.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t.delete}
+          >
+            <Icon name="delete" size={18} color={color.text.medium} />
+          </Pressable>
+        </View>
+      ))}
+
+      {adding ? (
+        <View style={styles.contactForm}>
+          <Field label={t.contactName} value={name} onChangeText={setName} placeholder={t.contactNamePh} />
+          <Field label={t.contactPhone} value={phone} onChangeText={setPhone} placeholder={t.contactPhonePh} />
+          <View style={styles.contactFormBtns}>
+            <Pressable style={styles.contactCancelBtn} onPress={cancel} accessibilityRole="button">
+              <Text style={styles.contactCancelText}>{t.cancel}</Text>
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton label={t.saveContact} disabled={!name.trim() || !phone.trim()} onPress={save} />
+            </View>
+          </View>
+        </View>
+      ) : !full ? (
+        <View style={{ marginTop: 12 }}>
+          <PrimaryButton label={t.addContact} leadingIcon="add" onPress={startAdd} />
+        </View>
+      ) : (
+        <Text style={[styles.settingHint, { marginTop: 10 }]}>{t.contactsFull}</Text>
+      )}
     </View>
   );
 }
@@ -925,6 +1041,20 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: color.primary[500] },
   toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
   toggleKnobOn: { transform: [{ translateX: 20 }] },
+
+  // Family-contacts card (local SOS).
+  contactRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: color.neutral.border,
+  },
+  contactStar: { padding: 4 },
+  contactName: { fontSize: 15, fontFamily: fontFamily.bold, fontWeight: '700', color: color.text.high },
+  contactPhone: { fontSize: 13, fontFamily: fontFamily.medium, color: color.text.medium, marginTop: 2 },
+  contactDelete: { padding: 6 },
+  contactForm: { marginTop: 12, gap: 12 },
+  contactFormBtns: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  contactCancelBtn: { paddingVertical: 12, paddingHorizontal: 16 },
+  contactCancelText: { fontSize: 15, fontFamily: fontFamily.bold, fontWeight: '700', color: color.text.medium },
 
   formScroll: { padding: 18, paddingBottom: 28 },
   photoSection: { marginTop: 22 },

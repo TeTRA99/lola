@@ -117,4 +117,10 @@ export const KEYS = {
   // Cloud guide shows the blind peephole view by default; flip this on (Debug) to
   // see the raw camera + box + grounding banner for tuning.
   guideCloudDebug: 'guide_cloud_debug',
+  // Family contacts for the local SOS / "call family" feature (JSON array of
+  // {id,name,phone,emergency}). Caregiver-managed in Setup; up to 5.
+  familyContacts: 'family_contacts',
+  // First-use voice hint for the volume-button trigger (shown once).
+  volumeTrigger: 'volume_trigger',
+  volumeTriggerHintSeen: 'onboarding_volume_trigger_hint_seen',
 } as const;

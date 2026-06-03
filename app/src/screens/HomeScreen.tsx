@@ -38,6 +38,7 @@ import { cameraNeedsAlwaysOn } from '@/adapters/camera';
 import { subscribeHaptics, heartbeat, type HapticPattern } from '@/adapters/haptics';
 import { subscribeSpeech, speak, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
+import { useVolumeTrigger } from '@/adapters/useVolumeTrigger';
 import * as Settings from '@/services/Settings';
 import { Icon } from '@/components/Icon';
 import { ActionIcon } from '@/components/ActionIcon';
@@ -169,6 +170,20 @@ export function HomeScreen({
       heartbeatHintDoneRef.current = seen;
     });
   }, []);
+
+  // Volume-button trigger (opt-in, caregiver-enabled). Loaded at mount; Home
+  // remounts on return from Setup so a freshly-flipped toggle takes effect. The
+  // double-press windowing + Home-idle gate live in useVolumeTrigger.
+  const [volumeTriggerOn, setVolumeTriggerOn] = useState(false);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.volumeTrigger, false).then(setVolumeTriggerOn);
+  }, []);
+  const volumeHintDoneRef = useRef(true);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.volumeTriggerHintSeen, false).then(seen => {
+      volumeHintDoneRef.current = seen;
+    });
+  }, []);
   useEffect(() => {
     if (!heartbeatOn || state !== 'idle' || showWelcome) return;
     const id = setInterval(() => {
@@ -261,6 +276,25 @@ export function HomeScreen({
       setState('idle');
     }
   };
+
+  // Fire Describe/Ask from a double-press of the volume keys. On the very first
+  // use (after the caregiver turns it on) explain the gesture once, then run.
+  const triggerFromVolume = (m: Mode) => {
+    if (runningRef.current || preparingRef.current) return;
+    if (!volumeHintDoneRef.current) {
+      volumeHintDoneRef.current = true;
+      void Settings.setBool(Settings.KEYS.volumeTriggerHintSeen, true);
+      void (async () => { await speak(COPY.onboarding.volumeTriggerHint); void run(m); })();
+      return;
+    }
+    void run(m);
+  };
+  useVolumeTrigger({
+    enabled: volumeTriggerOn,
+    idle: state === 'idle' && !showWelcome,
+    onDescribe: () => triggerFromVolume('describe'),
+    onAsk: () => triggerFromVolume('ask'),
+  });
 
   // Top bar fades out (and stops taking touches) while a flow is running.
   // NOTE: must stay above the `state === 'error'` early return below — all hooks

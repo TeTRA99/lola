@@ -14,6 +14,7 @@ const INTENT_SYSTEM_PROMPT = `Sos un clasificador de intenciones para una asiste
 - "extend": el usuario quiere MÁS DETALLE sobre la última escena ("contame más", "seguí", "más detalles").
 - "memory": el usuario pregunta por lo que VIO ANTES y NO pide que lo guíes hasta el objeto ahora — dónde ESTABA, dónde lo DEJÓ, CUÁNDO lo vio, qué había alrededor. Es RECUERDO del PASADO ("¿dónde dejé las llaves?", "¿cuándo viste el termo?", "¿qué había cerca del vaso?"). Extraé el sustantivo principal en singular y sin artículo.
 - "guide": el usuario PIDE AYUDA para ENCONTRAR, UBICAR o LLEGAR a un objeto que podría estar en el lugar AHORA, y querés guiarlo con la cámara — "llevame a la taza", "guiame hasta el control", "ayudame a encontrar mi botella", "¿me ayudás a buscar el vaso?", "no encuentro el control, ¿me ayudás?", "ayudame a llegar al sillón". Es del PRESENTE: quiere encontrarlo o llegar AHORA. Extraé el sustantivo principal en "noun" (singular, sin artículo). DISTINCIÓN CLAVE con "memory": si PIDE AYUDA para encontrarlo/llegar ahora → "guide"; si sólo pregunta dónde estaba o cuándo lo viste (recuerdo) → "memory".
+- "call_family": el usuario quiere LLAMAR o ESCRIBIR a un familiar/persona de confianza, o PIDE AYUDA. Extraé el nombre en "noun" si lo dice ("Charly", "mi hijo", "mi hija"); si solo dice "ayuda"/"necesito ayuda"/"emergencia" sin nombre, noun = null. Además decidí "channel": "whatsapp" SOLO si pide explícitamente un WhatsApp o un mensaje escrito ("mandale un WhatsApp", "escribile", "mandale un mensaje"); en cualquier otro caso (incluida toda pedida de ayuda/emergencia), channel = "call".
 - "model": cualquier otra pregunta sobre el CONTENIDO visible — qué es, qué dice, qué color, qué marca, cuántas hay, cómo está, está vencido, etc.
 
 Para "model" también tenés que decidir "needsCurrent": ¿hace falta MIRAR LA ESCENA AHORA o se puede responder con la escena que ya describió antes?
@@ -27,7 +28,7 @@ Si no hay contexto o el sustantivo no aparece en él, default a needsCurrent=tru
 OBJETOS GUARDADOS: si te paso un bloque "[OBJETOS GUARDADOS: ...]" y el usuario se refiere a uno de ELLOS como suyo (con posesivo "mi/mis/la mía/el mío", o por su nombre), poné el NOMBRE EXACTO de esa lista en "savedObject". Sirve tanto para describirlo ("describime mi yerba") como para distinguirlo entre varios ("¿cuál de estas es mi yerba?"). Si no se refiere a ninguno de la lista, savedObject = null.
 
 Respondé SOLO con un objeto JSON de esta forma exacta:
-{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null, "savedObject": "<nombre exacto de la lista de objetos guardados o null>" }
+{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i" | "call_family", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null, "savedObject": "<nombre exacto de la lista de objetos guardados o null>", "channel": "call" | "whatsapp" | null }
 
 Ejemplos:
 - "¿dónde estoy?" → { "intent": "where_am_i", "noun": null, "needsCurrent": null, "chitchatKind": null }
@@ -60,7 +61,13 @@ Ejemplos:
 - (con [OBJETOS GUARDADOS: Mi yerba]) "¿cuál de estas es mi yerba?" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
 - (con [OBJETOS GUARDADOS: Mi yerba]) "describime mi yerba" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
 - (con [OBJETOS GUARDADOS: Mi mate]) "guiame a mi mate" → { "intent": "guide", "noun": "mate", "needsCurrent": null, "chitchatKind": null, "savedObject": "Mi mate" }
-- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a una taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null, "savedObject": null }`;
+- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a una taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null, "savedObject": null }
+- "llamá a Charly" → { "intent": "call_family", "noun": "Charly", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "llamá a mi hijo" → { "intent": "call_family", "noun": "mi hijo", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "necesito ayuda" → { "intent": "call_family", "noun": null, "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "emergencia" → { "intent": "call_family", "noun": null, "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "mandale un WhatsApp a Charly" → { "intent": "call_family", "noun": "Charly", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp" }
+- "escribile a mi hija" → { "intent": "call_family", "noun": "mi hija", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp" }`;
 
 type IntentRaw = {
   intent?: string;
@@ -68,6 +75,7 @@ type IntentRaw = {
   needsCurrent?: boolean | null;
   chitchatKind?: string | null;
   savedObject?: string | null;
+  channel?: string | null;
 };
 
 const VALID_CHITCHAT_KINDS = ['thanks', 'greeting', 'goodbye', 'affirm', 'other'] as const;
@@ -132,6 +140,12 @@ export async function classifyIntent(
         return { type: 'guide', object: raw.noun.trim(), savedObject };
       }
       return { type: 'model', needsCurrent, savedObject };
+    case 'call_family':
+      return {
+        type: 'call_family',
+        contactName: typeof raw.noun === 'string' && raw.noun.trim() ? raw.noun.trim() : null,
+        channel: raw.channel === 'whatsapp' ? 'whatsapp' : 'call',
+      };
     case 'model':
     default:
       return { type: 'model', needsCurrent, savedObject };

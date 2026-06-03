@@ -76,6 +76,10 @@ export const COPY = {
     guideHint: 'Te voy a guiar con vibraciones: cuanto más rápido vibra, más cerca estás.',
     // Spoken once, the first time the idle heartbeat is felt.
     heartbeatHint: 'Ese latido suave soy yo, que estoy acá con vos.',
+    // Spoken once, the first time the volume-button trigger fires (after the
+    // caregiver turns it on). Explains the two double-press gestures.
+    volumeTriggerHint:
+      'Activaste el control por volumen. Desde esta pantalla, apretá dos veces el botón de subir volumen para que describa, o dos veces el de bajar volumen para preguntarme.',
   },
   // "Guíame a X" guidance flow (FR voseo). `obj` is the noun the user said.
   guide: {
@@ -152,6 +156,20 @@ export const COPY = {
     detectorReady: 'Guía lista.',
     // Spoken once if Describir/Preguntar is tapped before the model is ready.
     preparing: 'Esperá un momentito, todavía me estoy preparando. La primera vez puede tardar un poco.',
+  },
+  // Local SOS / "call family". Dad says "llamá a X" / "necesito ayuda" → a phone
+  // call; "mandale un WhatsApp a X" → a pre-filled chat. No backend.
+  sos: {
+    calling: (name: string): string => `Llamando a ${name}.`,
+    messaging: (name: string): string => `Le escribo a ${name}.`,
+    // Pre-filled WhatsApp body (the chat opens with this; dad taps send).
+    whatsappText: 'Hola, te escribo con Lola.',
+    // WhatsApp not installed / link failed.
+    openFailed: 'No pude abrir WhatsApp. Probá llamando.',
+    // No contacts saved yet — point to the caregiver setup, gently.
+    notConfigured: 'Todavía no tengo a quién llamar. Pedile a alguien de confianza que cargue un contacto en la configuración.',
+    // A name was said but it's not in the saved contacts.
+    notFound: 'No encontré a esa persona en tus contactos. Pedile a alguien que la agregue en la configuración.',
   },
   splash: {
     // On-screen greeting under the wordmark (distinct from the spoken `greeting`).
