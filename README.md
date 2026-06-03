@@ -26,6 +26,8 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
 
 - **Describir** — point the phone; Lola narrates the scene.
 - **Preguntar** — ask a question out loud; Lola answers about what it sees.
+- **¿Dónde estoy?** — ask out loud and Lola tells you which room of your home you're
+  in, matching the scene to the rooms you registered in Setup (on-device).
 - **Guíame a X** — say *"guiame a la taza"* and Lola homes you in, auto-picking the
   engine per object: a **generic** thing (a cup, the remote) runs the fast **on-device**
   detector with a Geiger-style vibration that quickens as you center it; one of **your
