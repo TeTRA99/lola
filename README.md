@@ -1,4 +1,4 @@
-# Lola 👁️‍🗨️
+# <img src="app/assets/launcher/Icon-1024.png" alt="" width="34" valign="middle" /> Lola
 
 > An assistive-vision app for a low-vision user — built for Charly's father. Lola
 > describes what's in front of you, answers spoken questions about it, and guides
