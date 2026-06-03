@@ -37,8 +37,9 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
 - **Debug** (dev-only) — usage telemetry, a live detector spike, and model selection
   for testing embedded (on-device) vs online (cloud) vision/guide.
 
-Designed for a blind / low-vision user: voice-first, large touch targets, audible
-cues for every state, and nothing that fails silently.
+Designed for a blind / low-vision user: voice-first, large touch targets, **audible
+*and* haptic** cues for every state (the guide's Geiger homing, the idle heartbeat,
+distinct buzzes for found/working/error), and nothing that fails silently.
 
 ## Screenshots
 
