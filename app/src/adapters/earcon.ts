@@ -22,7 +22,14 @@ function ensurePlayers(): void {
   try {
     // playsInSilentMode: like Lola's voice, the earcon must be heard even with
     // the ringer switch off — an assistive cue shouldn't vanish on mute.
-    void setAudioModeAsync({ playsInSilentMode: true });
+    // interruptionMode 'mixWithOthers' is CRITICAL: without it, expo-audio seizes
+    // the shared AVAudioSession to play the chime and then DEACTIVATES it when the
+    // ~210ms chime ends. That (a) collided with the speech recognizer claiming
+    // playAndRecord → the mic input never opened (STT timed out with no audiostart),
+    // and (b) tore the session down mid-TTS → Lola's voice faded to silence.
+    // 'mixWithOthers' makes the earcon a good citizen that mixes into whatever
+    // session STT/TTS already own, instead of fighting them.
+    void setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers' });
     openPlayer = createAudioPlayer(require('../../assets/audio/mic-open.wav'));
     closePlayer = createAudioPlayer(require('../../assets/audio/mic-close.wav'));
   } catch { /* best effort — never break the Ask flow on an audio hiccup */ }
