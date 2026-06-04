@@ -3,7 +3,7 @@
 // memory recall / model call.
 
 import { speak } from '@/adapters/tts';
-import { listen } from '@/adapters/stt';
+import { listen, lastSttDiag } from '@/adapters/stt';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
 import { chat, inferenceMode } from '@/services/ModelRouter';
@@ -99,7 +99,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   fire('listening_stop');
   if (!sttResult.ok) {
     console.log('[ask] STT FAILED with:', sttResult.error);
-    recordAskTrace({ at: now(), utterance: null, route: `STT_FAIL:${sttResult.error}` });
+    recordAskTrace({ at: now(), utterance: null, route: `STT_FAIL:${sttResult.error} [${lastSttDiag()}]` });
     fire('error');
     const kind: ErrorKind =
       sttResult.error === 'permission_denied' ? 'permission_denied_mic' :
@@ -270,8 +270,8 @@ async function handleCallFamily(
   try {
     await Linking.openURL(ContactService.contactUrl(match, channel, message));
   } catch {
-    // Almost always WhatsApp not installed — fall back to a calm spoken line.
-    if (channel === 'whatsapp') await speak(COPY.sos.openFailed);
+    // Never leave the user in silence — speak a calm fallback for either channel.
+    await speak(channel === 'whatsapp' ? COPY.sos.openFailed : COPY.sos.callFailed);
   }
   await logEvent(true, now() - t0, channel === 'whatsapp' ? 'whatsapp_family' : 'call_family');
   return ok({ narration, objects: [], route: 'call_family' });

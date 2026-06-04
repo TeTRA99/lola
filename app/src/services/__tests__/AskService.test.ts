@@ -12,6 +12,7 @@ jest.mock('@/adapters/tts', () => ({
 jest.mock('@/adapters/stt', () => ({
   listen: jest.fn(),
   abort: jest.fn(),
+  lastSttDiag: jest.fn(() => ''),
 }));
 
 jest.mock('@/adapters/haptics', () => ({

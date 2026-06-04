@@ -46,9 +46,13 @@ function normalize(contacts: Contact[]): Contact[] {
   const cleaned = contacts
     .filter(c => c.name.trim() && c.phone.trim())
     .slice(0, MAX_CONTACTS)
-    .map(c => ({ id: c.id || makeId(c), name: c.name.trim(), phone: c.phone.trim(), emergency: false }));
+    // Preserve the incoming emergency flag through the map so we can locate it
+    // WITHIN the cleaned/sliced list below — indexing `cleaned` with an index from
+    // the original (unfiltered) array could be out of bounds and crash.
+    .map(c => ({ id: c.id || makeId(c), name: c.name.trim(), phone: c.phone.trim(), emergency: !!c.emergency }));
   if (cleaned.length === 0) return cleaned;
-  const flaggedIdx = contacts.findIndex(c => c.emergency && c.name.trim() && c.phone.trim());
+  const flaggedIdx = cleaned.findIndex(c => c.emergency);
+  cleaned.forEach(c => { c.emergency = false; });
   cleaned[flaggedIdx >= 0 ? flaggedIdx : 0].emergency = true;
   return cleaned;
 }

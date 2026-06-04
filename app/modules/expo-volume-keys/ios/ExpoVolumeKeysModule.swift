@@ -23,6 +23,10 @@ public class ExpoVolumeKeysModule: Module {
       DispatchQueue.main.async { self.startObserving() }
     }
     OnStopObserving {
+      // Invalidate KVO synchronously so no volume-change closure fires during the
+      // teardown / audio-session transition, then clean up + release the session.
+      self.observation?.invalidate()
+      self.observation = nil
       DispatchQueue.main.async { self.stopObserving() }
     }
   }
@@ -59,6 +63,10 @@ public class ExpoVolumeKeysModule: Module {
     hiddenVolumeView?.removeFromSuperview()
     hiddenVolumeView = nil
     lastVolume = -1
+    // Release the audio session we activated in startObserving so we never leave
+    // the audio hardware locked (which would break a later STT mic / route TTS to
+    // the earpiece). notifyOthersOnDeactivation lets other audio resume cleanly.
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
   }
 
   private func keyWindow() -> UIWindow? {

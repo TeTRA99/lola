@@ -23,6 +23,9 @@ class ExpoVolumeKeysModule : Module() {
   }
 
   companion object {
+    // @Volatile: written on the module lifecycle thread (OnCreate/OnDestroy),
+    // read on the UI thread (MainActivity.onKeyDown) — ensures cross-thread visibility.
+    @Volatile
     private var instance: ExpoVolumeKeysModule? = null
 
     // Called from MainActivity.onKeyDown. `key` is "up" or "down". sendEvent only

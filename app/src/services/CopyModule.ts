@@ -169,6 +169,8 @@ export const COPY = {
     whatsappSignature: ' — enviado con Lola.',
     // WhatsApp not installed / link failed.
     openFailed: 'No pude abrir WhatsApp. Probá llamando.',
+    // The phone dialer failed to open — never leave the user in silence.
+    callFailed: 'No pude abrir el teléfono. Probá llamar de la forma habitual.',
     // No contacts saved yet — point to the caregiver setup, gently.
     notConfigured: 'Todavía no tengo a quién llamar. Pedile a alguien de confianza que cargue un contacto en la configuración.',
     // A name was said but it's not in the saved contacts.

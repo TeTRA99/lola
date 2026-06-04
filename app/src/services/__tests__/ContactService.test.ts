@@ -98,4 +98,25 @@ describe('ContactService.saveContacts / listContacts', () => {
     expect(saved[0].name).toBe('Charly');
     expect(saved[0].emergency).toBe(true); // defaults to the only contact
   });
+
+  // Regression: the emergency flag must be located in the CLEANED list, not the
+  // original — blanks before it (or it being past the 5-cap) shifted the index and
+  // crashed with "cannot set properties of undefined".
+  test('emergency flag after filtered-out blanks does not crash and is preserved', async () => {
+    const saved = await ContactService.saveContacts([
+      c('', ''), c('', ''), c('Zoomy', '+541', true),
+    ]);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].name).toBe('Zoomy');
+    expect(saved[0].emergency).toBe(true);
+  });
+
+  test('emergency on a contact beyond the 5-cap does not crash; falls back to first', async () => {
+    const saved = await ContactService.saveContacts([
+      c('A', '1'), c('B', '2'), c('C', '3'), c('D', '4'), c('E', '5'), c('F', '6', true),
+    ]);
+    expect(saved).toHaveLength(ContactService.MAX_CONTACTS);
+    expect(saved.filter(x => x.emergency)).toHaveLength(1);
+    expect(saved[0].emergency).toBe(true); // flagged one was sliced off → default to first
+  });
 });

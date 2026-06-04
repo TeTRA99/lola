@@ -51,9 +51,19 @@ const MIC_OPEN_EARCON_LEAD_MS = 220;
 let resolvedLocale: string | null = null;
 let activeAbort: (() => void) | null = null;
 
+// Diagnostic breadcrumb of which recognizer lifecycle events fired during the
+// last listen() — surfaced in the Debug Ask-trace so we can see WHERE STT hangs
+// on a release build (e.g. "startcalled" with no "audiostart" → mic never opened;
+// "audiostart" with no "result/end" → captured silence; "" → start never fired).
+let sttEvents: string[] = [];
+export function lastSttDiag(): string {
+  return sttEvents.join(',');
+}
+
 export function _resetForTests(): void {
   resolvedLocale = null;
   activeAbort = null;
+  sttEvents = [];
 }
 
 async function resolveLocale(): Promise<string | null> {
@@ -92,6 +102,7 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
   const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
   if (!perm.granted) return err('permission_denied');
 
+  sttEvents = [];
   return new Promise<Result<string, STTError>>(resolve => {
     let transcript = '';
     let settled = false;
@@ -140,18 +151,27 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
 
     subResult = ExpoSpeechRecognitionModule.addListener('result', (e: ResultEvent) => {
       const t = e.results?.[0]?.transcript;
+      sttEvents.push(t ? 'result' : 'result(empty)');
       if (t) transcript = t;
     });
     subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
+      sttEvents.push('end');
       settle(transcript ? ok(transcript) : err('no_speech'));
     });
     subError = ExpoSpeechRecognitionModule.addListener('error', (e: ErrorEvent) => {
       const code = e.error ?? '';
+      sttEvents.push(`error:${code}`);
       settle(err(code === 'not-allowed' ? 'permission_denied' : 'unknown'));
     });
     // Mic-open signals — the real "you can talk now" moment.
-    subAudioStart = ExpoSpeechRecognitionModule.addListener('audiostart', fireReady);
-    subStart = ExpoSpeechRecognitionModule.addListener('start', fireReady);
+    subAudioStart = ExpoSpeechRecognitionModule.addListener('audiostart', () => {
+      sttEvents.push('audiostart');
+      fireReady();
+    });
+    subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
+      sttEvents.push('start');
+      fireReady();
+    });
 
     activeAbort = () => settle(err('timeout'));
 
@@ -159,6 +179,7 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
       if (settled) return; // aborted during the chime lead
       try {
         console.log('[stt] starting with lang:', lang);
+        sttEvents.push('startcalled');
         ExpoSpeechRecognitionModule.start({
           lang,
           interimResults: false,
@@ -167,12 +188,13 @@ export async function listen(opts: ListenOptions = {}): Promise<Result<string, S
         });
       } catch (e) {
         console.log('[stt] start threw:', e);
+        sttEvents.push('startthrew');
         settle(err('engine_unavailable'));
         return;
       }
       readyTimer = setTimeout(fireReady, READY_FALLBACK_MS);
       hardTimeout = setTimeout(
-        () => settle(err('timeout')),
+        () => { sttEvents.push('timeout'); settle(err('timeout')); },
         opts.hardCapMs ?? CONFIG.STT_HARD_CAP_MS,
       );
     };
