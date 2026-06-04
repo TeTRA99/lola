@@ -1,10 +1,12 @@
 export const CONFIG = {
   // Dev tools (Debug 🐞 screen + Guide spike) are normally gated on __DEV__,
   // which is FALSE in the standalone Release builds Charly side-loads onto a
-  // device for testing — so they'd be unreachable there. Flip this on to expose
-  // them in a personal test build.
-  // ⚠️ MUST be false for dad's production build (it's a Charly-only tool surface).
-  SHOW_DEV_TOOLS: true,
+  // device for testing — so they'd be unreachable there.
+  // Env-driven so it's correct per EAS profile: the `preview` profile sets
+  // EXPO_PUBLIC_SHOW_DEV_TOOLS=true (Charly's test builds keep the tools), while
+  // `production` leaves it unset → FALSE, so dad's build never exposes them.
+  // (Local/dev builds still show the tools via __DEV__ regardless of this flag.)
+  SHOW_DEV_TOOLS: process.env.EXPO_PUBLIC_SHOW_DEV_TOOLS === 'true',
 
   // Volume-button trigger (feat/volume-and-sos): max gap between two presses of
   // the same volume key for them to count as a double-press (Vol-Up→Describe,
