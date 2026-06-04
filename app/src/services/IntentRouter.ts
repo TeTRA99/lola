@@ -14,6 +14,7 @@ const INTENT_SYSTEM_PROMPT = `Sos un clasificador de intenciones para una asiste
 - "extend": el usuario quiere MÁS DETALLE sobre la última escena ("contame más", "seguí", "más detalles").
 - "memory": el usuario pregunta por lo que VIO ANTES y NO pide que lo guíes hasta el objeto ahora — dónde ESTABA, dónde lo DEJÓ, CUÁNDO lo vio, qué había alrededor. Es RECUERDO del PASADO ("¿dónde dejé las llaves?", "¿cuándo viste el termo?", "¿qué había cerca del vaso?"). Extraé el sustantivo principal en singular y sin artículo.
 - "guide": el usuario PIDE AYUDA para ENCONTRAR, UBICAR o LLEGAR a un objeto que podría estar en el lugar AHORA, y querés guiarlo con la cámara — "llevame a la taza", "guiame hasta el control", "ayudame a encontrar mi botella", "¿me ayudás a buscar el vaso?", "no encuentro el control, ¿me ayudás?", "ayudame a llegar al sillón". Es del PRESENTE: quiere encontrarlo o llegar AHORA. Extraé el sustantivo principal en "noun" (singular, sin artículo). DISTINCIÓN CLAVE con "memory": si PIDE AYUDA para encontrarlo/llegar ahora → "guide"; si sólo pregunta dónde estaba o cuándo lo viste (recuerdo) → "memory".
+- "call_family": el usuario quiere LLAMAR o ESCRIBIR a un familiar/persona de confianza, o PIDE AYUDA. Extraé el nombre en "noun" si lo dice ("Charly", "mi hijo", "mi hija"); si solo dice "ayuda"/"necesito ayuda"/"emergencia" sin nombre, noun = null. Además decidí "channel": "whatsapp" SOLO si pide explícitamente un WhatsApp o un mensaje escrito ("mandale un WhatsApp", "escribile", "mandale un mensaje"); en cualquier otro caso (incluida toda pedida de ayuda/emergencia), channel = "call". Si el usuario DICTA el contenido del mensaje (sobre todo para WhatsApp), redactá en "message" un mensaje NATURAL, completo y bien escrito, como si la persona se lo mandara al destinatario — NO copies literal lo que dicta, interpretá la intención y armá la frase. Usá español argentino con VOSEO (vení, podés, venís, decime, mandame — NUNCA "ven", "puedes", "vienes"). Podés empezar con un saludo corto ("Hola, "). Ejemplos: "que estoy bien" → "Hola, estoy bien."; "que llego tarde" → "Hola, llego un poco tarde."; "que venga hoy" → "Hola, ¿podés venir hoy?"; "preguntale si viene a cenar" → "Hola, ¿venís a cenar?"; "decile que lo quiero" → "Hola, te quiero mucho.". Si no dicta contenido, message = null.
 - "model": cualquier otra pregunta sobre el CONTENIDO visible — qué es, qué dice, qué color, qué marca, cuántas hay, cómo está, está vencido, etc.
 
 Para "model" también tenés que decidir "needsCurrent": ¿hace falta MIRAR LA ESCENA AHORA o se puede responder con la escena que ya describió antes?
@@ -26,8 +27,10 @@ Si no hay contexto o el sustantivo no aparece en él, default a needsCurrent=tru
 
 OBJETOS GUARDADOS: si te paso un bloque "[OBJETOS GUARDADOS: ...]" y el usuario se refiere a uno de ELLOS como suyo (con posesivo "mi/mis/la mía/el mío", o por su nombre), poné el NOMBRE EXACTO de esa lista en "savedObject". Sirve tanto para describirlo ("describime mi yerba") como para distinguirlo entre varios ("¿cuál de estas es mi yerba?"). Si no se refiere a ninguno de la lista, savedObject = null.
 
+CONTACTOS GUARDADOS: si te paso un bloque "[CONTACTOS GUARDADOS: ...]" y la intención es "call_family" con un nombre, poné en "noun" el NOMBRE EXACTO de esa lista que mejor coincida con lo que el usuario dijo. La transcripción de nombres suele venir con errores o partida en pedazos (un nombre como "Zoomy" puede llegar como "sumi", "su mi", "zumi", "tsunami"): elegí el contacto que SUENE más parecido. Solo si NINGUNO suena razonablemente parecido, poné en "noun" lo que escuchaste tal cual. Para "ayuda"/"emergencia" sin nombre, noun = null.
+
 Respondé SOLO con un objeto JSON de esta forma exacta:
-{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null, "savedObject": "<nombre exacto de la lista de objetos guardados o null>" }
+{ "intent": "chitchat" | "repeat" | "extend" | "memory" | "guide" | "model" | "where_am_i" | "call_family", "noun": "<sustantivo o null>", "needsCurrent": true | false | null, "chitchatKind": "thanks" | "greeting" | "goodbye" | "affirm" | "other" | null, "savedObject": "<nombre exacto de la lista de objetos guardados o null>", "channel": "call" | "whatsapp" | null, "message": "<texto del mensaje a enviar, en primera persona, o null>" }
 
 Ejemplos:
 - "¿dónde estoy?" → { "intent": "where_am_i", "noun": null, "needsCurrent": null, "chitchatKind": null }
@@ -60,7 +63,19 @@ Ejemplos:
 - (con [OBJETOS GUARDADOS: Mi yerba]) "¿cuál de estas es mi yerba?" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
 - (con [OBJETOS GUARDADOS: Mi yerba]) "describime mi yerba" → { "intent": "model", "noun": "yerba", "needsCurrent": true, "chitchatKind": null, "savedObject": "Mi yerba" }
 - (con [OBJETOS GUARDADOS: Mi mate]) "guiame a mi mate" → { "intent": "guide", "noun": "mate", "needsCurrent": null, "chitchatKind": null, "savedObject": "Mi mate" }
-- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a una taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null, "savedObject": null }`;
+- (con [OBJETOS GUARDADOS: Mi mate]) "guiame a una taza" → { "intent": "guide", "noun": "taza", "needsCurrent": null, "chitchatKind": null, "savedObject": null }
+- "llamá a Charly" → { "intent": "call_family", "noun": "Charly", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "llamá a mi hijo" → { "intent": "call_family", "noun": "mi hijo", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "necesito ayuda" → { "intent": "call_family", "noun": null, "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "emergencia" → { "intent": "call_family", "noun": null, "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- "mandale un WhatsApp a Charly" → { "intent": "call_family", "noun": "Charly", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp" }
+- "escribile a mi hija" → { "intent": "call_family", "noun": "mi hija", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp" }
+- (con [CONTACTOS GUARDADOS: Zoomy]) "llamá a sumi" → { "intent": "call_family", "noun": "Zoomy", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- (con [CONTACTOS GUARDADOS: Zoomy, Mariana]) "hablar con su mi" → { "intent": "call_family", "noun": "Zoomy", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- (con [CONTACTOS GUARDADOS: Zoomy]) "llamá a Pedro" → { "intent": "call_family", "noun": "Pedro", "needsCurrent": null, "chitchatKind": null, "channel": "call" }
+- (con [CONTACTOS GUARDADOS: Zoomy]) "escribile a Zoomy que estoy bien" → { "intent": "call_family", "noun": "Zoomy", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp", "message": "Hola, estoy bien." }
+- (con [CONTACTOS GUARDADOS: Zoomy]) "mandale un mensaje a Zoomy que venga hoy" → { "intent": "call_family", "noun": "Zoomy", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp", "message": "Hola, ¿podés venir hoy?" }
+- "mandale un WhatsApp a mi hija diciendo que la llamo más tarde" → { "intent": "call_family", "noun": "mi hija", "needsCurrent": null, "chitchatKind": null, "channel": "whatsapp", "message": "Hola, te llamo más tarde." }`;
 
 type IntentRaw = {
   intent?: string;
@@ -68,6 +83,8 @@ type IntentRaw = {
   needsCurrent?: boolean | null;
   chitchatKind?: string | null;
   savedObject?: string | null;
+  channel?: string | null;
+  message?: string | null;
 };
 
 const VALID_CHITCHAT_KINDS = ['thanks', 'greeting', 'goodbye', 'affirm', 'other'] as const;
@@ -75,6 +92,7 @@ const VALID_CHITCHAT_KINDS = ['thanks', 'greeting', 'goodbye', 'affirm', 'other'
 export async function classifyIntent(
   utterance: string,
   catalogNames: string[] = [],
+  contactNames: string[] = [],
 ): Promise<RouteDecision> {
   console.log('[intent] classifying:', utterance);
   // Inject the last describe/ask narration as recent context so needsCurrent
@@ -88,9 +106,15 @@ export async function classifyIntent(
   const savedBlock = catalogNames.length
     ? `\n\n[OBJETOS GUARDADOS: ${catalogNames.join(', ')}]`
     : '';
+  // The user's saved family contacts, so the LLM can map a (possibly badly
+  // transcribed) spoken name to the right contact — names like "Zoomy" come back
+  // from es-AR STT mangled ("sumi"/"su mi"), so exact matching downstream fails.
+  const contactBlock = contactNames.length
+    ? `\n\n[CONTACTOS GUARDADOS: ${contactNames.join(', ')}]`
+    : '';
   const resp = await chatJson<IntentRaw>({
     systemPrompt: INTENT_SYSTEM_PROMPT,
-    userText: utterance + contextBlock + savedBlock,
+    userText: utterance + contextBlock + savedBlock + contactBlock,
   });
   if (!resp.ok) {
     console.log('[intent] classifier FAILED with:', resp.error, '— defaulting to model route');
@@ -132,6 +156,13 @@ export async function classifyIntent(
         return { type: 'guide', object: raw.noun.trim(), savedObject };
       }
       return { type: 'model', needsCurrent, savedObject };
+    case 'call_family':
+      return {
+        type: 'call_family',
+        contactName: typeof raw.noun === 'string' && raw.noun.trim() ? raw.noun.trim() : null,
+        channel: raw.channel === 'whatsapp' ? 'whatsapp' : 'call',
+        message: typeof raw.message === 'string' && raw.message.trim() ? raw.message.trim() : null,
+      };
     case 'model':
     default:
       return { type: 'model', needsCurrent, savedObject };

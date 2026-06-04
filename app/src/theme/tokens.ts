@@ -193,6 +193,9 @@ export const iconNames = {
   error: 'alert-circle-outline',
   lastSeen: 'time-outline',
   debug: 'bug-outline',
+  star: 'star',
+  starOutline: 'star-outline',
+  call: 'call-outline',
 } as const;
 
 export type IconName = keyof typeof iconNames;

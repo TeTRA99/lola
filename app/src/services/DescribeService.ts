@@ -48,6 +48,13 @@ export function _resetForTests(): void {
   SnapshotCache._resetForTests();
 }
 
+// Flip a first-person room label to second person so Lola says it back naturally:
+// "Mi oficina" → "tu oficina", "Mis cosas" → "tus cosas". Other names pass through
+// ("Cocina" stays "Cocina"). Only the leading possessive is touched.
+function toSecondPersonRoom(name: string): string {
+  return name.trim().replace(/^mis\s+/i, 'tus ').replace(/^mi\s+/i, 'tu ');
+}
+
 async function loadCatalogSafe() {
   try {
     return await OnboardingService.getCatalog();
@@ -103,14 +110,19 @@ export async function run(): Promise<Result<DescribeOutcome, DescribeError>> {
   const roomRes = await roomPromise;
   const roomName = roomRes.ok && roomRes.value ? roomRes.value.displayName : null;
   if (roomName) console.log('[describe] room identified:', roomName);
-  const userText = roomName
-    ? `Estás en ${roomName}. Describi esta escena, empezando por mencionar el cuarto.`
+  // Lola speaks TO the user, so a first-person room label ("Mi oficina") reads
+  // wrong echoed back — flip it to second person ("tu oficina"). It's a KNOWN,
+  // saved room, so she refers to it definitely; the prompt forbids "una/un …" so
+  // the model can't downgrade the recognized room to a generic guess.
+  const roomPhrase = roomName ? toSecondPersonRoom(roomName) : null;
+  const userText = roomPhrase
+    ? `La persona está en "${roomPhrase}" (un lugar conocido, ya identificado). Empezá tu respuesta nombrando ese lugar tal cual, por ejemplo "Estás en ${roomPhrase}". NUNCA lo llames "una" ni "un" (no es un lugar cualquiera). Después nombrá los objetos principales que ves.`
     : 'Describe esta escena.';
   // Sharper, item-focused instruction for the on-device VLM (it follows the user
   // turn better than the system prompt). Lola is the user's eyes at home: name the
   // things in front of them, not the "scene"/ambiance.
   const objectsTask = 'Nombrá los objetos principales que tengo adelante, en una o dos frases cortas separadas por comas, y decime dónde está cada cosa. Solo los objetos cotidianos que ves, sin describir la escena ni el ambiente ni para qué sirven.';
-  const localUserText = roomName ? `Estás en ${roomName}. ${objectsTask}` : objectsTask;
+  const localUserText = roomPhrase ? `Estás en ${roomPhrase}. ${objectsTask}` : objectsTask;
   const resp = await chat({
     systemPrompt: buildSystemPrompt(catalog),
     userText,

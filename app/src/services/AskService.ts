@@ -3,7 +3,7 @@
 // memory recall / model call.
 
 import { speak } from '@/adapters/tts';
-import { listen } from '@/adapters/stt';
+import { listen, lastSttDiag } from '@/adapters/stt';
 import { fire } from '@/adapters/haptics';
 import { captureSnapshot } from '@/adapters/camera';
 import { chat, inferenceMode } from '@/services/ModelRouter';
@@ -24,6 +24,8 @@ import * as RoomCatalog from '@/services/RoomCatalog';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
 import { ago } from '@/utils/relativeTime';
+import { Linking } from 'react-native';
+import * as ContactService from '@/services/ContactService';
 import type { LolaObject } from '@/gateways/openrouter';
 
 export type AskError =
@@ -97,7 +99,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
   fire('listening_stop');
   if (!sttResult.ok) {
     console.log('[ask] STT FAILED with:', sttResult.error);
-    recordAskTrace({ at: now(), utterance: null, route: `STT_FAIL:${sttResult.error}` });
+    recordAskTrace({ at: now(), utterance: null, route: `STT_FAIL:${sttResult.error} [${lastSttDiag()}]` });
     fire('error');
     const kind: ErrorKind =
       sttResult.error === 'permission_denied' ? 'permission_denied_mic' :
@@ -114,9 +116,16 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
 
   const utterance = sttResult.value;
   // Pass saved-object names so the classifier can flag a question about one of
-  // THE user's things ("mi yerba") → we attach its reference photo below.
+  // THE user's things ("mi yerba") → we attach its reference photo below. Also
+  // pass the family-contact names so the classifier can map a badly-transcribed
+  // spoken name ("sumi" → "Zoomy") to the right contact for the call_family route.
   const catalog = await loadCatalogSafe();
-  const decision = await classifyIntent(utterance, (catalog ?? []).map(o => o.display_name));
+  const contacts = await ContactService.listContacts();
+  const decision = await classifyIntent(
+    utterance,
+    (catalog ?? []).map(o => o.display_name),
+    contacts.map(c => c.name),
+  );
   console.log('[ask] routed to:', decision.type);
   recordAskTrace({ at: now(), utterance, route: describeRoute(decision) });
 
@@ -160,6 +169,9 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       return handleMemory(decision.object, utterance, t0, ensureSnapshot);
     case 'guide':
       return handleGuide(decision.object, decision.savedObject ?? null, t0);
+    case 'call_family':
+      // No snapshot/STT needed — the utterance is already captured.
+      return handleCallFamily(decision.contactName, decision.channel, decision.message, t0);
     case 'model': {
       // Reference-conditioned Ask: if the question is about a SAVED object
       // ("¿cuál es mi yerba?" / "describime mi yerba"), attach that object's
@@ -227,6 +239,44 @@ async function handleGuide(noun: string, savedObject: string | null, t0: number)
   });
 }
 
+// Local SOS / "call family": resolve the named (or emergency) contact and open
+// the dialer (tel: — dad taps call) or a pre-filled WhatsApp chat. No backend,
+// no snapshot. A misheard name is caught by ear: Lola says "Llamando a X" before
+// the dialer opens, and tel: never auto-dials.
+async function handleCallFamily(
+  contactName: string | null,
+  channel: ContactService.ContactChannel,
+  message: string | null,
+  t0: number,
+): Promise<Result<AskOutcome, AskError>> {
+  const contacts = await ContactService.listContacts();
+  fire('answer_ready');
+
+  if (contacts.length === 0) {
+    await speak(COPY.sos.notConfigured);
+    await logEvent(true, now() - t0, 'call_family_unconfigured');
+    return ok({ narration: COPY.sos.notConfigured, objects: [], route: 'call_family' });
+  }
+
+  const match = ContactService.resolveContact(contactName, contacts);
+  if (!match) {
+    await speak(COPY.sos.notFound);
+    await logEvent(true, now() - t0, 'call_family_no_match');
+    return ok({ narration: COPY.sos.notFound, objects: [], route: 'call_family' });
+  }
+
+  const narration = channel === 'whatsapp' ? COPY.sos.messaging(match.name) : COPY.sos.calling(match.name);
+  await speak(narration);
+  try {
+    await Linking.openURL(ContactService.contactUrl(match, channel, message));
+  } catch {
+    // Never leave the user in silence — speak a calm fallback for either channel.
+    await speak(channel === 'whatsapp' ? COPY.sos.openFailed : COPY.sos.callFailed);
+  }
+  await logEvent(true, now() - t0, channel === 'whatsapp' ? 'whatsapp_family' : 'call_family');
+  return ok({ narration, objects: [], route: 'call_family' });
+}
+
 // Compact human-readable route label for the Debug Ask-trace readout.
 function describeRoute(d: RouteDecision): string {
   switch (d.type) {
@@ -234,6 +284,7 @@ function describeRoute(d: RouteDecision): string {
     case 'guide': return `guide:${d.object}`;
     case 'memory': return `memory:${d.object}`;
     case 'model': return `model${d.needsCurrent === false ? '(cached)' : ''}`;
+    case 'call_family': return `call_family:${d.channel}:${d.contactName ?? 'emergency'}`;
     default: return d.type;
   }
 }

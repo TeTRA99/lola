@@ -12,6 +12,7 @@ jest.mock('@/adapters/tts', () => ({
 jest.mock('@/adapters/stt', () => ({
   listen: jest.fn(),
   abort: jest.fn(),
+  lastSttDiag: jest.fn(() => ''),
 }));
 
 jest.mock('@/adapters/haptics', () => ({
@@ -56,6 +57,13 @@ jest.mock('@/services/RoomCatalog', () => ({
   identifyRoom: jest.fn(async () => ({ ok: true, value: null })),
 }));
 
+// SOS: real (pure) resolveContact/contactUrl; only listContacts is stubbed.
+jest.mock('@/services/ContactService', () => ({
+  __esModule: true,
+  ...jest.requireActual('@/services/ContactService'),
+  listContacts: jest.fn(async () => []),
+}));
+
 import { run } from '../AskService';
 import { COPY } from '@/services/CopyModule';
 import { speak } from '@/adapters/tts';
@@ -65,6 +73,8 @@ import { chat, chatJson } from '@/services/ModelRouter';
 import { getDb } from '@/adapters/storage';
 import * as SnapshotCache from '@/services/SnapshotCache';
 import * as RoomCatalog from '@/services/RoomCatalog';
+import * as ContactService from '@/services/ContactService';
+import { Linking } from 'react-native';
 
 const mSpeak = speak as jest.MockedFunction<typeof speak>;
 const mListen = listen as jest.MockedFunction<typeof listen>;
@@ -74,12 +84,17 @@ const mChatJson = chatJson as jest.MockedFunction<typeof chatJson>;
 const mGetDb = getDb as jest.MockedFunction<typeof getDb>;
 const mGetLatest = SnapshotCache.getLatest as jest.MockedFunction<typeof SnapshotCache.getLatest>;
 const mIdentifyRoom = RoomCatalog.identifyRoom as jest.MockedFunction<typeof RoomCatalog.identifyRoom>;
+const mListContacts = ContactService.listContacts as jest.MockedFunction<typeof ContactService.listContacts>;
+let mOpenURL: jest.SpyInstance;
 
 const runAsync = jest.fn(async () => ({ lastInsertRowId: 1, changes: 1 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
   mGetDb.mockResolvedValue({ runAsync } as unknown as Awaited<ReturnType<typeof getDb>>);
+  // Spy on the real RN Linking (the jest-expo preset provides it) — don't mock
+  // the whole module, which breaks the preset's Platform setup.
+  mOpenURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
 });
 
 function snap() {
@@ -270,5 +285,55 @@ describe('AskService.run — error paths', () => {
     const r = await run();
     expect(r.ok).toBe(false);
     expect(COPY.errors.genericVariants).toContain(mSpeak.mock.calls.at(-1)?.[0]);
+  });
+});
+
+describe('AskService.run — route: call_family (local SOS)', () => {
+  const charly = { id: 'charly', name: 'Charly', phone: '+5491100', emergency: true };
+
+  test('call: classify → resolve → speak "Llamando…" + tel: link, no snapshot', async () => {
+    stt('llamá a Charly');
+    mChatJson.mockResolvedValue({ ok: true, value: { intent: 'call_family', noun: 'Charly', channel: 'call' } });
+    mListContacts.mockResolvedValue([charly]);
+
+    const r = await run();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.route).toBe('call_family');
+    expect(mCapture).not.toHaveBeenCalled();
+    expect(mSpeak).toHaveBeenCalledWith('Llamando a Charly.');
+    expect(mOpenURL).toHaveBeenCalledWith('tel:+5491100');
+  });
+
+  test('whatsapp verb → speak "Le escribo…" + whatsapp link', async () => {
+    stt('mandale un WhatsApp a Charly');
+    mChatJson.mockResolvedValue({ ok: true, value: { intent: 'call_family', noun: 'Charly', channel: 'whatsapp' } });
+    mListContacts.mockResolvedValue([charly]);
+
+    const r = await run();
+    expect(r.ok).toBe(true);
+    expect(mSpeak).toHaveBeenCalledWith('Le escribo a Charly.');
+    expect(mOpenURL).toHaveBeenCalledWith(expect.stringContaining('whatsapp://send?phone=5491100'));
+  });
+
+  test('bare "ayuda" with no name → emergency contact (call)', async () => {
+    stt('necesito ayuda');
+    mChatJson.mockResolvedValue({ ok: true, value: { intent: 'call_family', noun: null, channel: 'call' } });
+    mListContacts.mockResolvedValue([{ id: 'm', name: 'Mariana', phone: '+5492200', emergency: true }]);
+
+    const r = await run();
+    expect(r.ok).toBe(true);
+    expect(mSpeak).toHaveBeenCalledWith('Llamando a Mariana.');
+    expect(mOpenURL).toHaveBeenCalledWith('tel:+5492200');
+  });
+
+  test('no contacts configured → gentle line, no dialer', async () => {
+    stt('llamá a Charly');
+    mChatJson.mockResolvedValue({ ok: true, value: { intent: 'call_family', noun: 'Charly', channel: 'call' } });
+    mListContacts.mockResolvedValue([]);
+
+    const r = await run();
+    expect(r.ok).toBe(true);
+    expect(mSpeak).toHaveBeenCalledWith(COPY.sos.notConfigured);
+    expect(mOpenURL).not.toHaveBeenCalled();
   });
 });

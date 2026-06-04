@@ -79,6 +79,19 @@ type SetupCopy = {
   aiModeLocal: string;
   aiModeCloudHint: string;
   aiModeLocalHint: string;
+  volumeTrigger: string;
+  volumeTriggerHint: string;
+  family: string;
+  familyHint: string;
+  emptyContacts: string;
+  emergencyContact: string;
+  contactName: string;
+  contactNamePh: string;
+  contactPhone: string;
+  contactPhonePh: string;
+  addContact: string;
+  saveContact: string;
+  contactsFull: string;
   aiModeSwitchTitle: string;
   aiModeToCloudBody: string;
   aiModeToLocalBody: string;
@@ -182,6 +195,19 @@ const en: SetupCopy = {
   aiModeLocal: 'On the phone',
   aiModeCloudHint: 'Recommended. Photos are sent to the cloud, so Lola sees more and can name specific things (like a mate). Needs an internet connection.',
   aiModeLocalHint: 'Private and works offline — photos never leave the phone. But Lola recognizes far fewer things and won’t name specific objects (a mate becomes “a cup”). The first time, it downloads a model to the phone.',
+  volumeTrigger: 'Volume buttons',
+  volumeTriggerHint: 'From the home screen, double-press Volume Up to describe, Volume Down to ask. Single presses still change the volume.',
+  family: 'Family',
+  familyHint: 'Who Lola calls when he asks for help. Tap the star to set the emergency contact.',
+  emptyContacts: 'No contacts yet.',
+  emergencyContact: 'Emergency',
+  contactName: 'Name',
+  contactNamePh: 'e.g. Charly',
+  contactPhone: 'Phone',
+  contactPhonePh: '+54 9 11 …',
+  addContact: 'Add contact',
+  saveContact: 'Save contact',
+  contactsFull: 'Up to 5 contacts.',
   aiModeSwitchTitle: 'How Lola sees',
   aiModeToCloudBody: 'Online, Lola sends photos to the internet to see better and recognize specific things (like a mate). Turn it on?',
   aiModeToLocalBody: 'On the phone, photos never leave the device — private and offline — but Lola recognizes fewer things, and it downloads a model the first time. Turn it on?',
@@ -282,6 +308,19 @@ const es: SetupCopy = {
   aiModeLocal: 'En el teléfono',
   aiModeCloudHint: 'Recomendado. Las fotos se envían a la nube, así Lola ve más y puede nombrar cosas específicas (como un mate). Necesita conexión a internet.',
   aiModeLocalHint: 'Privado y funciona sin internet: las fotos nunca salen del teléfono. Pero Lola reconoce muchas menos cosas y no nombra objetos específicos (un mate pasa a ser “una taza”). La primera vez descarga un modelo al teléfono.',
+  volumeTrigger: 'Botones de volumen',
+  volumeTriggerHint: 'Desde la pantalla principal, apretá dos veces subir volumen para describir, o bajar volumen para preguntar. Una sola vez sigue cambiando el volumen.',
+  family: 'Familia',
+  familyHint: 'A quién llama Lola cuando pide ayuda. Tocá la estrella para elegir el contacto de emergencia.',
+  emptyContacts: 'Todavía no hay contactos.',
+  emergencyContact: 'Emergencia',
+  contactName: 'Nombre',
+  contactNamePh: 'ej. Charly',
+  contactPhone: 'Teléfono',
+  contactPhonePh: '+54 9 11 …',
+  addContact: 'Agregar contacto',
+  saveContact: 'Guardar contacto',
+  contactsFull: 'Hasta 5 contactos.',
   aiModeSwitchTitle: 'Cómo ve Lola',
   aiModeToCloudBody: 'En línea, Lola envía las fotos a internet para ver mejor y reconocer cosas específicas (como un mate). ¿Querés activarlo?',
   aiModeToLocalBody: 'En el teléfono, las fotos no salen del dispositivo —privado y sin internet— pero Lola reconoce menos cosas, y la primera vez descarga un modelo. ¿Querés activarlo?',

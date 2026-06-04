@@ -6,6 +6,11 @@ export const CONFIG = {
   // ⚠️ MUST be false for dad's production build (it's a Charly-only tool surface).
   SHOW_DEV_TOOLS: true,
 
+  // Volume-button trigger (feat/volume-and-sos): max gap between two presses of
+  // the same volume key for them to count as a double-press (Vol-Up→Describe,
+  // Vol-Down→Ask). Single presses still change the device volume.
+  VOLUME_DOUBLE_MS: 400,
+
   // Model + gateway (NFR-11, AD-4)
   MODEL_ID: 'google/gemini-2.5-flash',
   MODEL_ID_CHEAP: 'google/gemini-2.5-flash-lite',

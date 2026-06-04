@@ -38,6 +38,7 @@ import { cameraNeedsAlwaysOn } from '@/adapters/camera';
 import { subscribeHaptics, heartbeat, type HapticPattern } from '@/adapters/haptics';
 import { subscribeSpeech, speak, stop as ttsStop } from '@/adapters/tts';
 import { abort as sttAbort } from '@/adapters/stt';
+import { useVolumeTrigger } from '@/adapters/useVolumeTrigger';
 import * as Settings from '@/services/Settings';
 import { Icon } from '@/components/Icon';
 import { ActionIcon } from '@/components/ActionIcon';
@@ -169,6 +170,32 @@ export function HomeScreen({
       heartbeatHintDoneRef.current = seen;
     });
   }, []);
+
+  // Volume-button trigger (opt-in, caregiver-enabled). Loaded at mount; Home
+  // remounts on return from Setup so a freshly-flipped toggle takes effect. The
+  // double-press windowing + Home-idle gate live in useVolumeTrigger.
+  const [volumeTriggerOn, setVolumeTriggerOn] = useState(false);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.volumeTrigger, false).then(setVolumeTriggerOn);
+  }, []);
+  // null until loaded, so we never speak the hint before we know if it's armed.
+  const [volumeHintPending, setVolumeHintPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    void Settings.getBool(Settings.KEYS.volumeTriggerHintPending, false).then(setVolumeHintPending);
+  }, []);
+  // Explain the volume gesture the moment the user lands on Home after the caregiver
+  // ENABLES it — same principle as the model prep: onboarding happens on RETURN to
+  // Home, not on first action. Armed on each enable (cleared once played), so
+  // re-enabling re-explains.
+  useEffect(() => {
+    // Android-only feature (see adapters/volumeKeys) — don't announce it on iOS.
+    if (Platform.OS !== 'android') return;
+    if (volumeHintPending !== true || !volumeTriggerOn) return;
+    if (state !== 'idle' || showWelcome) return;
+    setVolumeHintPending(false);
+    void Settings.setBool(Settings.KEYS.volumeTriggerHintPending, false);
+    void speak(COPY.onboarding.volumeTriggerHint);
+  }, [volumeHintPending, volumeTriggerOn, state, showWelcome]);
   useEffect(() => {
     if (!heartbeatOn || state !== 'idle' || showWelcome) return;
     const id = setInterval(() => {
@@ -261,6 +288,19 @@ export function HomeScreen({
       setState('idle');
     }
   };
+
+  // Fire Describe/Ask from a double-press of the volume keys. The gesture is
+  // explained on Home arrival (above), so here we just run.
+  const triggerFromVolume = (m: Mode) => {
+    if (runningRef.current || preparingRef.current) return;
+    void run(m);
+  };
+  useVolumeTrigger({
+    enabled: volumeTriggerOn,
+    idle: state === 'idle' && !showWelcome,
+    onDescribe: () => triggerFromVolume('describe'),
+    onAsk: () => triggerFromVolume('ask'),
+  });
 
   // Top bar fades out (and stops taking touches) while a flow is running.
   // NOTE: must stay above the `state === 'error'` early return below — all hooks
