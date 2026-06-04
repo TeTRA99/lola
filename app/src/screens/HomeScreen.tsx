@@ -178,12 +178,24 @@ export function HomeScreen({
   useEffect(() => {
     void Settings.getBool(Settings.KEYS.volumeTrigger, false).then(setVolumeTriggerOn);
   }, []);
-  const volumeHintDoneRef = useRef(true);
+  // null until loaded, so we never speak the hint before we know if it's armed.
+  const [volumeHintPending, setVolumeHintPending] = useState<boolean | null>(null);
   useEffect(() => {
-    void Settings.getBool(Settings.KEYS.volumeTriggerHintSeen, false).then(seen => {
-      volumeHintDoneRef.current = seen;
-    });
+    void Settings.getBool(Settings.KEYS.volumeTriggerHintPending, false).then(setVolumeHintPending);
   }, []);
+  // Explain the volume gesture the moment the user lands on Home after the caregiver
+  // ENABLES it — same principle as the model prep: onboarding happens on RETURN to
+  // Home, not on first action. Armed on each enable (cleared once played), so
+  // re-enabling re-explains.
+  useEffect(() => {
+    // Android-only feature (see adapters/volumeKeys) — don't announce it on iOS.
+    if (Platform.OS !== 'android') return;
+    if (volumeHintPending !== true || !volumeTriggerOn) return;
+    if (state !== 'idle' || showWelcome) return;
+    setVolumeHintPending(false);
+    void Settings.setBool(Settings.KEYS.volumeTriggerHintPending, false);
+    void speak(COPY.onboarding.volumeTriggerHint);
+  }, [volumeHintPending, volumeTriggerOn, state, showWelcome]);
   useEffect(() => {
     if (!heartbeatOn || state !== 'idle' || showWelcome) return;
     const id = setInterval(() => {
@@ -277,16 +289,10 @@ export function HomeScreen({
     }
   };
 
-  // Fire Describe/Ask from a double-press of the volume keys. On the very first
-  // use (after the caregiver turns it on) explain the gesture once, then run.
+  // Fire Describe/Ask from a double-press of the volume keys. The gesture is
+  // explained on Home arrival (above), so here we just run.
   const triggerFromVolume = (m: Mode) => {
     if (runningRef.current || preparingRef.current) return;
-    if (!volumeHintDoneRef.current) {
-      volumeHintDoneRef.current = true;
-      void Settings.setBool(Settings.KEYS.volumeTriggerHintSeen, true);
-      void (async () => { await speak(COPY.onboarding.volumeTriggerHint); void run(m); })();
-      return;
-    }
     void run(m);
   };
   useVolumeTrigger({

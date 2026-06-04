@@ -120,7 +120,8 @@ export const KEYS = {
   // Family contacts for the local SOS / "call family" feature (JSON array of
   // {id,name,phone,emergency}). Caregiver-managed in Setup; up to 5.
   familyContacts: 'family_contacts',
-  // First-use voice hint for the volume-button trigger (shown once).
+  // Volume-button trigger toggle + the "play the gesture explanation on the next
+  // Home arrival" flag, armed each time the caregiver enables the toggle.
   volumeTrigger: 'volume_trigger',
-  volumeTriggerHintSeen: 'onboarding_volume_trigger_hint_seen',
+  volumeTriggerHintPending: 'volume_trigger_hint_pending',
 } as const;

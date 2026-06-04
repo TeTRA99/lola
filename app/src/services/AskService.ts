@@ -116,9 +116,16 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
 
   const utterance = sttResult.value;
   // Pass saved-object names so the classifier can flag a question about one of
-  // THE user's things ("mi yerba") → we attach its reference photo below.
+  // THE user's things ("mi yerba") → we attach its reference photo below. Also
+  // pass the family-contact names so the classifier can map a badly-transcribed
+  // spoken name ("sumi" → "Zoomy") to the right contact for the call_family route.
   const catalog = await loadCatalogSafe();
-  const decision = await classifyIntent(utterance, (catalog ?? []).map(o => o.display_name));
+  const contacts = await ContactService.listContacts();
+  const decision = await classifyIntent(
+    utterance,
+    (catalog ?? []).map(o => o.display_name),
+    contacts.map(c => c.name),
+  );
   console.log('[ask] routed to:', decision.type);
   recordAskTrace({ at: now(), utterance, route: describeRoute(decision) });
 
@@ -164,7 +171,7 @@ export async function run(): Promise<Result<AskOutcome, AskError>> {
       return handleGuide(decision.object, decision.savedObject ?? null, t0);
     case 'call_family':
       // No snapshot/STT needed — the utterance is already captured.
-      return handleCallFamily(decision.contactName, decision.channel, t0);
+      return handleCallFamily(decision.contactName, decision.channel, decision.message, t0);
     case 'model': {
       // Reference-conditioned Ask: if the question is about a SAVED object
       // ("¿cuál es mi yerba?" / "describime mi yerba"), attach that object's
@@ -239,6 +246,7 @@ async function handleGuide(noun: string, savedObject: string | null, t0: number)
 async function handleCallFamily(
   contactName: string | null,
   channel: ContactService.ContactChannel,
+  message: string | null,
   t0: number,
 ): Promise<Result<AskOutcome, AskError>> {
   const contacts = await ContactService.listContacts();
@@ -260,7 +268,7 @@ async function handleCallFamily(
   const narration = channel === 'whatsapp' ? COPY.sos.messaging(match.name) : COPY.sos.calling(match.name);
   await speak(narration);
   try {
-    await Linking.openURL(ContactService.contactUrl(match, channel));
+    await Linking.openURL(ContactService.contactUrl(match, channel, message));
   } catch {
     // Almost always WhatsApp not installed — fall back to a calm spoken line.
     if (channel === 'whatsapp') await speak(COPY.sos.openFailed);

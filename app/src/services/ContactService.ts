@@ -80,12 +80,18 @@ export function resolveContact(name: string | null, contacts: Contact[]): Contac
   );
 }
 
-/** Build the deep link to reach a contact via the chosen channel. */
-export function contactUrl(c: Contact, channel: ContactChannel): string {
+/** Build the deep link to reach a contact via the chosen channel. For WhatsApp,
+ *  `message` is the dictated body (falls back to the default greeting). */
+export function contactUrl(c: Contact, channel: ContactChannel, message?: string | null): string {
   if (channel === 'whatsapp') {
     // WhatsApp wants digits only (country code, no '+'/spaces) + a pre-filled body.
     const digits = c.phone.replace(/[^\d]/g, '');
-    return `whatsapp://send?phone=${digits}&text=${encodeURIComponent(COPY.sos.whatsappText)}`;
+    // A dictated message gets the Lola signature; the no-message fallback already
+    // names Lola, so it doesn't.
+    const body = message?.trim()
+      ? `${message.trim()}${COPY.sos.whatsappSignature}`
+      : COPY.sos.whatsappText;
+    return `whatsapp://send?phone=${digits}&text=${encodeURIComponent(body)}`;
   }
   // ACTION_DIAL: opens the dialer pre-filled — the user taps call (natural
   // confirmation, no CALL_PHONE permission needed). tel: tolerates the '+'.

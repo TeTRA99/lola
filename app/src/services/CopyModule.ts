@@ -162,8 +162,11 @@ export const COPY = {
   sos: {
     calling: (name: string): string => `Llamando a ${name}.`,
     messaging: (name: string): string => `Le escribo a ${name}.`,
-    // Pre-filled WhatsApp body (the chat opens with this; dad taps send).
+    // Pre-filled WhatsApp body when the user didn't dictate a message.
     whatsappText: 'Hola, te escribo con Lola.',
+    // Appended to a DICTATED message so family knows it came via the assistive app
+    // ("Estoy bien — enviado con Lola.").
+    whatsappSignature: ' — enviado con Lola.',
     // WhatsApp not installed / link failed.
     openFailed: 'No pude abrir WhatsApp. Probá llamando.',
     // No contacts saved yet — point to the caregiver setup, gently.

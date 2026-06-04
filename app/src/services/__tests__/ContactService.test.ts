@@ -10,6 +10,7 @@ jest.mock('@/services/Settings', () => {
 
 import * as ContactService from '../ContactService';
 import type { Contact } from '../ContactService';
+import { COPY } from '@/services/CopyModule';
 
 const c = (name: string, phone: string, emergency = false): Contact => ({ id: '', name, phone, emergency });
 
@@ -57,10 +58,20 @@ describe('ContactService.contactUrl (pure)', () => {
     expect(ContactService.contactUrl(contact, 'call')).toBe('tel:+549112233');
   });
 
-  test('whatsapp → digits only + pre-filled text', () => {
+  test('whatsapp → digits only + default pre-filled text', () => {
     const url = ContactService.contactUrl(contact, 'whatsapp');
     expect(url).toContain('whatsapp://send?phone=549112233');
     expect(url).toContain('&text=');
+  });
+
+  test('whatsapp with a dictated message uses it + the Lola signature', () => {
+    const url = ContactService.contactUrl(contact, 'whatsapp', 'Estoy bien');
+    expect(url).toContain(`&text=${encodeURIComponent('Estoy bien' + COPY.sos.whatsappSignature)}`);
+  });
+
+  test('whatsapp with a blank message falls back to the default body', () => {
+    const url = ContactService.contactUrl(contact, 'whatsapp', '   ');
+    expect(url).toContain(`&text=${encodeURIComponent(COPY.sos.whatsappText)}`);
   });
 });
 

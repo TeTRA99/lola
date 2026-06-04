@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -45,9 +46,13 @@ import { useSetupStrings, setLang, useLang, type Lang } from '@/i18n';
 import { color, radius, fontFamily, shadow } from '@/theme/tokens';
 import { TOP_INSET, BOTTOM_INSET } from '@/theme/insets';
 import type { SetupCopy } from '@/i18n/setupStrings';
+import appConfig from '../../app.json';
 
-// Read once at module load — these are synchronous native getters.
-const APP_VERSION = Application.nativeApplicationVersion ?? '0.0.0';
+// Version is read from app.json — the SINGLE source of truth — which is bundled
+// into the JS, so it updates on every JS push (no native rebuild needed). The
+// native version/build numbers (Info.plist, build.gradle) are kept in sync by
+// scripts/set-version.mjs, guarded by version.sync.test.ts so they can't drift.
+const APP_VERSION = appConfig.expo.version;
 const APP_BUILD = Application.nativeBuildVersion ?? '—';
 
 type Tab = 'objects' | 'rooms' | 'settings';
@@ -337,6 +342,9 @@ function SettingsTab() {
     const next = !volumeTriggerOn;
     setVolumeTriggerOn(next);
     await Settings.setBool(Settings.KEYS.volumeTrigger, next);
+    // Arm the on-Home gesture explanation each time it's turned ON (so re-enabling
+    // re-explains); clear it when turned off.
+    await Settings.setBool(Settings.KEYS.volumeTriggerHintPending, next);
   };
 
   const selectVoice = (id: string) => {
@@ -519,16 +527,19 @@ function SettingsTab() {
           </View>
         </Pressable>
 
-        {/* Volume-button trigger (needs the native build to actually fire). */}
-        <Pressable style={styles.settingRow} onPress={toggleVolumeTrigger}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.settingLabel}>{t.volumeTrigger}</Text>
-            <Text style={styles.settingHint}>{t.volumeTriggerHint}</Text>
-          </View>
-          <View style={[styles.toggle, volumeTriggerOn && styles.toggleOn]}>
-            <View style={[styles.toggleKnob, volumeTriggerOn && styles.toggleKnobOn]} />
-          </View>
-        </Pressable>
+        {/* Volume-button trigger — Android only (iOS can't detect a volume press
+            without hijacking the system volume; see adapters/volumeKeys). */}
+        {Platform.OS === 'android' && (
+          <Pressable style={styles.settingRow} onPress={toggleVolumeTrigger}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingLabel}>{t.volumeTrigger}</Text>
+              <Text style={styles.settingHint}>{t.volumeTriggerHint}</Text>
+            </View>
+            <View style={[styles.toggle, volumeTriggerOn && styles.toggleOn]}>
+              <View style={[styles.toggleKnob, volumeTriggerOn && styles.toggleKnobOn]} />
+            </View>
+          </Pressable>
+        )}
 
         {/* Family contacts — who Lola calls when dad asks for help (local SOS). */}
         <FamilyContactsCard />

@@ -7,6 +7,7 @@
 // The double-press windowing + Home-idle gating + routing all live in JS
 // (useVolumeTrigger) — this adapter just forwards raw presses.
 
+import { Platform } from 'react-native';
 import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 
 export type VolumeDir = 'up' | 'down';
@@ -16,16 +17,25 @@ type VolumeKeysNative = {
   addListener(event: 'onVolumeKey', listener: (e: VolumeKeyEvent) => void): EventSubscription;
 };
 
-const Native = requireOptionalNativeModule<VolumeKeysNative>('ExpoVolumeKeys');
+// ANDROID-ONLY. Android forwards real key events without consuming them, so the
+// volume keeps working normally. iOS has no clean volume-key API — the only way
+// to detect a press is to activate an audio session + a hidden MPVolumeView,
+// which HIJACKS the system volume on the idle Home screen (ringer/media mismatch,
+// presses doing nothing until TTS makes the session real). That's worse than the
+// feature is worth on iOS (Charly's test device), so we never observe there and
+// iOS volume behaves 100% normally. Revisit only with a non-intrusive iOS path.
+const Native = Platform.OS === 'android'
+  ? requireOptionalNativeModule<VolumeKeysNative>('ExpoVolumeKeys')
+  : null;
 
-/** True once the native module is in the binary (i.e. after a native rebuild). */
+/** True once the native module is usable (Android + in the binary). */
 export function isVolumeKeysAvailable(): boolean {
   return Native != null;
 }
 
 /**
- * Subscribe to raw volume-key presses. Returns an unsubscribe fn. When the
- * native module is absent (no rebuild yet), returns a no-op unsubscribe.
+ * Subscribe to raw volume-key presses. Returns an unsubscribe fn. No-op on iOS
+ * and when the native module is absent (no rebuild yet).
  */
 export function subscribeVolumeKeys(fn: (dir: VolumeDir) => void): () => void {
   if (!Native) return () => {};
