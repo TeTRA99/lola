@@ -5,7 +5,7 @@
 > you to everyday objects with haptic "warmer / colder" feedback. Spanish
 > (Argentine *voseo*) throughout.
 
-**Status:** active development · v0.11.0 · Android (priority) + iOS. Solo project.
+**Status:** active development · v0.12.0 · Android (priority) + iOS. Solo project.
 
 The app lives in [`app/`](app/); design notes in [`docs/`](docs/); day-to-day
 conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
@@ -34,10 +34,19 @@ conventions (for contributors and AI sessions) in [`CLAUDE.md`](CLAUDE.md).
   own saved things** (*"guiame a mi mate"*) — or anything outside the common-object
   set — uses a **cloud** open-vocabulary model, showing the live camera through a
   peephole with spoken "where" cues (direction + a nearby landmark).
-- **Setup** (caregiver) — register objects/rooms, tune the voice, pick the
-  on-device **detection quality**.
+- **Llamá a X / "necesito ayuda"** — say *"llamá a Charly"* or *"necesito ayuda"* and
+  Lola calls a family contact (the **emergency** one for a bare cry for help); *"mandale
+  un WhatsApp a Charly que venga hoy"* opens WhatsApp with the message **written for you**
+  in natural Spanish (*"Hola, ¿podés venir hoy?"*). Caregiver-managed contacts, fully
+  local — no backend, no accounts.
+- **Volume-button trigger** (Android, opt-in) — with the screen untouched, **double-press
+  Volume-Up** to Describir and **Volume-Down** to Preguntar; single presses still change
+  the volume normally. (iOS can't detect a volume press without hijacking the audio
+  session, so it's Android-only by design.)
+- **Setup** (caregiver) — register objects/rooms, add **family contacts** for "llamá a X",
+  enable the volume trigger, tune the voice, pick the on-device **detection quality**.
 - **Debug** (dev-only) — usage telemetry, a live detector spike, and model selection
-  for testing embedded (on-device) vs online (cloud) vision/guide.
+  for testing embedded (on-device) vs online (cloud) vision/guide. Off in production builds.
 
 Designed for a blind / low-vision user: voice-first, large touch targets, **audible
 *and* haptic** cues for every state (the guide's Geiger homing, the idle heartbeat,
@@ -115,15 +124,17 @@ live in [`docs/runbooks/`](docs/runbooks/).
 
 ## Versioning
 
-`app/app.json` (`version`, `ios.buildNumber`, `android.versionCode`) is the **single
-source of truth**. After bumping it, run:
+`app/app.json` `version` is the **single source of truth**. The in-app footer reads it
+straight from the JS bundle, so the shown version updates on any JS push — no native
+rebuild needed. After bumping it, run:
 
 ```bash
 cd app && npm run sync-version
 ```
 
 to stamp the **same** version into both `ios/Lola/Info.plist` and
-`android/app/build.gradle`, so iOS and Android never drift.
+`android/app/build.gradle`. A `version.sync` jest test fails if the three ever diverge,
+so iOS, Android, and the app can't drift apart.
 
 ## Conventions
 
