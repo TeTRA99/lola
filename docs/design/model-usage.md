@@ -23,8 +23,9 @@ What runs **on-device** vs. what makes a **network call**, as of 2026-05-29.
   the camera frames for "guíame a X" never leave the phone.
 
 ## Path to fully on-device (goal)
-Achievable in principle, in phases — the trend is strongly this way, but quality
-on low-end hardware (the Galaxy A12) is the gating factor:
+Achievable in principle, in phases — the trend is strongly this way, but quality +
+latency on the target device (**dad's Redmi Note 11**; the Galaxy A12 is only the
+weaker test device) is the gating factor:
 
 1. **Easy wins — text → small on-device LLM.** Intent classification and
    guide-target resolution are short text tasks a small LLM handles well.
@@ -56,17 +57,34 @@ For moving Describe/Ask on-device. The space moves monthly — re-check before a
 | Model | Sizes | Runtime | Mobile fit |
 |---|---|---|---|
 | **LFM2-VL / LFM2.5-VL** | **450M**, 1.6B (quantized) | **executorch — already in our 0.9.0** (`useLLM` + `LFM2_VL_450M_QUANTIZED` etc.) | 450M is the realistic A12 try; no rebuild |
-| **Gemma 4** E2B / E4B | ~2B / ~4B active (text+image+audio, 128K) | LiteRT-LM (Google), `.litertlm` | E2B ~8GB/RPi5; **E4B = flagship phone** |
+| **Gemma 4** E2B / E4B | ~2B / ~4B effective (text+image, 140+ langs, QAT) | executorch export **in progress** (rn-executorch #1062); also LiteRT-LM | **QAT mobile: E2B ~1 GB RAM / ~1–3.2 GB disk** — plausible on the Redmi; E4B ~5 GB = flagship-only |
 | Qwen3-VL | 2B / 4B (+MoE) | llama.cpp / others | current quality leader; 2B for mobile |
 | SmolVLM2 | 256M / 500M / 2.2B | llama.cpp / transformers | tiniest; 256M/500M for weak phones |
 | Moondream2 | 1.8B | llama.cpp | edge captioning/OCR/counting |
 | MobileVLM V2 | 1.7B / 3B | mllm | purpose-built mobile (~21 tok/s Qualcomm CPU) |
 
-**Cheapest next step:** A/B **LFM2-VL-450M (executorch)** vs Gemini for Describe on
-the *actual A12* — same library, no rebuild, model downloads at runtime. Measure
-latency + quality. **Gemma 4 (Apr 2026)** is the best on-device option quality-wise
-but runs on LiteRT, not executorch — a heavier integration; revisit when targeting a
-capable device or if executorch adds it. Device reality: A12 (weak, ~3-4GB, no NPU)
-→ only sub-1B VLMs are practical and slower/lower-quality than cloud; a modern phone
-(14+) makes Gemma 4 E2B/E4B genuinely viable. Sources: executorch v0.8 blog
-(LFM2-VL), HF/Google Gemma 4 (2026-04-02), LearnOpenCV "VLM on Edge".
+**Cheapest next step:** A/B **LFM2-VL-450M (executorch)** vs Gemini for Describe —
+same library, no rebuild, model downloads at runtime. Measure latency + quality.
+
+### Update 2026-06-08 — Gemma 4 QAT + correct target device
+- **Target device is dad's Redmi Note 11** (Snapdragon 680, 4–6 GB RAM), NOT the
+  Galaxy A12 (that's Charly's weaker *test* device). Earlier notes wrongly treated
+  the A12 as the floor and so under-scoped on-device models. Design for the Redmi.
+- **Gemma 4 QAT shipped 2026-06-05.** vs our current LFM2.5-VL: E2B has *more*
+  capability (2B effective, 140+ langs, QAT ≈ near-original quality — should finally
+  name a *mate*) at **similar-or-less footprint than our 1.6B** (≈1 GB RAM mobile-QAT
+  vs ~3 GB; smaller download than the 1.6B's 2.3 GB). It's a **replacement for the
+  1.6B tier, not the 450M tier** — heavier than the 450M (so the 450M stays the
+  fallback for the weakest device). On the Redmi, **RAM is fine; the only gate is CPU
+  latency** (no flagship NPU) — but Describe/Ask is tap-and-wait, so a few seconds is
+  acceptable. Likely the on-device default for dad *if* it lands in executorch.
+- ⏰ **REMINDER — check periodically:** Gemma 4 isn't in `react-native-executorch`
+  yet (LiteRT/llama.cpp only). Watch **rn-executorch issue #1062 "Gemma4 support"**
+  and its releases; ExecuTorch core E2B/E4B export is in progress (PLE memory
+  offload). When the `.pte` ships, drop E2B into the `visionLLM` adapter (loads
+  LFM2.5-VL the same way) and **measure Describe latency on the Redmi Note 11** — that
+  number decides whether it becomes the on-device default. Confirm fast/non-thinking
+  mode works in executorch first (a hybrid-thinking model already errored once).
+
+Sources: Google "Gemma 4 QAT" (2026-06-05), rn-executorch #1062, executorch gemma3
+example, LFM2.5-VL-450M specs (Liquid AI).

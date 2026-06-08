@@ -24,9 +24,14 @@ depth.
 - **iOS local build is broken by an RN-0.85 bug** (`React-Core-prebuilt` pod
   "Missing required attribute source"). Workaround: build RN from source via
   `RCT_USE_PREBUILT_RNCORE=0 npx expo run:ios`.
-- Charly's test device is an **Android Galaxy** — it's the priority platform, and
-  the floor for "does it actually work" (weak haptics: Light impact is
-  imperceptible, use **Medium+**; iOS-only Core Haptics niceties won't show there).
+- **Two Android devices — don't conflate them.** The PRIORITY/target device is
+  **dad's Redmi Note 11** (Snapdragon 680, 4–6 GB RAM, mid-range) — design product
+  decisions (e.g. which on-device model) for *that*. **Charly's test device is a
+  Galaxy A12** (Helio P35/Exynos 850, 3–4 GB) — a weaker, conservative lower bound
+  for "does it run at all," NOT dad's phone, so it shouldn't cap what the Redmi can
+  handle. Android is the priority platform. Weak-haptics note (observed on the
+  Galaxy): Light impact is imperceptible, use **Medium+**; iOS-only Core Haptics
+  niceties won't show on Android.
 
 ## Verify before claiming done
 From `app/`: `npx tsc --noEmit` · `npx jest` · `npx eslint src`. All three are
