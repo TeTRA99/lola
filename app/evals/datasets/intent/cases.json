@@ -1,0 +1,44 @@
+[
+  { "id": "wai-anchor-1", "utterance": "¿dónde estoy?", "expect": { "type": "where_am_i" } },
+  { "id": "wai-novel-1", "utterance": "me podés decir en qué lugar de la casa estoy", "expect": { "type": "where_am_i" } },
+  { "id": "wai-novel-2", "utterance": "qué habitación es esta", "expect": { "type": "where_am_i" } },
+
+  { "id": "chit-anchor-1", "utterance": "gracias", "expect": { "type": "chitchat", "kind": "thanks" } },
+  { "id": "chit-novel-1", "utterance": "buen día Lola", "expect": { "type": "chitchat", "kind": "greeting" } },
+  { "id": "chit-novel-2", "utterance": "dale, perfecto", "expect": { "type": "chitchat", "kind": "affirm" } },
+  { "id": "chit-novel-3", "utterance": "hasta luego", "expect": { "type": "chitchat", "kind": "goodbye" } },
+
+  { "id": "rep-anchor-1", "utterance": "repetí", "expect": { "type": "repeat" } },
+  { "id": "rep-novel-1", "utterance": "decímelo de nuevo", "expect": { "type": "repeat" } },
+
+  { "id": "ext-anchor-1", "utterance": "contame más", "expect": { "type": "extend" } },
+  { "id": "ext-novel-1", "utterance": "dame más detalles de eso", "expect": { "type": "extend" } },
+
+  { "id": "mem-anchor-1", "utterance": "¿dónde dejé las llaves?", "expect": { "type": "memory", "object": "llaves" } },
+  { "id": "mem-anchor-2", "utterance": "¿dónde está el termo?", "expect": { "type": "memory", "object": "termo" } },
+  { "id": "mem-novel-1", "utterance": "¿cuándo fue la última vez que viste mis anteojos?", "expect": { "type": "memory", "object": "anteojos" } },
+  { "id": "mem-novel-2", "utterance": "te acordás dónde quedó la billetera", "expect": { "type": "memory", "object": "billetera" } },
+
+  { "id": "gui-anchor-1", "utterance": "llevame a la taza", "expect": { "type": "guide", "object": "taza" } },
+  { "id": "gui-anchor-2", "utterance": "no encuentro el vaso, ¿me ayudás?", "expect": { "type": "guide", "object": "vaso" } },
+  { "id": "gui-novel-1", "utterance": "ayudame a encontrar mi celular", "expect": { "type": "guide", "object": "celular" } },
+  { "id": "gui-novel-2", "utterance": "quiero llegar hasta el sillón", "expect": { "type": "guide", "object": "sillón" } },
+  { "id": "gui-vs-mem-1", "utterance": "¿me ayudás a buscar el termo?", "expect": { "type": "guide", "object": "termo" } },
+  { "id": "gui-saved-1", "utterance": "guiame a mi mate", "catalog": ["Mi mate"], "expect": { "type": "guide", "object": "mate", "savedObject": "Mi mate" } },
+  { "id": "gui-saved-2", "utterance": "guiame a una taza", "catalog": ["Mi mate"], "expect": { "type": "guide", "object": "taza", "savedObject": null } },
+
+  { "id": "call-anchor-1", "utterance": "llamá a Charly", "contacts": ["Charly"], "expect": { "type": "call_family", "contactName": "Charly", "channel": "call" } },
+  { "id": "call-anchor-2", "utterance": "necesito ayuda", "contacts": ["Charly"], "expect": { "type": "call_family", "contactNameAnyOf": [null, "Charly"], "channel": "call" } },
+  { "id": "call-sos-multi-1", "utterance": "necesito ayuda", "contacts": ["Zoomy", "Mariana"], "expect": { "type": "call_family", "contactName": null, "channel": "call" } },
+  { "id": "call-sos-multi-2", "utterance": "emergencia", "contacts": ["Zoomy", "Mariana"], "expect": { "type": "call_family", "contactName": null, "channel": "call" } },
+  { "id": "call-novel-1", "utterance": "mandale un WhatsApp a Charly que estoy bien", "contacts": ["Charly"], "expect": { "type": "call_family", "contactName": "Charly", "channel": "whatsapp", "hasMessage": true } },
+  { "id": "call-stt-1", "utterance": "llamá a sumi", "contacts": ["Zoomy"], "expect": { "type": "call_family", "contactName": "Zoomy", "channel": "call" } },
+  { "id": "call-stt-2", "utterance": "escribile a mariana que venga mañana", "contacts": ["Zoomy", "Mariana"], "expect": { "type": "call_family", "contactName": "Mariana", "channel": "whatsapp", "hasMessage": true } },
+
+  { "id": "mod-anchor-1", "utterance": "¿qué es esto?", "expect": { "type": "model", "needsCurrent": true } },
+  { "id": "mod-novel-1", "utterance": "qué tengo enfrente", "expect": { "type": "model", "needsCurrent": true } },
+  { "id": "mod-novel-2", "utterance": "leeme lo que dice ahí", "expect": { "type": "model", "needsCurrent": true } },
+  { "id": "mod-ctx-1", "utterance": "¿de qué marca son las papas?", "context": "Veo una bolsa de papas fritas sobre la mesada, al lado de una botella.", "expect": { "type": "model", "needsCurrent": false } },
+  { "id": "mod-ctx-2", "utterance": "¿qué decía el paquete?", "context": "Veo una bolsa de papas fritas sobre la mesada, al lado de una botella.", "expect": { "type": "model", "needsCurrent": false } },
+  { "id": "mod-saved-1", "utterance": "describime mi yerba", "catalog": ["Mi yerba"], "expect": { "type": "model", "savedObject": "Mi yerba" } }
+]

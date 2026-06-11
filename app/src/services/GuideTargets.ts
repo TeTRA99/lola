@@ -8,6 +8,7 @@
 
 import { chatJson } from '@/services/ModelRouter';
 import { GUIDABLE_COCO_LABELS } from '@/adapters/objectDetection';
+import { CONFIG } from '@/config';
 
 // Spanish hints per label — reference DATA to ground the LLM + document the set.
 // NOT an utterance matcher.
@@ -19,9 +20,9 @@ const GUIDABLE_ES: Record<string, string> = {
   fork: 'tenedor',
   knife: 'cuchillo',
   spoon: 'cuchara, cucharita',
-  'cell phone': 'celular, teléfono, móvil',
+  'cell phone': 'celular, celu, teléfono, móvil',
   remote: 'control remoto, control, mando',
-  laptop: 'notebook, laptop, computadora portátil',
+  laptop: 'notebook, laptop, compu, computadora portátil',
   keyboard: 'teclado',
   mouse: 'mouse, ratón',
   book: 'libro, cuaderno',
@@ -92,13 +93,21 @@ export type GuideTarget = {
  * null if it isn't something we can detect (→ graceful "no puedo guiarte a eso").
  * `approximate` is set when the match is only a physical proxy, not the real class.
  */
-export async function resolveGuideTarget(noun: string | null | undefined): Promise<GuideTarget | null> {
+export async function resolveGuideTarget(
+  noun: string | null | undefined,
+  // Model override for the eval harness only — the app never sets it.
+  model?: string,
+): Promise<GuideTarget | null> {
   const spoken = (noun ?? '').trim();
   if (!spoken) return null;
 
+  // Cheap model by default: the 2026-06-10 eval scorecards had flash-lite at
+  // 23/23 on this prompt (flash flaked on an anchor) and ~2× faster.
+  // See docs/design/evaluation.md.
   const resp = await chatJson<{ label?: string | null; match?: string; spoken?: string }>({
     systemPrompt: RESOLVE_PROMPT,
     userText: spoken,
+    model: model ?? CONFIG.MODEL_ID_CHEAP,
   });
   if (!resp.ok) return null;
 

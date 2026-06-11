@@ -1,0 +1,20 @@
+[
+  {
+    "id": "kitchen-counter-01",
+    "image": "images/kitchen-counter-01.jpg",
+    "expect": {
+      "mustMention": ["taza", "mesada"],
+      "mustNotMention": ["perro"]
+    },
+    "notes": "Morning light, mate + kettle on the counter. mustNotMention catches a past hallucination."
+  },
+  {
+    "id": "living-low-light-01",
+    "image": "images/living-low-light-01.jpg",
+    "expect": {
+      "mustMention": ["sillón"],
+      "mustNotMention": []
+    },
+    "notes": "Evening, lamps only — the hard low-light case."
+  }
+]

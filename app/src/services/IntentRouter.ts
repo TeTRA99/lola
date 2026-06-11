@@ -5,6 +5,7 @@
 import { chatJson } from '@/services/ModelRouter';
 import * as SnapshotCache from './SnapshotCache';
 import type { RouteDecision } from './UtteranceRouter';
+import { CONFIG } from '@/config';
 
 const INTENT_SYSTEM_PROMPT = `Sos un clasificador de intenciones para una asistente de voz que ayuda a una persona mayor con baja visión. Recibís una frase en español argentino (puede tener errores de transcripción). Tenés que clasificarla en UNA de estas categorías:
 
@@ -93,6 +94,9 @@ export async function classifyIntent(
   utterance: string,
   catalogNames: string[] = [],
   contactNames: string[] = [],
+  // Model override for the eval harness (MODEL=… npm run eval); the app never
+  // sets it, so production keeps using the ModelRouter/CONFIG default.
+  model?: string,
 ): Promise<RouteDecision> {
   console.log('[intent] classifying:', utterance);
   // Inject the last describe/ask narration as recent context so needsCurrent
@@ -112,9 +116,14 @@ export async function classifyIntent(
   const contactBlock = contactNames.length
     ? `\n\n[CONTACTOS GUARDADOS: ${contactNames.join(', ')}]`
     : '';
+  // Text-only classification runs on the cheap model: the 2026-06-10 eval
+  // scorecards put flash-lite at parity with flash on this prompt and ~40%
+  // faster (p50 0.9s vs 1.4s) — it's on the critical path of every Ask.
+  // See docs/design/evaluation.md.
   const resp = await chatJson<IntentRaw>({
     systemPrompt: INTENT_SYSTEM_PROMPT,
     userText: utterance + contextBlock + savedBlock + contactBlock,
+    model: model ?? CONFIG.MODEL_ID_CHEAP,
   });
   if (!resp.ok) {
     console.log('[intent] classifier FAILED with:', resp.error, '— defaulting to model route');

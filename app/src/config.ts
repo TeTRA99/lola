@@ -13,7 +13,10 @@ export const CONFIG = {
   // Vol-Down→Ask). Single presses still change the device volume.
   VOLUME_DOUBLE_MS: 400,
 
-  // Model + gateway (NFR-11, AD-4)
+  // Model + gateway (NFR-11, AD-4). Split per 2026-06-10 eval scorecards
+  // (docs/design/evaluation.md): vision (Describe/Ask) stays on MODEL_ID;
+  // text-only classification (IntentRouter, GuideTargets) runs on
+  // MODEL_ID_CHEAP — parity accuracy, ~40% faster, ~10× cheaper.
   MODEL_ID: 'google/gemini-2.5-flash',
   MODEL_ID_CHEAP: 'google/gemini-2.5-flash-lite',
   GATEWAY_BASE_URL: 'https://openrouter.ai/api/v1',
@@ -125,7 +128,7 @@ export const CONFIG = {
   // On-device inference (feat/on-device-models). Default mode flips to 'local'
   // in the final migration step; 450m is the realistic Galaxy A12 VLM size.
   LOCAL_INFERENCE_DEFAULT: 'cloud' as 'local' | 'cloud',
-  LOCAL_VLM_DEFAULT_SIZE: '450m' as '450m' | '1.6b',
+  LOCAL_VLM_DEFAULT_SIZE: '450m' as '450m' | '1.6b' | 'gemma4',
   // Text model for intent + guide-target. Llama 3.2 1B (non-thinking) — qwen3-0.6b
   // is a hybrid thinking model that errors in executorch's runner. Swappable via
   // Settings.textModel; ids: llama-3.2-1b | qwen2.5-0.5b | qwen2.5-1.5b | smollm2.1-360m.

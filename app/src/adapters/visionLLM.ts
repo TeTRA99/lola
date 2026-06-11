@@ -23,7 +23,12 @@ import { recordVlmTrace } from '@/adapters/vlmTrace';
 import { ok, err, type Result } from '@/utils/result';
 import type { ChatInput, ChatError, LolaResponse, LolaObject } from '@/gateways/openrouter';
 
-export type VlmSize = '450m' | '1.6b';
+// '450m'/'1.6b' = LFM2.5-VL (XNNPACK/CPU). 'gemma4' = Gemma 4 E2B multimodal —
+// runs on the GPU backend (Android Vulkan / iOS MLX), stronger + multilingual but
+// heavier; experimental, selectable from Debug (not the default). See
+// docs/design/model-usage.md.
+export type VlmSize = '450m' | '1.6b' | 'gemma4';
+const VLM_SIZES: readonly VlmSize[] = ['450m', '1.6b', 'gemma4'];
 // Lifecycle phase, so the UI can say exactly where we are:
 //  idle        — nothing loaded yet
 //  downloading — fetching the .pte from HuggingFace (progress 0..1, may bounce
@@ -49,12 +54,18 @@ let lastProgress = 0;
 
 function currentSize(): VlmSize {
   const v = Settings.getStringSync(Settings.KEYS.vlmModel, CONFIG.LOCAL_VLM_DEFAULT_SIZE);
-  return v === '1.6b' ? '1.6b' : '450m';
+  return (VLM_SIZES as readonly string[]).includes(v) ? (v as VlmSize) : '450m';
 }
+
+const VLM_LABELS: Record<VlmSize, string> = {
+  '450m': 'LFM2.5-VL 450M',
+  '1.6b': 'LFM2.5-VL 1.6B',
+  gemma4: 'Gemma 4 E2B',
+};
 
 /** Human-readable name of the VLM currently selected. */
 export function modelLabel(): string {
-  return currentSize() === '1.6b' ? 'LFM2.5-VL 1.6B' : 'LFM2.5-VL 450M';
+  return VLM_LABELS[currentSize()];
 }
 
 /** Current lifecycle status (cheap, no load triggered). */
@@ -106,7 +117,9 @@ export function isReady(): boolean {
 }
 
 function sources(size: VlmSize) {
-  return size === '1.6b' ? models.llm.lfm2_5_vl_1_6b() : models.llm.lfm2_5_vl_450m();
+  if (size === 'gemma4') return models.llm.gemma4_e2b_multimodal();
+  if (size === '1.6b') return models.llm.lfm2_5_vl_1_6b();
+  return models.llm.lfm2_5_vl_450m();
 }
 
 /** Free the model from memory (e.g. before loading the other size, or for OOM tests). */

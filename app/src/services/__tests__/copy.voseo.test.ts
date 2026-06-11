@@ -1,4 +1,7 @@
 import { COPY } from '../CopyModule';
+// The tuteo ban list lives with the eval scorers so the static copy check and
+// the live model-output evals can't drift apart (single source of truth).
+import { TUTEO_PATTERNS as FORBIDDEN } from '../../../evals/scorers/voseo';
 
 function flatten(obj: unknown, path: string[] = []): { path: string; value: string }[] {
   if (typeof obj === 'string') return [{ path: path.join('.'), value: obj }];
@@ -7,17 +10,6 @@ function flatten(obj: unknown, path: string[] = []): { path: string; value: stri
   }
   return [];
 }
-
-// Voseo = Argentine "vos" form. Tuteo = "tú" form. Banning the unambiguous
-// tuteo verb conjugations (tienes/puedes/quieres/eres) + the "tú" pronoun.
-// Deliberately not banning `\bte\b` — it's a valid voseo object pronoun ("te dejo").
-const FORBIDDEN = [
-  /\btú\b/i,
-  /\btienes\b/i,
-  /\bpuedes\b/i,
-  /\bquieres\b/i,
-  /\beres\b/i,
-];
 
 describe('CopyModule voseo enforcement', () => {
   const entries = flatten(COPY);

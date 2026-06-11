@@ -13,12 +13,14 @@ import { embedImageLocal } from '@/adapters/embeddings';
 import { canonicalize } from './OnboardingService';
 import { ok, err, type Result } from '@/utils/result';
 import { now } from '@/utils/time';
+import { cosineSimilarity } from '@/utils/vector';
 
 const ROOT = new Directory(Paths.document, 'rooms');
 const MAX_PHOTOS_PER_ROOM = 5;
 // Match a snapshot against a stored room only if the best-photo similarity
 // crosses this. Below = "no estoy segura" rather than guessing wrong.
-const SIMILARITY_THRESHOLD = 0.55;
+// Exported so the Debug room-ID eval scores with the same rule (RoomEval).
+export const SIMILARITY_THRESHOLD = 0.55;
 
 export type Room = {
   id: number;
@@ -69,18 +71,6 @@ export function primaryUriFor(roomId: number): string | null {
  */
 export function listForRoom(roomId: number): string[] {
   return listFilesIn(roomDir(roomId)).map(f => f.uri);
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  const denom = Math.sqrt(na) * Math.sqrt(nb);
-  return denom === 0 ? 0 : dot / denom;
 }
 
 // ----- CRUD -----

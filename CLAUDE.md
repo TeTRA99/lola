@@ -9,8 +9,10 @@ depth.
 - **The app lives in `app/`** — `package.json`, `npm` (`package-lock.json`), and all
   source are there, NOT the repo root. `cd app` before npm/expo/eas commands.
 - Expo **SDK 56**, React Native **0.85.3**, **New Architecture on**, TypeScript.
-- Vision = cloud LLM via **OpenRouter** (`google/gemini-2.5-flash`); on-device
-  **CLIP** (room ID) via `react-native-executorch`. Key from `.env.local`
+- Cloud LLMs via **OpenRouter**: vision (Describe/Ask) = `gemini-2.5-flash`;
+  text classification (intent, guide-target) = `gemini-2.5-flash-lite` (eval-
+  driven split, see docs/design/evaluation.md). On-device **CLIP** (room ID) via
+  `react-native-executorch`. Key from `.env.local`
   (`EXPO_PUBLIC_OPENROUTER_API_KEY`) for local dev.
 - **Git is local-only — there is no remote.** "Push" = commit locally. Branch off
   the current feature branch; PRs/remote don't exist unless one is added.
@@ -35,7 +37,16 @@ depth.
 
 ## Verify before claiming done
 From `app/`: `npx tsc --noEmit` · `npx jest` · `npx eslint src`. All three are
-fast and expected to pass.
+fast and expected to pass. (`npm test`/`npx jest` runs the offline `unit` Jest
+project only — the `evals` project makes LIVE paid calls and is gated behind
+`RUN_EVALS=1`; never wire it into default verification.)
+
+## Model-quality evals (before swapping models or editing prompts)
+`app/evals/` scores REAL pipeline outputs (intent, guide-target, Describe)
+against OpenRouter: `npm run eval` (baseline) → `MODEL=<id> npm run eval`
+(candidate) → `npm run eval:compare <a> <b>`. The Room-ID (CLIP) eval is the
+"Room-ID eval" panel on the Debug screen (on-device, free). See
+docs/design/evaluation.md, docs/runbooks/run-evals.md, app/evals/README.md.
 
 ## Conventions
 - **User-facing Spanish strings must live in `src/services/CopyModule.ts`** (voseo,

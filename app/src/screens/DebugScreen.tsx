@@ -12,6 +12,8 @@ import * as OnboardingService from '@/services/OnboardingService';
 import { getAskTraces, type AskTrace } from '@/services/AskTrace';
 import { getVlmTraces, type VlmTrace } from '@/adapters/vlmTrace';
 import { getGuideTraces, type GuideTrace } from '@/adapters/guideTrace';
+import * as RoomEval from '@/services/RoomEval';
+import { buildReport, formatReport } from '@/services/roomEvalCore';
 import { CONFIG } from '@/config';
 import { TOP_INSET } from '@/theme/insets';
 import {
@@ -44,7 +46,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
 
   // On-device inference A/B controls.
   const [inferMode, setInferMode] = useState<'local' | 'cloud'>('cloud');
-  const [vlmSize, setVlmSize] = useState<'450m' | '1.6b'>('450m');
+  const [vlmSize, setVlmSize] = useState<VlmAdapter.VlmSize>('450m');
   const [allowFallback, setAllowFallback] = useState(false);
   const [vlmStatus, setVlmStatus] = useState<VlmAdapter.VlmStatus>(() => VlmAdapter.getStatus());
   const [textStatus, setTextStatus] = useState<TextAdapter.TextStatus>(() => TextAdapter.getStatus());
@@ -60,7 +62,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     void Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT)
       .then(v => setInferMode(v === 'local' ? 'local' : 'cloud'));
     void Settings.getString(Settings.KEYS.vlmModel, CONFIG.LOCAL_VLM_DEFAULT_SIZE)
-      .then(v => setVlmSize(v === '1.6b' ? '1.6b' : '450m'));
+      .then(v => setVlmSize(v === '1.6b' || v === 'gemma4' ? v : '450m'));
     void Settings.getBool(Settings.KEYS.allowCloudFallback, false).then(setAllowFallback);
     void Settings.getString(Settings.KEYS.guideCloudTargeting, 'text')
       .then(v => setGuideTargeting(v === 'reference' ? 'reference' : 'text'));
@@ -82,7 +84,7 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     setInferMode(m);
     void Settings.setString(Settings.KEYS.inferenceMode, m);
   };
-  const onSetSize = (s: '450m' | '1.6b') => {
+  const onSetSize = (s: VlmAdapter.VlmSize) => {
     setVlmSize(s);
     void Settings.setString(Settings.KEYS.vlmModel, s);
     // Drop the currently-loaded VLM so the status stops falsely showing the OLD
@@ -132,6 +134,34 @@ export function DebugScreen({ onClose, onOpenGuide }: {
     await Promise.all([VlmAdapter.unload(), TextAdapter.unload()]);
     setExportNote('Freed on-device model memory');
     setTimeout(() => setExportNote(null), 2000);
+  };
+
+  // Room-ID eval (CLIP) — leave-one-out over registered room photos + the
+  // optional bundled holdout set. Free: local embeddings/inference only.
+  const [roomEvalText, setRoomEvalText] = useState<string | null>(null);
+  const [roomEvalBusy, setRoomEvalBusy] = useState(false);
+  const onRunRoomEval = async () => {
+    setRoomEvalBusy(true);
+    try {
+      const parts: string[] = [];
+      const loo = await RoomEval.runLeaveOneOut();
+      parts.push(
+        loo.ok
+          ? `LEAVE-ONE-OUT (catalog photos — confusion signal, accuracy optimistic)\n${formatReport(buildReport(loo.value), RoomEval.SIMILARITY_THRESHOLD)}`
+          : 'leave-one-out: needs ≥2 room photos registered in Setup',
+      );
+      const holdout = await RoomEval.runHoldout();
+      parts.push(
+        holdout.length > 0
+          ? `HOLDOUT (bundled photos, full CLIP pipeline)\n${formatReport(buildReport(holdout), RoomEval.SIMILARITY_THRESHOLD)}`
+          : 'holdout: none bundled — add photos in src/eval/roomEvalAssets.ts',
+      );
+      setRoomEvalText(parts.join('\n\n'));
+    } catch (e) {
+      setRoomEvalText(`eval failed: ${String(e)}`);
+    } finally {
+      setRoomEvalBusy(false);
+    }
   };
 
   const load = useCallback(async () => {
@@ -199,10 +229,11 @@ export function DebugScreen({ onClose, onOpenGuide }: {
           <Seg active={inferMode === 'local'} label="On-device VLM" onPress={() => onSetMode('local')} />
         </View>
 
-        <Text style={styles.segLabel}>VLM size (A12 default: 450M)</Text>
+        <Text style={styles.segLabel}>On-device VLM (default: 450M)</Text>
         <View style={styles.segRow}>
           <Seg active={vlmSize === '450m'} label="450M" onPress={() => onSetSize('450m')} />
           <Seg active={vlmSize === '1.6b'} label="1.6B (heavy)" onPress={() => onSetSize('1.6b')} />
+          <Seg active={vlmSize === 'gemma4'} label="Gemma 4 (GPU)" onPress={() => onSetSize('gemma4')} />
         </View>
 
         <Pressable style={styles.fallbackRow} onPress={onToggleFallback}>
@@ -299,6 +330,40 @@ export function DebugScreen({ onClose, onOpenGuide }: {
               {!tr.found && tr.raw ? <Text style={styles.traceRaw} numberOfLines={4}>raw: {tr.raw}</Text> : null}
             </View>
           ))
+        )}
+      </View>
+
+      {/* Room-ID eval — confusion matrix for the CLIP room matcher.
+          See docs/design/evaluation.md (Phase 3). */}
+      <View style={[styles.panel, styles.panelNeutral]}>
+        <View style={styles.traceHeader}>
+          <Text style={styles.panelTitle}>Room-ID eval (CLIP)</Text>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable style={styles.headerBtn} onPress={() => void onRunRoomEval()} disabled={roomEvalBusy}>
+              <Text style={styles.headerBtnText}>{roomEvalBusy ? 'Running…' : 'Run'}</Text>
+            </Pressable>
+            {roomEvalText ? (
+              <Pressable
+                style={styles.headerBtn}
+                onPress={() => {
+                  void Clipboard.setStringAsync(roomEvalText);
+                  setExportNote('Copied room-ID eval report to clipboard');
+                  setTimeout(() => setExportNote(null), 2000);
+                }}
+              >
+                <Text style={styles.headerBtnText}>Copy</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+        {roomEvalText ? (
+          <Text style={styles.evalReport}>{roomEvalText}</Text>
+        ) : (
+          <Text style={styles.panelText}>
+            Leave-one-out over the registered room photos (instant), plus any bundled holdout
+            shots (src/eval/roomEvalAssets.ts) through the full CLIP pipeline. Watch cross-room
+            confusion and the unknown-room abstain rate.
+          </Text>
         )}
       </View>
 
@@ -479,6 +544,7 @@ const styles = StyleSheet.create({
   traceUtterance: { color: '#fff', fontSize: 13 },
   traceRoute: { color: '#8c8', fontSize: 12, fontFamily: 'monospace' },
   traceRaw: { color: '#fbbf24', fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
+  evalReport: { color: '#8c8', fontSize: 11, fontFamily: 'monospace', marginTop: 4 },
   sectionTitle: { color: '#aaa', fontSize: 13, marginTop: 16, marginBottom: 6, textTransform: 'uppercase' },
   emptyText: { color: '#666', fontSize: 13, fontStyle: 'italic' },
   table: { backgroundColor: '#222', borderRadius: 6, overflow: 'hidden' },

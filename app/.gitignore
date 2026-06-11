@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# eval scorecards (per-run output — compare locally, don't commit)
+evals/results/

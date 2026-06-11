@@ -1,0 +1,27 @@
+[
+  { "id": "exact-anchor-1", "noun": "la taza", "expect": { "cocoLabel": "cup" } },
+  { "id": "exact-anchor-2", "noun": "el control de la tele", "expect": { "cocoLabel": "remote" } },
+  { "id": "exact-anchor-3", "noun": "mi celular", "expect": { "cocoLabel": "cell phone" } },
+  { "id": "exact-anchor-4", "noun": "el sillón", "expect": { "cocoLabel": "couch" } },
+  { "id": "exact-anchor-5", "noun": "la heladera", "expect": { "cocoLabel": "refrigerator" } },
+  { "id": "exact-novel-1", "noun": "una botella", "expect": { "cocoLabel": "bottle" } },
+  { "id": "exact-novel-2", "noun": "el vaso", "expect": { "cocoLabel": "cup" } },
+  { "id": "exact-novel-3", "noun": "la tele", "expect": { "cocoLabel": "tv" } },
+  { "id": "exact-novel-4", "noun": "la mochila", "expect": { "cocoLabel": "backpack" } },
+  { "id": "exact-novel-5", "noun": "una cuchara", "expect": { "cocoLabel": "spoon" } },
+  { "id": "exact-novel-6", "noun": "el cuaderno", "expect": { "cocoLabel": "book" } },
+  { "id": "exact-novel-7", "noun": "la silla", "expect": { "cocoLabel": "chair" } },
+  { "id": "exact-novel-8", "noun": "la compu", "expect": { "cocoLabel": "laptop" } },
+  { "id": "exact-novel-9", "noun": "el mando de la tele", "expect": { "cocoLabel": "remote" } },
+  { "id": "exact-novel-10", "noun": "el celu", "expect": { "cocoLabel": "cell phone" } },
+  { "id": "exact-novel-11", "noun": "la cartera", "expect": { "cocoLabel": "handbag" } },
+
+  { "id": "approx-anchor-1", "noun": "el termo", "expect": { "cocoLabel": "bottle", "approximate": true } },
+  { "id": "approx-anchor-2", "noun": "el mate", "expect": { "cocoLabel": "cup", "approximate": true } },
+
+  { "id": "null-anchor-1", "noun": "el lápiz", "expect": { "cocoLabel": null } },
+  { "id": "null-anchor-2", "noun": "las llaves", "expect": { "cocoLabel": null } },
+  { "id": "null-anchor-3", "noun": "mis anteojos", "expect": { "cocoLabel": null } },
+  { "id": "null-novel-1", "noun": "el encendedor", "expect": { "cocoLabel": null } },
+  { "id": "null-novel-2", "noun": "la factura de la luz", "expect": { "cocoLabel": null } }
+]

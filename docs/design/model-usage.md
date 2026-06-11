@@ -1,20 +1,23 @@
 # Model & service usage — embedded vs. online
 
-What runs **on-device** vs. what makes a **network call**, as of 2026-05-29.
+What runs **on-device** vs. what makes a **network call**, as of 2026-06-10.
 
 | Purpose | Model / engine | Where |
 |---|---|---|
 | **Guide** ("guíame a X") — object detection | YOLO26n via `react-native-executorch` | 🟢 On-device |
 | **Room ID** ("¿dónde estoy?") — image embeddings | CLIP ViT-B/32 INT8 via executorch | 🟢 On-device |
 | **Describe / Ask** — scene description & visual Q&A | Gemini 2.5 Flash via **OpenRouter** | 🔵 Cloud |
-| **Intent** (route the voice command) | Gemini 2.5 Flash (text) via OpenRouter | 🔵 Cloud |
-| **Guide target resolution** (noun → COCO label) | Gemini 2.5 Flash (text) via OpenRouter | 🔵 Cloud |
+| **Intent** (route the voice command) | Gemini 2.5 Flash-**Lite** (text) via OpenRouter | 🔵 Cloud |
+| **Guide target resolution** (noun → COCO label) | Gemini 2.5 Flash-**Lite** (text) via OpenRouter | 🔵 Cloud |
 | **Voice output (TTS)** | System TTS (`expo-speech`) | 🟢 On-device (OS) |
 | **Speech input (STT)** | System speech recognition (`expo-speech-recognition`) | 🟢 On-device (OS service) |
 
-`CONFIG.MODEL_ID = 'google/gemini-2.5-flash'` (cloud text+vision). `MODEL_ID_CHEAP`
-= `gemini-2.5-flash-lite`. On-device models live behind `@/adapters/embeddings`
-(CLIP) and `@/adapters/useGuideDetection` (YOLO26n), both via executorch.
+`CONFIG.MODEL_ID = 'google/gemini-2.5-flash'` (cloud **vision**: Describe/Ask).
+`MODEL_ID_CHEAP = 'gemini-2.5-flash-lite'` (cloud **text**: intent + guide-target
+— moved 2026-06-10 after eval scorecards showed parity accuracy at ~40% lower
+latency; see docs/design/evaluation.md). On-device models live behind
+`@/adapters/embeddings` (CLIP) and `@/adapters/useGuideDetection` (YOLO26n),
+both via executorch.
 
 ## What leaves the device
 - **Describe / Ask** send the **photo** to OpenRouter/Gemini.
