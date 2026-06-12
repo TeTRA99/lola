@@ -114,17 +114,18 @@ export function HomeScreen({
     void Settings.setBool(Settings.KEYS.welcomeSeen, true);
   };
 
-  // Dev-only: surface which cloud-guide model the spike is using (only when the
-  // guide backend is set to cloud in Debug). Never shown in the end-user build.
-  const [devGuideLabel, setDevGuideLabel] = useState<string | null>(null);
+  // Dev-only: surface the ACTIVE Describe/Ask model under the title so a model
+  // switch in Debug is visible at a glance — cloud Gemini vs the selected
+  // on-device VLM. Recomputed on each Home mount (returning from Debug remounts
+  // the screen). Never shown in the end-user build.
+  const [devModelLabel, setDevModelLabel] = useState<string | null>(null);
   useEffect(() => {
-    if (!onDevDebug) return;
-    void (async () => {
-      const backend = await Settings.getString(Settings.KEYS.guideBackend, 'device');
-      if (backend !== 'cloud') { setDevGuideLabel(null); return; }
-      const model = await Settings.getString(Settings.KEYS.guideCloudModel, CONFIG.GUIDE_CLOUD_MODEL_DEFAULT);
-      setDevGuideLabel(`cloud · ${model.replace(/^.*\//, '')}`);
-    })();
+    if (!onDevDebug) { setDevModelLabel(null); return; }
+    setDevModelLabel(
+      inferenceMode() === 'local'
+        ? `local · ${VlmAdapter.modelLabel()}`
+        : `cloud · ${CONFIG.MODEL_ID.replace(/^.*\//, '')}`,
+    );
   }, [onDevDebug]);
 
   // Tap anywhere while Lola is listening/thinking/speaking → stop her and
@@ -399,9 +400,9 @@ export function HomeScreen({
         </View>
       </Animated.View>
 
-      {/* Dev-only: active cloud-guide model, placed UNDER the title so a long name
-          doesn't crowd the top-bar icons. */}
-      {devGuideLabel && <Text style={styles.devGuideLabel}>{devGuideLabel}</Text>}
+      {/* Dev-only: active Describe/Ask model, placed UNDER the title so a long
+          name doesn't crowd the top-bar icons. */}
+      {devModelLabel && <Text style={styles.devGuideLabel}>{devModelLabel}</Text>}
 
       <Card
         dark={false}
