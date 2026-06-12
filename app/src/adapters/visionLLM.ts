@@ -274,9 +274,13 @@ export async function describeLocal(input: ChatInput): Promise<Result<LolaRespon
     // JSON. userText still carries the actual task + room/context.
     // Lower temperature + a repetition penalty rein in the small model's
     // tendency to hallucinate ("...consume sustancias sin pagar") and ramble.
+    // Gemma 4 E2B invents objects more than the LFM sizes, so push it to
+    // near-greedy (0.1) — fewer sampled tokens = fewer made-up things — while
+    // keeping the LFM sizes at their tuned 0.3.
+    const temperature = currentSize() === 'gemma4' ? 0.1 : 0.3;
     mod.configure({
       chatConfig: { systemPrompt: LOCAL_VLM_SYSTEM_PROMPT, initialMessageHistory: [] },
-      generationConfig: { temperature: 0.3, repetitionPenalty: 1.3 },
+      generationConfig: { temperature, repetitionPenalty: 1.3 },
     });
     const started = Date.now();
     // Use the on-device-specific instruction when the caller supplies one (Describe
