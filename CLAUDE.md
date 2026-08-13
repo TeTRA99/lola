@@ -8,7 +8,10 @@ depth.
 ## Layout & stack
 - **The app lives in `app/`** — `package.json`, `npm` (`package-lock.json`), and all
   source are there, NOT the repo root. `cd app` before npm/expo/eas commands.
-- Expo **SDK 56**, React Native **0.85.3**, **New Architecture on**, TypeScript.
+- Expo **SDK 57**, React Native **0.86.2**, **New Architecture on**, TypeScript.
+  (Upgraded from SDK 56 / RN 0.85.3 on `chore/expo-sdk-57`, 2026-08-13 — JS-verified
+  only, **not yet run on a device**. `expo-speech-recognition` stays on its 56.x line;
+  upstream has published no 57.x.)
 - Cloud LLMs via **OpenRouter**: vision (Describe/Ask) = `gemini-2.5-flash`;
   text classification (intent, guide-target) = `gemini-2.5-flash-lite` (eval-
   driven split, see docs/design/evaluation.md). On-device **CLIP** (room ID) via
@@ -25,7 +28,8 @@ depth.
   **native dependency** requires another EAS build.
 - **iOS local build is broken by an RN-0.85 bug** (`React-Core-prebuilt` pod
   "Missing required attribute source"). Workaround: build RN from source via
-  `RCT_USE_PREBUILT_RNCORE=0 npx expo run:ios`.
+  `RCT_USE_PREBUILT_RNCORE=0 npx expo run:ios`. (Not re-tested on RN 0.86 — the
+  workaround is still configured, so it costs nothing if the bug is gone.)
 - **Two Android devices — don't conflate them.** The PRIORITY/target device is
   **dad's Redmi Note 11** (Snapdragon 680, 4–6 GB RAM, mid-range) — design product
   decisions (e.g. which on-device model) for *that*. **Charly's test device is a

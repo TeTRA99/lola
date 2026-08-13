@@ -65,7 +65,7 @@ distinct buzzes for found/working/error), and nothing that fails silently.
 
 ## Tech stack
 
-- **Expo SDK 56**, **React Native 0.85**, New Architecture on, TypeScript.
+- **Expo SDK 57**, **React Native 0.86**, New Architecture on, TypeScript.
 - **Vision / language** — cloud **OpenRouter → Gemini 2.5 Flash**, plus an
   on-device path (VLM + small text LLM) via **react-native-executorch**, selectable
   per request through a routing seam (`src/services/ModelRouter.ts`).
@@ -118,9 +118,10 @@ npx eas-cli@latest build --profile development --platform android
 npx expo start --dev-client
 ```
 
-iOS is built locally from source (an RN 0.85 prebuilt-pod bug is worked around with
-`ios.buildReactNativeFromSource`). The full iOS sideload / TestFlight walkthroughs
-live in [`docs/runbooks/`](docs/runbooks/).
+iOS is built locally from source (a prebuilt-pod bug hit on RN 0.85 is worked around
+with `ios.buildReactNativeFromSource`; the workaround is still in place and has not
+been re-tested on 0.86). The full iOS sideload / TestFlight walkthroughs live in
+[`docs/runbooks/`](docs/runbooks/).
 
 ## Versioning
 
