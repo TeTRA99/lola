@@ -68,6 +68,16 @@ function localeAvailable(langs: string[]) {
   mockedLocales.mockResolvedValue({ locales: langs } as Awaited<ReturnType<typeof mod.getSupportedLocales>>);
 }
 
+// The iOS path defers start() behind the ~220ms mic-open chime lead. Polling for
+// the call instead of sleeping a fixed 260ms keeps the test off a 40ms margin
+// that a loaded CI/dev machine loses.
+async function waitForStart(timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (mockedStart.mock.calls.length === 0 && Date.now() < deadline) {
+    await new Promise<void>(r => setTimeout(() => r(), 10));
+  }
+}
+
 describe('STT adapter', () => {
   test('falls back to CONFIG.STT_LOCALE when engine reports no matching locales', async () => {
     // On-device, Android often returns an empty/non-matching supported-locales
@@ -76,8 +86,7 @@ describe('STT adapter', () => {
     localeAvailable(['en-US', 'pt-BR']);
     grantPermissions();
     const p = listen();
-    // iOS path defers start() behind the ~220ms mic-open chime lead — wait it out.
-    await new Promise<void>(r => setTimeout(() => r(), 260));
+    await waitForStart();
     expect(mockedStart).toHaveBeenCalledWith(expect.objectContaining({ lang: 'es-AR' }));
     mod.__fire('end', {});
     await p;
@@ -130,8 +139,7 @@ describe('STT adapter', () => {
     localeAvailable(['es-419', 'en-US']);
     grantPermissions();
     const p = listen();
-    // iOS path defers start() behind the ~220ms mic-open chime lead — wait it out.
-    await new Promise<void>(r => setTimeout(() => r(), 260));
+    await waitForStart();
     expect(mockedStart).toHaveBeenCalledWith(expect.objectContaining({ lang: 'es-419' }));
     mod.__fire('end', {});
     await p;
