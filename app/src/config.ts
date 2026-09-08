@@ -112,16 +112,20 @@ export const CONFIG = {
   GUIDE_CLOUD_JPEG_QUALITY: 0.6,     // capture/compress quality for the uploaded frame
   GUIDE_CLOUD_MAX_POLLS: 60,         // hard cap on polls per session (cost backstop)
   // Default model: Gemini 2.5 Flash — on-device tests showed it the most accurate
-  // of the candidates at a usable latency (3.5-flash was ~2-3× slower).
+  // of the candidates at a usable latency (3.5-flash was ~2-3× slower). 3.5-flash
+  // has since been dropped from the picker: 3.8-flash (2026-09-02) is newer at half
+  // the price ($0.75/$3.75 vs $1.50/$9 per M) — not yet timed on device.
   GUIDE_CLOUD_MODEL_DEFAULT: 'google/gemini-2.5-flash',
   // Candidate grounding models (Debug picker). All do open-vocab boxes on OpenRouter;
   // box conventions differ — see groundingIsPixelBox()/parseGroundingBox in
-  // adapters/objectDetection.ts (Gemini = normalized 0–1000 [ymin,xmin,ymax,xmax];
-  // Qwen = absolute pixel [x1,y1,x2,y2]).
+  // adapters/objectDetection.ts (both normalized 0–1000; Gemini = [ymin,xmin,ymax,xmax],
+  // Qwen = [x1,y1,x2,y2] — confirmed on device, NOT pixels).
   GUIDE_CLOUD_MODELS: [
-    'google/gemini-3.5-flash',
+    'google/gemini-3.8-flash',
     'google/gemini-3.1-flash-lite',
-    'qwen/qwen3-vl-8b-instruct',
+    // qwen3-vl-32b replaced the 8b: on OpenRouter it's both cheaper ($0.10/$0.42 vs
+    // $0.12/$0.45 per M) and 4× the params. Same Qwen XYXY 0–1000 box convention.
+    'qwen/qwen3-vl-32b-instruct',
     'google/gemini-2.5-flash',
   ] as const,
 

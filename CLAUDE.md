@@ -8,17 +8,17 @@ depth.
 ## Layout & stack
 - **The app lives in `app/`** — `package.json`, `npm` (`package-lock.json`), and all
   source are there, NOT the repo root. `cd app` before npm/expo/eas commands.
-- Expo **SDK 57**, React Native **0.86.2**, **New Architecture on**, TypeScript.
-  (Upgraded from SDK 56 / RN 0.85.3 on `chore/expo-sdk-57`, 2026-08-13 — JS-verified
-  only, **not yet run on a device**. `expo-speech-recognition` stays on its 56.x line;
-  upstream has published no 57.x.)
+- Expo **SDK 57**, React Native **0.86.3**, **New Architecture on**, TypeScript.
+  (Upgraded from SDK 56 / RN 0.85.3 on `chore/expo-sdk-57`, 2026-08-13; deps
+  re-aligned + `react-native-executorch` 0.10 + `expo-speech-recognition` 57 on
+  2026-09-08 — all JS-verified only, **not yet run on a device**.)
 - Cloud LLMs via **OpenRouter**: vision (Describe/Ask) = `gemini-2.5-flash`;
   text classification (intent, guide-target) = `gemini-2.5-flash-lite` (eval-
   driven split, see docs/design/evaluation.md). On-device **CLIP** (room ID) via
   `react-native-executorch`. Key from `.env.local`
   (`EXPO_PUBLIC_OPENROUTER_API_KEY`) for local dev.
-- **Git is local-only — there is no remote.** "Push" = commit locally. Branch off
-  the current feature branch; PRs/remote don't exist unless one is added.
+- **Remote: GitHub `TeTRA99/lola` (private).** Push one branch at a time, only when
+  asked. Branch off the current feature branch.
 
 ## Build & run (see docs/runbooks/dev-build-and-run.md for the full walkthrough)
 - **Dev client is built on EAS, not locally** — this machine has no Android NDK/
@@ -61,6 +61,13 @@ docs/design/evaluation.md, docs/runbooks/run-evals.md, app/evals/README.md.
   react-navigation); one screen renders at a time.
 - Result type (`@/utils/result`) for fallible adapters; adapters in `src/adapters`,
   orchestration in `src/services`.
+- **`react-native-executorch` imports go through the `/legacy` subpath**
+  (`react-native-executorch/legacy`, `react-native-executorch-expo-resource-fetcher/legacy`).
+  0.10.0 (2026-09-08) is a ground-up rewrite; the legacy entry keeps the 0.9 API
+  (`LLMModule`, `useObjectDetection`, `models`, …) with parity. It is deprecated
+  upstream and logs one dev-only warning. Jest auto-mocks live at
+  `app/__mocks__/react-native-executorch/legacy.js` to match. Migrating the adapters
+  to the new pipeline API is a separate, deliberate job — don't mix the two entries.
 
 ## Where things are documented
 - `docs/design/` — feature/design notes (TTS, directional-haptics, guide-me-to-it,

@@ -10,7 +10,7 @@ import {
   ImageEmbeddingsModule,
   CLIP_VIT_BASE_PATCH32_IMAGE_QUANTIZED,
   isAvailable as executorchAvailable,
-} from 'react-native-executorch';
+} from 'react-native-executorch/legacy';
 import { ok, err, type Result } from '@/utils/result';
 
 export type EmbedError = 'not_supported' | 'download_failed' | 'inference_failed';

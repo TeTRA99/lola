@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { useObjectDetection } from 'react-native-executorch';
+import { useObjectDetection } from 'react-native-executorch/legacy';
 import { presetForLevel, currentDetectionLevel, markModelDownloaded } from '@/adapters/detectionPresets';
 import { COPY } from '@/services';
 import { color, fontFamily } from '@/theme/tokens';

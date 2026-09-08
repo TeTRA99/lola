@@ -12,7 +12,7 @@ import {
   models,
   isAvailable as executorchAvailable,
   type Message,
-} from 'react-native-executorch';
+} from 'react-native-executorch/legacy';
 import { CONFIG } from '@/config';
 import * as Settings from '@/services/Settings';
 import { ok, err, type Result } from '@/utils/result';

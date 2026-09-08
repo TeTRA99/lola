@@ -5,7 +5,7 @@
 // what the model is doing. YOLO26n is a built-in executorch model.
 
 import { useCallback, useEffect, useMemo } from 'react';
-import { useObjectDetection } from 'react-native-executorch';
+import { useObjectDetection } from 'react-native-executorch/legacy';
 import { useFrameOutput, type Frame } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 import { type RawDetection } from '@/adapters/objectDetection';

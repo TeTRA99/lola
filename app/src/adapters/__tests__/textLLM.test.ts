@@ -3,7 +3,7 @@
 
 jest.mock('@/adapters/storage', () => ({ getDb: jest.fn() }));
 
-import { LLMModule } from 'react-native-executorch';
+import { LLMModule } from 'react-native-executorch/legacy';
 import { extractJson, generateJsonLocal, _resetForTests } from '../textLLM';
 
 beforeEach(() => {

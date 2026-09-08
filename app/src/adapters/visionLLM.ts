@@ -15,7 +15,7 @@ import {
   models,
   isAvailable as executorchAvailable,
   type Message,
-} from 'react-native-executorch';
+} from 'react-native-executorch/legacy';
 import { CONFIG } from '@/config';
 import * as Settings from '@/services/Settings';
 import { LOCAL_VLM_SYSTEM_PROMPT } from '@/prompts/lola';

@@ -13,7 +13,7 @@
 // later (the slider already lets the caregiver raise it manually).
 
 import { Platform } from 'react-native';
-import { models } from 'react-native-executorch';
+import { models } from 'react-native-executorch/legacy';
 import * as Settings from '@/services/Settings';
 
 export type DetectionLevel = 1 | 2 | 3 | 4 | 5;
