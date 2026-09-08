@@ -100,8 +100,17 @@ STT and TTS are **already on-device** (OS services). So the gap is entirely
 LLM/VLM-shaped, plus open-vocab detection.
 
 **The wall is RAM, not compute.** Dad's phone is the **4 GB variant: 3.7 GB total**
-(read over adb; Android 13 / MIUI 14, SD680 / SM6225, arm64). A foreground app on a
-4 GB MIUI phone realistically gets ~1.5–2.2 GB before the low-memory killer acts.
+(read over adb; Android 13 / MIUI 14, SD680 / SM6225, arm64). **Measured at rest
+2026-09-08: `MemAvailable` = 1.91 GB**, 4 GB zram swap (2.8 GB free). MIUI also
+runs `persist.sys.cam_lowmem_restart=true` and reserves memory for the camera
+(`persist.sys.camera.boost.ext.mem`) — a camera-first app holding a big model is
+exactly what it kills. **Plan on ≤1.5 GB resident**, everything else swaps.
+Two more facts from the probe: the CPU (4× A73 @ 2.4 GHz + 4× A53 @ 1.9 GHz) has
+**no `asimddp`/`i8mm`** — no int8 dot-product instructions — so the `8da4w`
+quantized kernels run on plain NEON and will be slower than the same model on any
+2020+ core; and **Vulkan is present** (Adreno 610, `vulkan.adreno.so`), so the
+Vulkan `.pte` variants are at least loadable — whether they're faster is the
+measurement.
 Everything below is sized against that, using the real `.pte` sizes in the
 react-native-executorch **0.10.0** Hugging Face repos and SWM's published peaks.
 
