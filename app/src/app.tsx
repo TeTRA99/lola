@@ -22,6 +22,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import * as Settings from '@/services/Settings';
 import { CONFIG } from '@/config';
 import { preloadResident } from '@/adapters/llmResidency';
+import { canRunExecutorch, executorchSupportKnown } from '@/adapters/cpuFeatures';
 
 // Register the Expo resource fetcher with ExecuTorch once at boot. Required
 // before any module (ImageEmbeddings, LLM, etc.) can download / load weights.
@@ -65,7 +66,7 @@ export default function App() {
     void (async () => {
       const mode = await Settings.getString(Settings.KEYS.inferenceMode, CONFIG.LOCAL_INFERENCE_DEFAULT);
       if (mode !== 'local') return;
-      void preloadResident('vlm');
+      void canRunExecutorch().then(ok => { if (ok) preloadResident('vlm'); });
     })();
   }, []);
 
@@ -116,6 +117,15 @@ export default function App() {
     return <View style={{ flex: 1, backgroundColor: '#0C0D0F' }} />;
   }
 
+  // Every way into GuideScreen goes through here. On ARMv8.0 phones executorch can't
+  // be used (model teardown SIGILLs — adapters/cpuFeatures.ts), and GuideScreen
+  // mounts the detector unconditionally, so refuse with a spoken reason instead.
+  const openGuide = (t: typeof guideTarget | undefined) => {
+    if (executorchSupportKnown() === false) { void speak(COPY.guide.unsupportedDevice); return; }
+    setGuideTarget(t ?? null);
+    setScreen('guide');
+  };
+
   return (
     <>
       {screen === 'splash' && (
@@ -125,7 +135,7 @@ export default function App() {
         <HomeScreen
           onOpenSettings={openSettings}
           onDevDebug={(__DEV__ || CONFIG.SHOW_DEV_TOOLS) ? () => setScreen('debug') : undefined}
-          onOpenGuide={(t) => { setGuideTarget(t); setScreen('guide'); }}
+          onOpenGuide={openGuide}
         />
       )}
       {/* Setup is reached via the OS app-icon shortcut or the in-app Home gear;
@@ -134,7 +144,7 @@ export default function App() {
       {screen === 'debug' && (
         <DebugScreen
           onClose={() => setScreen('home')}
-          onOpenGuide={(t) => { setGuideTarget(t ?? null); setScreen('guide'); }}
+          onOpenGuide={openGuide}
         />
       )}
       {screen === 'guide' && (

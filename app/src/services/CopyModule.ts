@@ -99,6 +99,9 @@ export const COPY = {
     // reads wrong inserted into a sentence, and naming it doesn't matter when we
     // can't guide anyway.
     cannotGuide: 'Disculpá, la funcionalidad de encontrar objetos está limitada a algunos tipos de objetos en esta versión. Probá usando «Describir» y te cuento qué tenés enfrente.',
+    // Device can't run the on-device detector at all (ARMv8.0 CPU — see
+    // adapters/cpuFeatures.ts). Same warm redirect to Describir as cannotGuide.
+    unsupportedDevice: 'Disculpá, en este teléfono todavía no puedo guiarte hasta objetos. Probá usando «Describir» y te cuento qué tenés enfrente.',
     // Approximate match (e.g. "termo" → botella): warn before guiding anyway.
     approxWarning: 'Ese tipo de objeto todavía no lo reconozco del todo, pero voy a hacer lo posible para guiarte.',
     found: '¡Ahí está! Lo tenés enfrente. Tocá la pantalla cuando termines.',

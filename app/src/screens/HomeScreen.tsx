@@ -48,6 +48,7 @@ import { Toast, type ToastMessage } from '@/components/Toast';
 import { WelcomeOverlay } from '@/components/WelcomeOverlay';
 import { ModelPrepBanner } from '@/components/ModelPrepBanner';
 import { DetectionPrepBanner } from '@/components/DetectionPrepBanner';
+import { canRunExecutorch } from '@/adapters/cpuFeatures';
 import { presetForLevel, currentDetectionLevel, isModelDownloaded } from '@/adapters/detectionPresets';
 import { inferenceMode } from '@/services/ModelRouter';
 import * as VlmAdapter from '@/adapters/visionLLM';
@@ -99,7 +100,17 @@ export function HomeScreen({
   // Show the Guide-detector prep banner if the chosen Detection-quality level
   // needs a model that isn't on the device yet. Evaluated at mount (Home remounts
   // on return from Setup, so a freshly-changed level re-triggers the download).
-  const [detPending, setDetPending] = useState(() => !isModelDownloaded(presetForLevel(currentDetectionLevel()).modelName));
+  // Detector warm-up banner. Starts OFF and only turns on after the CPU probe: on
+  // ARMv8.0 phones the banner's unmount would destroy the model and SIGILL the app
+  // (see adapters/cpuFeatures.ts) — so it must never mount there at all.
+  const [detPending, setDetPending] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void canRunExecutorch().then(ok => {
+      if (alive && ok && !isModelDownloaded(presetForLevel(currentDetectionLevel()).modelName)) setDetPending(true);
+    });
+    return () => { alive = false; };
+  }, []);
 
   // First-run welcome (item #6): a one-time voice-first interstitial. Shown once
   // ever, then suppressed via the welcomeSeen flag.
