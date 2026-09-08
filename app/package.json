@@ -31,7 +31,7 @@
     "react-native-executorch-expo-resource-fetcher": "^0.10.0",
     "react-native-haptic-feedback": "^3.0.0",
     "react-native-nitro-image": "^0.15.1",
-    "react-native-nitro-modules": "^0.35.9",
+    "react-native-nitro-modules": "^0.37.1",
     "react-native-svg": "15.15.4",
     "react-native-vision-camera": "^5.2.2",
     "react-native-vision-camera-worklets": "^5.2.2",
